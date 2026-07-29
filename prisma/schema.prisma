@@ -1,0 +1,119 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  CUSTOMER
+  ADMIN
+}
+
+model Service {
+  id              String   @id @default(cuid())
+  name            String
+  description     String?
+  durationMinutes Int
+  priceCents      Int
+  createdAt       DateTime @default(now())
+
+  appointments Appointment[]
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String?
+  role         Role     @default(CUSTOMER)
+  createdAt    DateTime @default(now())
+
+  appointments Appointment[]
+}
+
+model Artist {
+  id        String   @id @default(cuid())
+  name      String
+  bio       String?
+  photoUrl  String?
+  createdAt DateTime @default(now())
+
+  portfolio    PortfolioImage[]
+  availability Availability[]
+  timeOff      TimeOff[]
+  appointments Appointment[]
+  slots        AppointmentSlot[]
+}
+
+model PortfolioImage {
+  id        String   @id @default(cuid())
+  artistId  String
+  imageUrl  String
+  caption   String?
+  createdAt DateTime @default(now())
+
+  artist Artist @relation(fields: [artistId], references: [id])
+}
+
+// Scheduling
+enum AppointmentStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+}
+
+model Appointment {
+  id        String            @id @default(cuid())
+  userId    String
+  artistId  String
+  serviceId String
+  startTime DateTime
+  endTime   DateTime
+  status    AppointmentStatus @default(PENDING)
+  createdAt DateTime          @default(now())
+
+  user    User              @relation(fields: [userId], references: [id])
+  artist  Artist            @relation(fields: [artistId], references: [id])
+  service Service           @relation(fields: [serviceId], references: [id])
+  slots   AppointmentSlot[]
+}
+
+model AppointmentSlot {
+  id            String   @id @default(cuid())
+  artistId      String
+  slotStart     DateTime
+  appointmentId String
+
+  artist      Artist      @relation(fields: [artistId], references: [id])
+  appointment Appointment @relation(fields: [appointmentId], references: [id])
+
+  @@unique([artistId, slotStart])
+}
+
+model Availability {
+  id        String @id @default(cuid())
+  artistId  String
+  dayOfWeek Int
+  startTime String
+  endTime   String
+
+  artist Artist @relation(fields: [artistId], references: [id])
+}
+
+model TimeOff {
+  id        String   @id @default(cuid())
+  artistId  String
+  date      DateTime
+  startTime String
+  endTime   String
+
+  artist Artist @relation(fields: [artistId], references: [id])
+}
