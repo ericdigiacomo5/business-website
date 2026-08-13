@@ -2,6 +2,9 @@ import { prisma } from "@/lib/prisma";
 
 const SLOT_MINUTES = 15;
 
+// "HH:mm", 24-hour, zero-padded — matches what timeStringToDate() expects to parse.
+const TIME_PATTERN = /^([01]\d|2[0-3]):([0-5]\d)$/
+
 // No timezone handling yet: times are interpreted in the server's local
 // timezone. Fine for now with a single-location salon, but will need
 // date-fns-tz or Temporal once this runs somewhere other than the salon's
@@ -76,4 +79,14 @@ export async function getOpenSlots(artistId: string, date: Date): Promise<Date[]
   uniqueOpenSlots.sort((a, b) => a.getTime() - b.getTime());
 
   return uniqueOpenSlots;
+}
+
+export function isValidTimeString(s: string) {
+  const isMatch = TIME_PATTERN.test(s)
+  return isMatch
+}
+
+export function isGridAligned(time: string) {
+  const [, minutes] = time.split(":").map(Number);
+  return minutes % 15 === 0;
 }
