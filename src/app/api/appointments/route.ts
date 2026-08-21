@@ -1,8 +1,12 @@
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@/generated/prisma/client";
 import { getOpenSlots } from "@/lib/availability";
+import { requireUser } from "@/lib/require-user";
 
 export async function POST(request: Request) {
+    const userId = await requireUser()
+    if (userId instanceof Response) return userId
+
     let body: unknown;
     try {
         body = await request.json();
@@ -20,13 +24,7 @@ export async function POST(request: Request) {
         )
     }
 
-    // SECURITY (temporary): userId is trusted straight from the request body,
-    // with no auth to verify the request actually came from that user — right
-    // now anyone can book (or later cancel) as anyone else. Deliberate
-    // trade-off to unblock testing the booking transaction below; NextAuth is
-    // next on the roadmap and MUST replace this with a session-derived id
-    // before this route is exposed to real users.
-    const { artistId, serviceId, startTime, userId } = body as Record<string, unknown>
+    const { artistId, serviceId, startTime } = body as Record<string, unknown>
 
     if (typeof artistId !== 'string' || !artistId) {
         return Response.json(
@@ -38,13 +36,6 @@ export async function POST(request: Request) {
     if (typeof serviceId !== 'string' || !serviceId) {
         return Response.json(
             { error: 'Service is required' },
-            { status: 400 }
-        )
-    }
-
-    if (typeof userId !== 'string' || !userId) {
-        return Response.json(
-            { error: 'User is required' },
             { status: 400 }
         )
     }
