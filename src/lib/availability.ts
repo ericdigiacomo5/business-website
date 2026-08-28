@@ -9,14 +9,14 @@ const TIME_PATTERN = /^([01]\d|2[0-3]):([0-5]\d)$/
 // timezone. Fine for now with a single-location salon, but will need
 // date-fns-tz or Temporal once this runs somewhere other than the salon's
 // own timezone.
-function timeStringToDate(date: Date, time: string): Date {
+export function timeStringToDate(date: Date, time: string): Date {
   const [hours, minutes] = time.split(":").map(Number);
   const result = new Date(date);
   result.setHours(hours, minutes, 0, 0);
   return result;
 }
 
-function startOfDay(date: Date): Date {
+export function startOfDay(date: Date): Date {
   const result = new Date(date);
   result.setHours(0, 0, 0, 0);
   return result;

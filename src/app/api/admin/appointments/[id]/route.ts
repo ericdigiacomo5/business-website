@@ -43,7 +43,7 @@ export async function PATCH(
 
     if (typeof status !== 'string' || !(Object.values(AppointmentStatus) as string[]).includes(status)) {
         return Response.json(
-            { error: 'Status must be one of PENDING, CONFIRMED, CANCELLED, COMPLETED' },
+            { error: 'Status must be one of UPCOMING, CONFIRMED, CANCELLED, COMPLETED' },
             { status: 400 }
         )
     }

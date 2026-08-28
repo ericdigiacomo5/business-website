@@ -1,26 +1,65 @@
 @import "tailwindcss";
 
+/* Single light theme, deliberately — booking-app UIs are conventionally
+   bright/light (OpenTable, Calendly), and a v1 portfolio build doesn't need
+   to carry a second palette through every component. Revisit if this ever
+   needs a dark mode. */
 :root {
   --background: #ffffff;
-  --foreground: #171717;
+  --foreground: #241619;
+
+  --primary: #b33c5e;
+  --primary-foreground: #ffffff;
+
+  --accent: #c9a15a;
+  --accent-foreground: #3a2a1a;
+
+  --surface: #fff9f7;
+  --surface-foreground: #1f1315;
+
+  --border: #e8dad8;
+
+  --muted: #f5edeb;
+  --muted-foreground: #8a7371;
+
+  --danger: #c0392b;
+  --danger-foreground: #ffffff;
+
+  --success: #2e7d5b;
+  --success-foreground: #ffffff;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-surface: var(--surface);
+  --color-surface-foreground: var(--surface-foreground);
+  --color-border: var(--border);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-danger: var(--danger);
+  --color-danger-foreground: var(--danger-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  /* Reserves the vertical scrollbar's gutter on every page, whether or not
+     that page actually needs to scroll — without this, pages shorter than
+     the viewport (no scrollbar) have more available width than pages taller
+     than the viewport (scrollbar present), so the centered Header's content
+     visibly shifts a few pixels between them on navigation. */
+  scrollbar-gutter: stable;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
 }

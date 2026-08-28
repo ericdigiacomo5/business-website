@@ -1,6 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { Prisma } from "@/generated/prisma/client";
-import { getOpenSlots } from "@/lib/availability";
+import { bookOccurrence } from "@/lib/booking";
 import { requireUser } from "@/lib/require-user";
 
 export async function POST(request: Request) {
@@ -87,62 +86,17 @@ export async function POST(request: Request) {
         )
     }
 
-    const endTime = new Date(parsedStartTime.getTime() + (service.durationMinutes * 60_000))
+    const result = await bookOccurrence({
+        userId,
+        artistId,
+        serviceId,
+        serviceDurationMinutes: service.durationMinutes,
+        startTime: parsedStartTime,
+    })
 
-    const SLOT_DURATION_MS = 15 * 60_000
-    const slots: Date[] = []
-    let current = parsedStartTime
-    while (current < endTime) {
-        slots.push(current);
-        current = new Date(current.getTime() + SLOT_DURATION_MS)
+    if (!result.ok) {
+        return Response.json({ error: result.error }, { status: result.status })
     }
 
-    const openSlots = await getOpenSlots(artistId, parsedStartTime)
-    const openSlotTimes = new Set(openSlots.map((slot) => slot.getTime()))
-    const isFullyAvailable = slots.every((slot) => openSlotTimes.has(slot.getTime()))
-
-    if (!isFullyAvailable) {
-        return Response.json(
-            { error: 'That time is not available' },
-            { status: 400 }
-        )
-    }
-
-    try {
-
-        const appointment = await prisma.$transaction(async (tx) => {
-            const appointment = await tx.appointment.create({
-                data: {
-                    userId: userId,
-                    artistId: artistId,
-                    serviceId: serviceId,
-                    startTime: parsedStartTime,
-                    endTime: endTime
-                }
-            })
-
-            await tx.appointmentSlot.createMany({
-                data: slots.map((slotStart) => ({
-                    artistId: artistId,
-                    slotStart: slotStart,
-                    appointmentId: appointment.id
-                }))
-            })
-
-            return appointment
-        })
-
-        return Response.json({ data: appointment }, { status: 201 });
-    } catch (error) {
-
-        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-            return Response.json(
-                { error: 'That time was just booked, please pick another' },
-                { status: 409 }
-            )
-        }
-
-        throw error
-    }
-
+    return Response.json({ data: result.appointment }, { status: 201 });
 }

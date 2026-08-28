@@ -26,7 +26,8 @@ model Service {
   active          Boolean  @default(true)
   createdAt       DateTime @default(now())
 
-  appointments Appointment[]
+  appointments          Appointment[]
+  recurringAppointments RecurringAppointment[]
 }
 
 model User {
@@ -39,9 +40,10 @@ model User {
   role          Role      @default(CUSTOMER)
   createdAt     DateTime  @default(now())
 
-  appointments Appointment[]
-  accounts     Account[]
-  sessions     Session[]
+  appointments          Appointment[]
+  accounts              Account[]
+  sessions              Session[]
+  recurringAppointments RecurringAppointment[]
 }
 
 model Account {
@@ -90,11 +92,12 @@ model Artist {
   photoUrl  String?
   createdAt DateTime @default(now())
 
-  portfolio    PortfolioImage[]
-  availability Availability[]
-  timeOff      TimeOff[]
-  appointments Appointment[]
-  slots        AppointmentSlot[]
+  portfolio             PortfolioImage[]
+  availability          Availability[]
+  timeOff               TimeOff[]
+  appointments          Appointment[]
+  slots                 AppointmentSlot[]
+  recurringAppointments RecurringAppointment[]
 }
 
 model PortfolioImage {
@@ -109,26 +112,53 @@ model PortfolioImage {
 
 // Scheduling
 enum AppointmentStatus {
-  PENDING
+  UPCOMING
   CONFIRMED
   CANCELLED
   COMPLETED
 }
 
-model Appointment {
-  id        String            @id @default(cuid())
-  userId    String
-  artistId  String
-  serviceId String
-  startTime DateTime
-  endTime   DateTime
-  status    AppointmentStatus @default(PENDING)
-  createdAt DateTime          @default(now())
+enum RecurringStatus {
+  ACTIVE
+  PAUSED
+  CANCELLED
+}
 
-  user    User              @relation(fields: [userId], references: [id])
-  artist  Artist            @relation(fields: [artistId], references: [id])
-  service Service           @relation(fields: [serviceId], references: [id])
-  slots   AppointmentSlot[]
+model RecurringAppointment {
+  id            String          @id @default(cuid())
+  userId        String
+  artistId      String
+  serviceId     String
+  dayOfWeek     Int
+  startTime     String
+  intervalWeeks Int
+  seriesStart   DateTime
+  seriesEnd     DateTime?
+  status        RecurringStatus @default(ACTIVE)
+  createdAt     DateTime        @default(now())
+
+  user         User          @relation(fields: [userId], references: [id])
+  artist       Artist        @relation(fields: [artistId], references: [id])
+  service      Service       @relation(fields: [serviceId], references: [id])
+  appointments Appointment[]
+}
+
+model Appointment {
+  id                     String            @id @default(cuid())
+  userId                 String
+  artistId               String
+  serviceId              String
+  startTime              DateTime
+  endTime                DateTime
+  status                 AppointmentStatus @default(UPCOMING)
+  createdAt              DateTime          @default(now())
+  recurringAppointmentId String?
+
+  user                 User                  @relation(fields: [userId], references: [id])
+  artist               Artist                @relation(fields: [artistId], references: [id])
+  service              Service               @relation(fields: [serviceId], references: [id])
+  slots                AppointmentSlot[]
+  recurringAppointment RecurringAppointment? @relation(fields: [recurringAppointmentId], references: [id])
 }
 
 model AppointmentSlot {

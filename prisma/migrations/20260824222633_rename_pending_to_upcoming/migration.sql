@@ -1,0 +1,14 @@
+-- Renames the AppointmentStatus enum value PENDING to UPCOMING.
+--
+-- Hand-written instead of using Prisma's auto-generated diff: Prisma's
+-- migrate dev diffing has no concept of "this old enum value became this new
+-- one" — it only sees PENDING removed and UPCOMING added, and would generate
+-- a migration that drops PENDING outright (Prisma itself warned: "The values
+-- [PENDING] on the enum AppointmentStatus will be removed. If these variants
+-- are still used in the database, this will fail." — and at the time this
+-- migration was written, 2 real Appointment rows still had status = PENDING).
+--
+-- ALTER TYPE ... RENAME VALUE relabels the enum in place: existing rows keep
+-- their same underlying value and are simply read back under the new label,
+-- with no data loss and no need to rewrite the Appointment table.
+ALTER TYPE "AppointmentStatus" RENAME VALUE 'PENDING' TO 'UPCOMING';

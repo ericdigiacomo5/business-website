@@ -8,6 +8,7 @@ export async function GET(request: NextRequest) {
 
     const appointments = await prisma.appointment.findMany({
         where: { userId: userId },
+        include: { artist: true, service: true },
         orderBy: { startTime: 'asc' }
     })
 
