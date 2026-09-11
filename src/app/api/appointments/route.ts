@@ -1,10 +1,24 @@
 import { prisma } from "@/lib/prisma";
 import { bookOccurrence } from "@/lib/booking";
-import { requireUser } from "@/lib/require-user";
+import { auth } from "@/auth";
+import { isBookingEnabled } from "@/lib/settings";
 
 export async function POST(request: Request) {
-    const userId = await requireUser()
-    if (userId instanceof Response) return userId
+    const session = await auth()
+    if (!session?.user?.id) {
+        return Response.json({ error: "Unauthorized" }, { status: 401 })
+    }
+    const isAdmin = session.user.role === "ADMIN"
+
+    // Admins always bypass the toggle — it exists to stop customer
+    // self-booking (e.g. fully booked out, between seasons), not to stop
+    // staff from booking appointments on the phone/in person.
+    if (!isAdmin && !(await isBookingEnabled())) {
+        return Response.json(
+            { error: "Online booking is currently closed. Please contact the salon directly." },
+            { status: 403 }
+        )
+    }
 
     let body: unknown;
     try {
@@ -23,7 +37,16 @@ export async function POST(request: Request) {
         )
     }
 
-    const { artistId, serviceId, startTime } = body as Record<string, unknown>
+    const { artistId, serviceId, startTime, userId: requestedUserId } = body as Record<string, unknown>
+
+    // Only an admin's requested target user is honored — a non-admin's
+    // userId is silently ignored (not rejected) so the customer-facing
+    // contract is unchanged; isAdmin comes from the session, never from
+    // this body, so a spoofed userId can't grant a spoofed override either.
+    let targetUserId = session.user.id
+    if (isAdmin && typeof requestedUserId === 'string' && requestedUserId) {
+        targetUserId = requestedUserId
+    }
 
     if (typeof artistId !== 'string' || !artistId) {
         return Response.json(
@@ -62,7 +85,7 @@ export async function POST(request: Request) {
     const [artist, service, user] = await Promise.all([
         prisma.artist.findUnique({ where: { id: artistId } }),
         prisma.service.findUnique({ where: { id: serviceId } }),
-        prisma.user.findUnique({ where: { id: userId } }),
+        prisma.user.findUnique({ where: { id: targetUserId } }),
     ])
 
     if (!artist) {
@@ -87,7 +110,7 @@ export async function POST(request: Request) {
     }
 
     const result = await bookOccurrence({
-        userId,
+        userId: targetUserId,
         artistId,
         serviceId,
         serviceDurationMinutes: service.durationMinutes,

@@ -38,7 +38,7 @@ export async function POST(request: Request) {
         )
     }
 
-    const { email, password } = body as Record<string, unknown>
+    const { email, password, phone } = body as Record<string, unknown>
 
     if (
         !email ||
@@ -59,6 +59,15 @@ export async function POST(request: Request) {
         )
     }
 
+    // No format validation beyond "non-empty" — phone formats vary too much
+    // (country codes, extensions, formatting) to regex meaningfully.
+    if (!phone || typeof phone !== "string") {
+        return Response.json(
+            { error: "A phone number is required" },
+            { status: 400 }
+        )
+    }
+
     const existingUser = await prisma.user.findUnique({ where: { email } })
     if (existingUser) {
         return Response.json(
@@ -70,7 +79,7 @@ export async function POST(request: Request) {
     const passwordHash = await bcrypt.hash(password, BCRYPT_COST)
 
     const user = await prisma.user.create({
-        data: { email, passwordHash },
+        data: { email, phone, passwordHash },
     })
 
     // Scrubbed response — never echo passwordHash back, same reasoning as

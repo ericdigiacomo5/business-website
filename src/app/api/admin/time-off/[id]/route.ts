@@ -1,6 +1,7 @@
 import { requireAdmin } from "@/lib/require-admin";
 import { prisma } from "@/lib/prisma"
-import { isGridAligned, isValidTimeString } from "@/lib/availability";
+import { isGridAligned, isValidTimeString, startOfDay, endOfDay } from "@/lib/availability";
+import { parseLocalDate } from "@/lib/format";
 import { Prisma } from "@/generated/prisma/client";
 
 export async function PATCH(
@@ -71,19 +72,16 @@ export async function PATCH(
 
     let parsedDate: Date | undefined
     if (date !== undefined) {
-        const [year, month, day] = date.split('-').map(Number)
-        parsedDate = new Date(year, month - 1, day)
-        const isValidDate =
-            parsedDate.getFullYear() === year &&
-            parsedDate.getMonth() === month - 1 &&
-            parsedDate.getDate() === day
+        const parsed = parseLocalDate(date)
 
-        if (!isValidDate) {
+        if (!parsed) {
             return Response.json(
                 { error: 'Date is invalid' },
                 { status: 400 }
             )
         }
+
+        parsedDate = parsed
     }
 
     if (
@@ -122,8 +120,8 @@ export async function PATCH(
     const effectiveArtistId = artistId !== undefined ? artistId : timeOff.artistId
     const effectiveDate = parsedDate !== undefined ? parsedDate : timeOff.date
 
-    const dayStart = new Date(effectiveDate.getFullYear(), effectiveDate.getMonth(), effectiveDate.getDate())
-    const dayEnd = new Date(effectiveDate.getFullYear(), effectiveDate.getMonth(), effectiveDate.getDate(), 23, 59, 59, 999)
+    const dayStart = startOfDay(effectiveDate)
+    const dayEnd = endOfDay(effectiveDate)
 
     const priorTimeOff = await prisma.timeOff.findMany({
         where: {

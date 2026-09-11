@@ -40,6 +40,16 @@ async function main() {
         }
     })
 
+    await prisma.appSettings.upsert({
+        where: { id: 1 },
+        update: {},
+        create: {
+            id: 1,
+            bookingEnabled: true
+        }
+    })
+
+
     // Dev-convenience admin login — NOT for production. Falls back to a
     // clearly-labeled default if SEED_ADMIN_EMAIL/SEED_ADMIN_PASSWORD aren't
     // set, so `npx prisma db seed` gives a working /admin login out of the
@@ -63,6 +73,7 @@ async function main() {
         update: {},
         create: {
             email: adminEmail,
+            phone: "555-0100",
             passwordHash: await bcrypt.hash(adminPassword, 10),
             role: "ADMIN",
         },

@@ -1,6 +1,11 @@
 import { prisma } from "@/lib/prisma";
+import { SLOT_MINUTES, getGridBounds, type ArtistWorkingWindow } from "@/lib/schedule-grid";
 
-const SLOT_MINUTES = 15;
+// Re-exported so server-side code can keep importing these from this file —
+// only the schedule grid's Client Component needs to import them from
+// @/lib/schedule-grid directly, to avoid pulling this file's Prisma/pg
+// dependency chain into a client bundle (see that file's own comment).
+export { SLOT_MINUTES, getGridBounds, type ArtistWorkingWindow };
 
 // "HH:mm", 24-hour, zero-padded — matches what timeStringToDate() expects to parse.
 const TIME_PATTERN = /^([01]\d|2[0-3]):([0-5]\d)$/
@@ -22,7 +27,7 @@ export function startOfDay(date: Date): Date {
   return result;
 }
 
-function endOfDay(date: Date): Date {
+export function endOfDay(date: Date): Date {
   const result = new Date(date);
   result.setHours(23, 59, 59, 999);
   return result;
@@ -67,7 +72,10 @@ export async function getOpenSlots(artistId: string, date: Date): Promise<Date[]
     generateSlotsInWindow(date, window.startTime, window.endTime)
   );
 
+  const now = Date.now();
+
   const openSlots = candidateSlots.filter((slot) => {
+    if (slot.getTime() < now) return false;
     if (bookedTimes.has(slot.getTime())) return false;
     return !timeOffRanges.some((range) => slot >= range.start && slot < range.end);
   });
@@ -79,6 +87,37 @@ export async function getOpenSlots(artistId: string, date: Date): Promise<Date[]
   uniqueOpenSlots.sort((a, b) => a.getTime() - b.getTime());
 
   return uniqueOpenSlots;
+}
+
+// One batched query for all requested artists (not N+1 — the schedule grid
+// always needs every artist's window for the day at once). An artist can
+// have multiple Availability rows for the same dayOfWeek (nothing in the
+// schema prevents overlapping windows, same caveat getOpenSlots already
+// documents) — this takes the min start / max end across all of an artist's
+// rows for that day, string-compared lexically, which is safe because every
+// stored value is a zero-padded "HH:mm" (the same assumption isValidTimeString
+// enforces elsewhere). An artist with zero rows for that day of week gets
+// { start: null, end: null } rather than being omitted, so callers can
+// render a distinct "off today" state instead of an indistinguishable empty one.
+export async function getWorkingWindows(artistIds: string[], date: Date): Promise<ArtistWorkingWindow[]> {
+  const dayOfWeek = date.getDay();
+
+  const rows = await prisma.availability.findMany({
+    where: { artistId: { in: artistIds }, dayOfWeek },
+  });
+
+  return artistIds.map((artistId) => {
+    const artistRows = rows.filter((row) => row.artistId === artistId);
+
+    if (artistRows.length === 0) {
+      return { artistId, start: null, end: null };
+    }
+
+    const start = artistRows.reduce((min, row) => (row.startTime < min ? row.startTime : min), artistRows[0].startTime);
+    const end = artistRows.reduce((max, row) => (row.endTime > max ? row.endTime : max), artistRows[0].endTime);
+
+    return { artistId, start, end };
+  });
 }
 
 export function isValidTimeString(s: string) {

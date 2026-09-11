@@ -1,30 +1,26 @@
 import { prisma } from "@/lib/prisma";
-import { requireUser } from "@/lib/require-user";
+import { auth } from "@/auth";
 import { isGridAligned, isValidTimeString, startOfDay, timeStringToDate } from "@/lib/availability";
 import { generateOccurrenceDates, MATERIALIZE_WEEKS } from "@/lib/recurring";
 import { bookOccurrence } from "@/lib/booking";
-import { toLocalDateKey } from "@/lib/format";
-
-// "YYYY-MM-DD" in local time, with round-trip validation — same pattern as
-// admin/time-off and GET /api/artists/:id/availability, factored out here
-// since this route needs it for both seriesStart and seriesEnd.
-function parseLocalDate(value: string): Date | null {
-    const parts = value.split("-").map(Number);
-    if (parts.length !== 3 || parts.some((n) => Number.isNaN(n))) return null;
-
-    const [year, month, day] = parts;
-    const parsed = new Date(year, month - 1, day);
-    const isValid =
-        parsed.getFullYear() === year &&
-        parsed.getMonth() === month - 1 &&
-        parsed.getDate() === day;
-
-    return isValid ? parsed : null;
-}
+import { toLocalDateKey, parseLocalDate } from "@/lib/format";
+import { isBookingEnabled } from "@/lib/settings";
 
 export async function POST(request: Request) {
-    const userId = await requireUser()
-    if (userId instanceof Response) return userId
+    const session = await auth()
+    if (!session?.user?.id) {
+        return Response.json({ error: "Unauthorized" }, { status: 401 })
+    }
+    const isAdmin = session.user.role === "ADMIN"
+
+    // Same toggle enforcement as the one-off booking route — admins always
+    // bypass it, since it exists to stop customer self-booking, not staff.
+    if (!isAdmin && !(await isBookingEnabled())) {
+        return Response.json(
+            { error: "Online booking is currently closed. Please contact the salon directly." },
+            { status: 403 }
+        )
+    }
 
     let body: unknown
     try {
@@ -43,7 +39,15 @@ export async function POST(request: Request) {
         )
     }
 
-    const { artistId, serviceId, dayOfWeek, startTime, intervalWeeks, seriesStart, seriesEnd } = body as Record<string, unknown>
+    const { artistId, serviceId, dayOfWeek, startTime, intervalWeeks, seriesStart, seriesEnd, userId: requestedUserId } = body as Record<string, unknown>
+
+    // Same admin-override rule as the one-off booking route: a non-admin's
+    // userId is silently ignored, not rejected, so the customer contract is
+    // unchanged; isAdmin comes only from the session, never this body.
+    let targetUserId = session.user.id
+    if (isAdmin && typeof requestedUserId === "string" && requestedUserId) {
+        targetUserId = requestedUserId
+    }
 
     if (!artistId || typeof artistId !== "string") {
         return Response.json(
@@ -135,9 +139,10 @@ export async function POST(request: Request) {
         )
     }
 
-    const [artist, service] = await Promise.all([
+    const [artist, service, targetUser] = await Promise.all([
         prisma.artist.findUnique({ where: { id: artistId } }),
         prisma.service.findUnique({ where: { id: serviceId } }),
+        prisma.user.findUnique({ where: { id: targetUserId } }),
     ])
 
     if (!artist) {
@@ -154,9 +159,16 @@ export async function POST(request: Request) {
         )
     }
 
+    if (!targetUser) {
+        return Response.json(
+            { error: "User not found" },
+            { status: 404 }
+        )
+    }
+
     const recurringAppointment = await prisma.recurringAppointment.create({
         data: {
-            userId,
+            userId: targetUserId,
             artistId,
             serviceId,
             dayOfWeek,
@@ -177,7 +189,7 @@ export async function POST(request: Request) {
         const occurrenceStart = timeStringToDate(date, startTime)
 
         const result = await bookOccurrence({
-            userId,
+            userId: targetUserId,
             artistId,
             serviceId,
             serviceDurationMinutes: service.durationMinutes,

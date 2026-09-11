@@ -12,10 +12,12 @@ export function BookingFilters({
     artists,
     currentStatus,
     currentArtistId,
+    currentDateString,
 }: {
     artists: Artist[]
     currentStatus: string
     currentArtistId: string
+    currentDateString: string
 }) {
     function autoSubmit(e: ChangeEvent<HTMLSelectElement>) {
         e.currentTarget.form?.requestSubmit()
@@ -23,6 +25,11 @@ export function BookingFilters({
 
     return (
         <form method="get" className="flex flex-wrap items-end gap-3">
+            {/* Carries the currently-viewed date forward — a GET form
+                submission replaces the whole query string with only its own
+                fields, so without this, changing a filter would silently
+                reset DatePicker back to today. */}
+            <input type="hidden" name="dateString" value={currentDateString} />
             <div>
                 <label htmlFor="status" className="block text-xs font-medium text-muted-foreground">
                     Status
@@ -69,6 +76,8 @@ export function BookingFilters({
             >
                 Filter
             </button>
+
         </form>
+
     )
 }

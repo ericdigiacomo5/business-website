@@ -13,11 +13,24 @@ import bcrypt from "bcryptjs"
 // match whatever the registration route ends up hashing new passwords with.
 const DUMMY_PASSWORD_HASH = bcrypt.hashSync("no-such-user-timing-safety", 10)
 
+const prismaAdapter = PrismaAdapter(prisma)
+
 export const { handlers, auth, signIn, signOut } = NextAuth({
   // IMPORTANT: pass our own singleton, never `import { PrismaClient } from "@prisma/client"`
   // directly — that import path is broken in this project because schema.prisma uses a
   // custom generator `output`, and no node_modules/.prisma compatibility shim gets written.
-  adapter: PrismaAdapter(prisma),
+  adapter: {
+    ...prismaAdapter,
+    // User.phone is required, but the adapter's own createUser (used for
+    // first-time OAuth sign-in, e.g. Google) has no phone to supply — it
+    // only ever gets name/email/image/emailVerified from the provider
+    // profile. Same placeholder sentinel as the migration's backfill for
+    // pre-existing rows, so it's recognizable everywhere as "needs a real
+    // value," not a coincidentally-blank field. A future profile-edit
+    // feature can prompt the user to replace it; not built yet.
+    createUser: (data) =>
+      prismaAdapter.createUser!({ ...data, phone: "UNKNOWN" } as typeof data & { phone: string }),
+  },
 
   // JWT, not database, despite having an adapter configured. Originally tried
   // "database" for revocable sessions, but confirmed (via a real sign-in

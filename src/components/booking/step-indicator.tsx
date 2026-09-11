@@ -1,18 +1,22 @@
 import type { WizardStep } from "./wizard-state"
 
-const STEPS: { key: WizardStep; label: string }[] = [
-    { key: "service", label: "Service" },
-    { key: "artist", label: "Artist" },
-    { key: "datetime", label: "Time" },
-    { key: "review", label: "Confirm" },
-]
+function getSteps(adminMode: boolean): { key: WizardStep; label: string }[] {
+    return [
+        ...(adminMode ? [{ key: "user" as const, label: "Customer" }] : []),
+        { key: "service" as const, label: "Service" },
+        { key: "artist" as const, label: "Artist" },
+        { key: "datetime" as const, label: "Time" },
+        { key: "review" as const, label: "Confirm" },
+    ]
+}
 
-export function StepIndicator({ current }: { current: WizardStep }) {
-    const currentIndex = STEPS.findIndex((s) => s.key === current)
+export function StepIndicator({ current, adminMode = false }: { current: WizardStep; adminMode?: boolean }) {
+    const steps = getSteps(adminMode)
+    const currentIndex = steps.findIndex((s) => s.key === current)
 
     return (
         <ol className="flex items-center gap-2">
-            {STEPS.map((step, index) => {
+            {steps.map((step, index) => {
                 const isDone = currentIndex > index
                 const isActive = currentIndex === index
                 return (
@@ -29,7 +33,7 @@ export function StepIndicator({ current }: { current: WizardStep }) {
                         >
                             {index + 1}
                         </span>
-                        {index < STEPS.length - 1 && (
+                        {index < steps.length - 1 && (
                             <span
                                 className={"h-0.5 flex-1 " + (isDone ? "bg-primary/40" : "bg-border")}
                                 aria-hidden

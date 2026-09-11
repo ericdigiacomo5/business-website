@@ -6,6 +6,7 @@ import { useSession } from "next-auth/react"
 import type { Artist, Service } from "@/generated/prisma/client"
 import { wizardReducer, initialWizardState, type WizardSelection } from "./wizard-state"
 import { StepIndicator } from "./step-indicator"
+import { UserStep } from "./steps/user-step"
 import { ServiceStep } from "./steps/service-step"
 import { ArtistStep } from "./steps/artist-step"
 import { DateTimeStep } from "./steps/datetime-step"
@@ -22,11 +23,13 @@ export function BookingWizard({
     initialArtists,
     initialServiceId,
     initialArtistId,
+    adminMode = false,
 }: {
     initialServices: Service[]
     initialArtists: Artist[]
     initialServiceId: string | null
     initialArtistId: string | null
+    adminMode?: boolean
 }) {
     const router = useRouter()
     const { data: session, status } = useSession()
@@ -34,11 +37,17 @@ export function BookingWizard({
     const [state, dispatch] = useReducer(
         wizardReducer,
         { serviceId: initialServiceId, artistId: initialArtistId, date: null, startTime: null },
-        initialWizardState
+        (selection) => initialWizardState(selection, adminMode)
     )
 
 
     useEffect(() => {
+        // The unauthenticated-redirect/rehydrate dance below is customer-only
+        // — an admin is always already authenticated as ADMIN by the time
+        // they reach this page (enforced by src/app/admin/layout.tsx), so
+        // there's nothing to rehydrate and no login redirect can ever fire.
+        if (adminMode) return
+
         if (status === "loading") return // don't act on a guess
 
         const raw = sessionStorage.getItem(STORAGE_KEY)
@@ -57,7 +66,7 @@ export function BookingWizard({
         } catch {
             // Malformed storage — ignore, start fresh.
         }
-    }, [status, initialServices, initialArtists])
+    }, [status, initialServices, initialArtists, adminMode])
 
     function redirectToLogin() {
         const selection: WizardSelection = {
@@ -72,12 +81,14 @@ export function BookingWizard({
 
     // Reaching review unauthenticated (arrived here directly, or the session
     // expired while browsing steps 1-3) triggers the same persist+redirect.
+    // Admin-mode never hits this — see the effect above.
     useEffect(() => {
+        if (adminMode) return
         if (state.step === "review" && status === "unauthenticated") {
             redirectToLogin()
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [state.step, status])
+    }, [state.step, status, adminMode])
 
     const selectedService = initialServices.find((s) => s.id === state.serviceId) ?? null
     const selectedArtist = initialArtists.find((a) => a.id === state.artistId) ?? null
@@ -111,9 +122,13 @@ export function BookingWizard({
 
     return (
         <div className="mx-auto max-w-lg px-4 py-8">
-            <StepIndicator current={state.step} />
+            <StepIndicator current={state.step} adminMode={adminMode} />
 
             <div className="mt-8">
+                {state.step === "user" && (
+                    <UserStep onSelect={(user) => dispatch({ type: "SELECT_USER", user })} />
+                )}
+
                 {state.step === "service" && (
                     <ServiceStep
                         services={initialServices}
@@ -154,12 +169,18 @@ export function BookingWizard({
                 )}
 
                 {state.step === "review" &&
-                    (status === "authenticated" && selectedService && selectedArtist && state.startTime ? (
+                    ((adminMode || status === "authenticated") && selectedService && selectedArtist && state.startTime ? (
                         <ReviewStep
                             service={selectedService}
                             artist={selectedArtist}
                             startTime={state.startTime}
-                            userLabel={session?.user?.email ?? session?.user?.name ?? "you"}
+                            userLabel={
+                                adminMode
+                                    ? (state.selectedUser?.name ?? state.selectedUser?.email ?? "")
+                                    : (session?.user?.email ?? session?.user?.name ?? "you")
+                            }
+                            adminMode={adminMode}
+                            targetUserId={state.selectedUser?.id}
                             onBack={() => dispatch({ type: "GO_BACK" })}
                             onSuccess={(appointment) => dispatch({ type: "SUBMIT_SUCCESS", appointment })}
                             onRecurringSuccess={(result) => dispatch({ type: "SUBMIT_RECURRING_SUCCESS", result })}

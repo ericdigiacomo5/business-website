@@ -26,3 +26,25 @@ export function toLocalTimeKey(date: Date): string {
     const minutes = String(date.getMinutes()).padStart(2, "0")
     return `${hours}:${minutes}`
 }
+
+// Inverse of toLocalDateKey(): 'YYYY-MM-DD' (local time) -> Date, via the
+// multi-arg Date constructor rather than `new Date(dateString)` — a bare
+// date-only string is parsed as UTC midnight per the JS spec, which can land
+// on the wrong calendar day once shifted into local time. Round-trips the
+// parts back out to catch anything that overflowed (month 13, day 45, etc.)
+// instead of silently landing on some other valid-but-wrong date. Returns
+// null for anything malformed. For an end-of-day bound, compose with
+// endOfDay() from @/lib/availability rather than passing a flag here.
+export function parseLocalDate(value: string): Date | null {
+    const parts = value.split("-").map(Number)
+    if (parts.length !== 3 || parts.some((n) => Number.isNaN(n))) return null
+
+    const [year, month, day] = parts
+    const parsed = new Date(year, month - 1, day)
+    const isValid =
+        parsed.getFullYear() === year &&
+        parsed.getMonth() === month - 1 &&
+        parsed.getDate() === day
+
+    return isValid ? parsed : null
+}

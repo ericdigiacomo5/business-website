@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 export function RegisterForm() {
     const router = useRouter()
     const [email, setEmail] = useState("")
+    const [phone, setPhone] = useState("")
     const [password, setPassword] = useState("")
     const [error, setError] = useState<string | null>(null)
     const [pending, setPending] = useState(false)
@@ -19,7 +20,7 @@ export function RegisterForm() {
         const response = await fetch("/api/auth/register", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ email, password }),
+            body: JSON.stringify({ email, phone, password }),
         })
 
         setPending(false)
@@ -47,6 +48,21 @@ export function RegisterForm() {
                     autoComplete="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
+                    className="mt-1 h-11 w-full rounded-lg border border-border bg-background px-3 text-foreground"
+                />
+            </div>
+            <div>
+                <label htmlFor="phone" className="block text-sm font-medium text-foreground">
+                    Phone
+                </label>
+                <input
+                    id="phone"
+                    name="phone"
+                    type="tel"
+                    required
+                    autoComplete="tel"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
                     className="mt-1 h-11 w-full rounded-lg border border-border bg-background px-3 text-foreground"
                 />
             </div>

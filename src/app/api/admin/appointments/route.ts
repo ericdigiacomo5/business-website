@@ -2,23 +2,8 @@ import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/require-admin";
 import { AppointmentStatus, Prisma } from "@/generated/prisma/client";
 import { NextRequest } from "next/server";
-
-// Parses "YYYY-MM-DD" via the multi-arg Date constructor (local time) and
-// round-trips the parts to reject overflow (month 13, day 45, etc.) — same
-// pattern used by GET /api/artists/:id/availability and admin/time-off.
-function parseLocalDate(dateString: string, atEndOfDay: boolean): Date | null {
-    const [year, month, day] = dateString.split('-').map(Number)
-    const date = atEndOfDay
-        ? new Date(year, month - 1, day, 23, 59, 59, 999)
-        : new Date(year, month - 1, day)
-
-    const isValid =
-        date.getFullYear() === year &&
-        date.getMonth() === month - 1 &&
-        date.getDate() === day
-
-    return isValid ? date : null
-}
+import { endOfDay } from "@/lib/availability";
+import { parseLocalDate } from "@/lib/format";
 
 export async function GET(request: NextRequest) {
     const forbidden = await requireAdmin()
@@ -57,7 +42,7 @@ export async function GET(request: NextRequest) {
 
     let startBound: Date | undefined
     if (startDate) {
-        const parsed = parseLocalDate(startDate, false)
+        const parsed = parseLocalDate(startDate)
 
         if (!parsed) {
             return Response.json(
@@ -71,7 +56,7 @@ export async function GET(request: NextRequest) {
 
     let endBound: Date | undefined
     if (endDate) {
-        const parsed = parseLocalDate(endDate, true)
+        const parsed = parseLocalDate(endDate)
 
         if (!parsed) {
             return Response.json(
@@ -80,7 +65,7 @@ export async function GET(request: NextRequest) {
             )
         }
 
-        endBound = parsed
+        endBound = endOfDay(parsed)
     }
 
     if (startBound && endBound && startBound > endBound) {

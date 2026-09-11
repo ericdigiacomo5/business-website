@@ -1,6 +1,7 @@
 import { requireAdmin } from "@/lib/require-admin";
 import { prisma } from "@/lib/prisma"
-import { isValidTimeString, isGridAligned } from "@/lib/availability"
+import { isValidTimeString, isGridAligned, startOfDay, endOfDay } from "@/lib/availability"
+import { parseLocalDate } from "@/lib/format"
 
 export async function POST(request: Request) {
     const forbidden = await requireAdmin()
@@ -50,14 +51,9 @@ export async function POST(request: Request) {
         )
     }
 
-    const [year, month, day] = date.split('-').map(Number)
-    const parsedDate = new Date(year, month - 1, day)
-    const isValidDate =
-        parsedDate.getFullYear() === year &&
-        parsedDate.getMonth() === month - 1 &&
-        parsedDate.getDate() === day
+    const parsedDate = parseLocalDate(date)
 
-    if (!isValidDate) {
+    if (!parsedDate) {
         return Response.json(
             { error: 'Date is invalid' },
             { status: 400 }
@@ -93,8 +89,8 @@ export async function POST(request: Request) {
         )
     }
 
-    const dayStart = new Date(year, month - 1, day)
-    const dayEnd = new Date(year, month - 1, day, 23, 59, 59, 999)
+    const dayStart = startOfDay(parsedDate)
+    const dayEnd = endOfDay(parsedDate)
 
     const priorTimeOff = await prisma.timeOff.findMany({
         where: { artistId: artistId, date: { gte: dayStart, lte: dayEnd } }

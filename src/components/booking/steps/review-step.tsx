@@ -20,6 +20,8 @@ export function ReviewStep({
     artist,
     startTime,
     userLabel,
+    adminMode = false,
+    targetUserId,
     onBack,
     onSuccess,
     onRecurringSuccess,
@@ -30,6 +32,8 @@ export function ReviewStep({
     artist: Artist
     startTime: string
     userLabel: string
+    adminMode?: boolean
+    targetUserId?: string
     onBack: () => void
     onSuccess: (appointment: Appointment) => void
     onRecurringSuccess: (result: RecurringBookingResult) => void
@@ -67,12 +71,18 @@ export function ReviewStep({
                           intervalWeeks,
                           seriesStart: toLocalDateKey(new Date(startTime)),
                           seriesEnd: seriesEnd || undefined,
+                          ...(adminMode && targetUserId ? { userId: targetUserId } : {}),
                       }),
                   })
                 : await fetch("/api/appointments", {
                       method: "POST",
                       headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ artistId: artist.id, serviceId: service.id, startTime }),
+                      body: JSON.stringify({
+                          artistId: artist.id,
+                          serviceId: service.id,
+                          startTime,
+                          ...(adminMode && targetUserId ? { userId: targetUserId } : {}),
+                      }),
                   })
 
             if (res.status === 201) {
