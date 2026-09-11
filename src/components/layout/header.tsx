@@ -60,6 +60,18 @@ export function Header() {
                             My Bookings
                         </Link>
                     )}
+                    {status === "authenticated" && (
+                        <Link
+                            href="/account"
+                            className={
+                                pathname === "/account"
+                                    ? "text-sm font-medium text-primary"
+                                    : "text-sm font-medium text-foreground hover:text-primary"
+                            }
+                        >
+                            My Profile
+                        </Link>
+                    )}
                     {isAdmin && (
                         <Link
                             href="/admin"
@@ -118,6 +130,15 @@ export function Header() {
                             className="flex h-11 items-center text-base font-medium text-foreground"
                         >
                             My Bookings
+                        </Link>
+                    )}
+                    {status === "authenticated" && (
+                        <Link
+                            href="/account"
+                            onClick={closeMenu}
+                            className="flex h-11 items-center text-base font-medium text-foreground"
+                        >
+                            My Profile
                         </Link>
                     )}
                     {isAdmin && (

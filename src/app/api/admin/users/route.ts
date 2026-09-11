@@ -1,11 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/require-admin";
+import { isValidEmail, isValidPhone } from "@/lib/validation";
 import { NextRequest } from "next/server";
-
-// Deliberately not RFC 5322-exhaustive — same pragmatic check as
-// src/app/api/auth/register/route.ts, just enough to reject obvious garbage.
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-const EMAIL_MAX_LENGTH = 254
 
 export async function GET(request: NextRequest) {
     const forbidden = await requireAdmin()
@@ -63,21 +59,14 @@ export async function POST(request: Request) {
         )
     }
 
-    if (
-        !email ||
-        typeof email !== "string" ||
-        email.length > EMAIL_MAX_LENGTH ||
-        !EMAIL_PATTERN.test(email)
-    ) {
+    if (!isValidEmail(email)) {
         return Response.json(
             { error: "A valid email is required" },
             { status: 400 }
         )
     }
 
-    // No format validation beyond "non-empty" — phone formats vary too much
-    // to regex meaningfully, same reasoning as the registration route.
-    if (!phone || typeof phone !== "string") {
+    if (!isValidPhone(phone)) {
         return Response.json(
             { error: "A phone number is required" },
             { status: 400 }

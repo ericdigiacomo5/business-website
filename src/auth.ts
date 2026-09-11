@@ -101,10 +101,21 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     // token itself is the only source of truth). Only copy from `user` when
     // it's actually there; otherwise leave whatever's already encoded in the
     // token from the original sign-in untouched.
-    async jwt({ token, user }) {
+    //
+    // `trigger === "update"` is the exception: it fires when the client calls
+    // next-auth/react's useSession().update(...), which the profile-edit form
+    // does after a successful PATCH /api/users/me. Without this branch,
+    // name/email edits would never show up in the session until the user
+    // signs out and back in — under JWT strategy there's no per-request
+    // database read to pick the new values up automatically.
+    async jwt({ token, user, trigger, session }) {
       if (user?.id) {
         token.id = user.id
         token.role = user.role
+      }
+      if (trigger === "update" && session) {
+        if (typeof session.name === "string") token.name = session.name
+        if (typeof session.email === "string") token.email = session.email
       }
       return token
     },
@@ -114,6 +125,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     async session({ session, token }) {
       session.user.id = token.id
       session.user.role = token.role
+      if (token.name) session.user.name = token.name
+      if (token.email) session.user.email = token.email
       return session
     },
   },

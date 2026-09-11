@@ -9,6 +9,7 @@ const ADMIN_LINKS = [
     { href: "/admin/services", label: "Services" },
     { href: "/admin/availability", label: "Availability" },
     { href: "/admin/time-off", label: "Time Off" },
+    { href: "/admin/users", label: "Users" },
 ]
 
 export function AdminNav() {

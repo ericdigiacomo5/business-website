@@ -1,18 +1,11 @@
 import bcrypt from "bcryptjs"
 import { prisma } from "@/lib/prisma"
+import { isValidEmail, isValidPhone } from "@/lib/validation"
 
 // Same cost factor as DUMMY_PASSWORD_HASH in src/auth.ts — keep these in sync,
 // since a mismatch wouldn't break anything functionally, but would make the
 // timing-safety comment in auth.ts inaccurate.
 const BCRYPT_COST = 10
-
-// Deliberately not RFC 5322-exhaustive — just enough to reject obvious
-// garbage (no "@", no domain, whitespace). Proving the address is real and
-// actually belongs to the registrant is a different problem, solved by
-// send-a-confirmation-link verification (User.emailVerified already exists in
-// the schema for this), not by stricter format matching here.
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-const EMAIL_MAX_LENGTH = 254 // practical upper bound per RFC 5321
 
 // No composition rules (no forced uppercase/number/symbol) — current
 // guidance (NIST 800-63B) recommends against them, since they tend to push
@@ -40,12 +33,7 @@ export async function POST(request: Request) {
 
     const { email, password, phone } = body as Record<string, unknown>
 
-    if (
-        !email ||
-        typeof email !== "string" ||
-        email.length > EMAIL_MAX_LENGTH ||
-        !EMAIL_PATTERN.test(email)
-    ) {
+    if (!isValidEmail(email)) {
         return Response.json(
             { error: "A valid email is required" },
             { status: 400 }
@@ -59,9 +47,7 @@ export async function POST(request: Request) {
         )
     }
 
-    // No format validation beyond "non-empty" — phone formats vary too much
-    // (country codes, extensions, formatting) to regex meaningfully.
-    if (!phone || typeof phone !== "string") {
+    if (!isValidPhone(phone)) {
         return Response.json(
             { error: "A phone number is required" },
             { status: 400 }
