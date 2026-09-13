@@ -1,6 +1,18 @@
 import type { Appointment, AppointmentStatus, Artist, Service, User } from "@/generated/prisma/client"
 
-export type AdminAppointment = Appointment & { artist: Artist; service: Service; user: User }
+// Deliberately a Pick, not the full `User`. This type crosses a Server→Client
+// boundary, so every field named here is serialized into the browser payload —
+// widening it back to `User` would ship passwordHash. Keep this in sync with
+// SAFE_USER_SELECT_BASIC in src/lib/user-select.ts, which is what the query
+// actually fetches; a mismatch is a type error at the call site rather than a
+// silent leak.
+export type AdminAppointmentUser = Pick<User, "id" | "name" | "email" | "phone">
+
+export type AdminAppointment = Appointment & {
+    artist: Artist
+    service: Service
+    user: AdminAppointmentUser
+}
 
 export const STATUS_TONE: Record<AppointmentStatus, "primary" | "success" | "danger" | "muted"> = {
     UPCOMING: "primary",

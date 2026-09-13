@@ -2,10 +2,7 @@ import { prisma } from "@/lib/prisma"
 import { Prisma } from "@/generated/prisma/client"
 import { requireAdmin } from "@/lib/require-admin"
 import { isValidEmail, isValidPhone } from "@/lib/validation"
-
-// Explicit select everywhere in this file, never a bare/include'd query —
-// this is what guarantees passwordHash can never leak through this endpoint.
-const SAFE_SELECT = { id: true, name: true, email: true, phone: true, role: true } as const
+import { SAFE_USER_SELECT } from "@/lib/user-select"
 
 export async function GET(
     request: Request,
@@ -18,7 +15,7 @@ export async function GET(
 
     const user = await prisma.user.findUnique({
         where: { id },
-        select: SAFE_SELECT,
+        select: SAFE_USER_SELECT,
     })
 
     if (!user) {
@@ -92,7 +89,7 @@ export async function PATCH(
         const updated = await prisma.user.update({
             where: { id: user.id },
             data,
-            select: SAFE_SELECT,
+            select: SAFE_USER_SELECT,
         })
 
         return Response.json({ data: updated }, { status: 200 })

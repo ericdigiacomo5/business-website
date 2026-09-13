@@ -8,6 +8,7 @@ import { DatePicker } from "@/components/admin/admin-date-picker"
 import { startOfDay, endOfDay, getWorkingWindows, getGridBounds } from "@/lib/availability"
 import { toLocalDateKey, parseLocalDate } from "@/lib/format"
 import { isBookingEnabled } from "@/lib/settings"
+import { SAFE_USER_SELECT_BASIC } from "@/lib/user-select"
 
 export default async function AdminBookingsPage({
     searchParams,
@@ -59,7 +60,15 @@ export default async function AdminBookingsPage({
     const [appointments, allArtists, bookingEnabled] = await Promise.all([
         prisma.appointment.findMany({
             where,
-            include: { artist: true, service: true, user: true },
+            // Explicit select on `user`, never a bare include — Prisma returns
+            // every scalar by default, and this result crosses into a Client
+            // Component, so a bare include serializes passwordHash into the
+            // browser's RSC payload.
+            include: {
+                artist: true,
+                service: true,
+                user: { select: SAFE_USER_SELECT_BASIC },
+            },
             orderBy: { startTime: "asc" },
         }),
         prisma.artist.findMany({ orderBy: { createdAt: "asc" } }),

@@ -1,5 +1,6 @@
 import Link from "next/link"
 import { LoginForm } from "@/components/auth/login-form"
+import { safeCallbackUrl } from "@/lib/validation"
 
 export default async function LoginPage({
     searchParams,
@@ -7,7 +8,9 @@ export default async function LoginPage({
     searchParams: Promise<{ callbackUrl?: string; registered?: string }>
 }) {
     const params = await searchParams
-    const callbackUrl = params.callbackUrl ?? "/"
+    // Validated server-side so the untrusted query value never reaches the
+    // client as a trusted prop.
+    const callbackUrl = safeCallbackUrl(params.callbackUrl)
 
     return (
         <div className="mx-auto max-w-sm px-4 py-12">

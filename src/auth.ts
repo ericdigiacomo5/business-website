@@ -44,7 +44,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   // cookie. "jwt" makes both providers behave consistently (correctly) at the
   // cost of losing server-side revocability for Google sign-ins too, which
   // previously worked correctly under "database" — see PROJECT_STATUS.md.
-  session: { strategy: "jwt" },
+  // maxAge bounds how long a stolen or no-longer-authorized token stays
+  // usable. JWTs can't be revoked server-side (no Session row to delete under
+  // this strategy), so the expiry is the only backstop — Auth.js's 30-day
+  // default is too long for an app with an admin surface. 8 hours ≈ one shift.
+  session: { strategy: "jwt", maxAge: 60 * 60 * 8 },
 
   providers: [
     Credentials({
@@ -102,21 +106,45 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     // it's actually there; otherwise leave whatever's already encoded in the
     // token from the original sign-in untouched.
     //
-    // `trigger === "update"` is the exception: it fires when the client calls
-    // next-auth/react's useSession().update(...), which the profile-edit form
-    // does after a successful PATCH /api/users/me. Without this branch,
-    // name/email edits would never show up in the session until the user
-    // signs out and back in — under JWT strategy there's no per-request
-    // database read to pick the new values up automatically.
-    async jwt({ token, user, trigger, session }) {
+    // On every later request the User row is re-read, for two reasons:
+    //
+    // 1. Revocation. token.role used to be written only at sign-in, so
+    //    demoting an admin in the database had no effect on their active
+    //    session — they kept ADMIN until the token expired. Re-reading makes
+    //    a role change (and a deleted account) take effect immediately.
+    //
+    // 2. Integrity. The `session` argument of this callback is the raw
+    //    request body of a client's useSession().update() call — entirely
+    //    attacker-controlled. Writing it into the token let any signed-in
+    //    user mint a validly-signed JWT carrying someone else's email.
+    //    The trigger is now treated as a signal that something changed, and
+    //    the values come from the database instead of from the caller.
+    //
+    // The cost is one indexed lookup per request, which is small next to the
+    // Prisma work these routes already do — and is what buys revocability
+    // back after the strategy switch documented above.
+    async jwt({ token, user }) {
       if (user?.id) {
         token.id = user.id
         token.role = user.role
+        return token
       }
-      if (trigger === "update" && session) {
-        if (typeof session.name === "string") token.name = session.name
-        if (typeof session.email === "string") token.email = session.email
+
+      if (token.id) {
+        const fresh = await prisma.user.findUnique({
+          where: { id: token.id },
+          select: { name: true, email: true, role: true },
+        })
+
+        // Returning null tells Auth.js to clear the session cookie, so a
+        // deleted account can't keep using an already-signed token.
+        if (!fresh) return null
+
+        token.name = fresh.name
+        token.email = fresh.email
+        token.role = fresh.role
       }
+
       return token
     },
     // Reads back off `token`, not `user` — under JWT strategy there's no
