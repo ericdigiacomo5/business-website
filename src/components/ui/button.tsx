@@ -1,16 +1,21 @@
 import { type ButtonHTMLAttributes, forwardRef } from "react"
 
-type Variant = "primary" | "secondary" | "danger" | "ghost"
+type Variant = "primary" | "secondary" | "gold" | "inverse" | "danger" | "ghost"
 type Size = "md" | "lg"
 
 const base =
-    "inline-flex items-center justify-center gap-2 rounded-lg font-medium transition-colors " +
+    "inline-flex items-center justify-center gap-2 rounded-sm font-semibold uppercase tracking-wide transition-colors " +
     "disabled:opacity-50 disabled:pointer-events-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
 
 const variants: Record<Variant, string> = {
-    primary: "bg-primary text-primary-foreground hover:bg-primary/90",
-    secondary: "bg-surface text-surface-foreground border border-border hover:bg-muted",
-    danger: "bg-danger text-danger-foreground hover:bg-danger/90",
+    // Header/nav "Book Now" — matches the mockup's blue CTA.
+    primary: "bg-accent text-accent-foreground border border-foreground hover:bg-accent/90",
+    secondary: "bg-surface text-surface-foreground border border-foreground hover:bg-muted",
+    // Hero "Book Now" — the mockup's gold CTA against the dark hero background.
+    gold: "bg-primary text-primary-foreground border border-foreground hover:bg-primary/90",
+    // Closing CTA band — the mockup's dark navy button against the gold band background.
+    inverse: "bg-foreground text-background border border-foreground hover:bg-foreground/90",
+    danger: "bg-danger text-danger-foreground border border-foreground hover:bg-danger/90",
     ghost: "bg-transparent text-foreground hover:bg-muted",
 }
 

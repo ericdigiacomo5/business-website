@@ -17,8 +17,9 @@ export default async function AppointmentsPage() {
     })
 
     return (
-        <div className="mx-auto max-w-3xl px-4 py-12">
-            <h1 className="text-3xl font-semibold tracking-tight text-foreground">My Bookings</h1>
+        <div className="mx-auto max-w-3xl px-4 py-14">
+            <span className="font-script text-2xl text-accent">Your</span>
+            <h1 className="mt-1 font-serif text-4xl font-extrabold text-foreground">Bookings</h1>
             <MyBookingsList initialAppointments={appointments} />
         </div>
     )

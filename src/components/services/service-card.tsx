@@ -6,19 +6,21 @@ import { formatDuration, formatPrice } from "@/lib/format"
 
 export function ServiceCard({ service }: { service: Service }) {
     return (
-        <Card className="flex flex-col p-5">
-            <h3 className="text-base font-semibold text-surface-foreground">{service.name}</h3>
+        <Card className="relative flex flex-col p-7">
+            <span className="absolute -top-3 right-5 rounded-sm bg-primary px-3.5 py-1 font-jost text-xs font-semibold tracking-wide text-primary-foreground">
+                {formatPrice(service.priceCents)}
+            </span>
+            <h3 className="mt-1 font-serif text-xl font-bold text-surface-foreground">{service.name}</h3>
             {service.description && (
-                <p className="mt-1 text-sm text-muted-foreground">{service.description}</p>
+                <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{service.description}</p>
             )}
-            <div className="mt-3 flex items-center gap-3 text-sm text-muted-foreground">
-                <span>{formatDuration(service.durationMinutes)}</span>
-                <span aria-hidden>&middot;</span>
-                <span className="font-medium text-surface-foreground">{formatPrice(service.priceCents)}</span>
-            </div>
+            <div className="mt-4 text-sm text-muted-foreground">{formatDuration(service.durationMinutes)}</div>
             <Link
                 href={`/book?serviceId=${service.id}`}
-                className={buttonVariants({ variant: "secondary", className: "mt-4 w-full" })}
+                className={buttonVariants({
+                    variant: "secondary",
+                    className: "mt-5 w-full bg-[#f0e2cf]! hover:bg-[#e6cead]!",
+                })}
             >
                 Book This Service
             </Link>

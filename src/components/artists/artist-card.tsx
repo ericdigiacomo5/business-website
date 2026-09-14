@@ -14,7 +14,7 @@ function initials(name: string) {
 export function ArtistCard({ artist }: { artist: Artist }) {
     return (
         <Link href={`/artists/${artist.id}`}>
-            <Card className="flex flex-col items-center p-5 text-center transition-colors hover:bg-muted">
+            <Card className="flex flex-col items-center p-7 text-center transition-colors hover:bg-muted">
                 {artist.photoUrl ? (
                     // DB-sourced image, host not yet chosen (roadmap item 5) — plain <img>
                     // rather than next/image, which would throw on a non-allowlisted host.
@@ -22,16 +22,16 @@ export function ArtistCard({ artist }: { artist: Artist }) {
                     <img
                         src={artist.photoUrl}
                         alt={artist.name}
-                        className="h-20 w-20 rounded-full object-cover"
+                        className="h-24 w-24 rounded-full border-2 border-accent object-cover"
                     />
                 ) : (
-                    <div className="flex h-20 w-20 items-center justify-center rounded-full bg-primary/10 text-lg font-semibold text-primary">
+                    <div className="flex h-24 w-24 items-center justify-center rounded-full border-2 border-accent bg-muted text-lg font-semibold text-accent">
                         {initials(artist.name)}
                     </div>
                 )}
-                <h3 className="mt-3 text-base font-semibold text-surface-foreground">{artist.name}</h3>
+                <h3 className="mt-4 font-serif text-xl font-bold text-surface-foreground">{artist.name}</h3>
                 {artist.bio && (
-                    <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">{artist.bio}</p>
+                    <p className="mt-1 line-clamp-2 text-sm leading-relaxed text-muted-foreground">{artist.bio}</p>
                 )}
             </Card>
         </Link>

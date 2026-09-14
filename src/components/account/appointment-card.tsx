@@ -24,18 +24,23 @@ export function AppointmentCard({
     cancelling: boolean
 }) {
     return (
-        <div className="flex flex-col gap-3 rounded-xl border border-border bg-surface p-4 sm:flex-row sm:items-center sm:justify-between">
+        <div
+            className={
+                cancellable
+                    ? "flex flex-col gap-3 rounded-sm border-2 border-accent bg-background p-5 sm:flex-row sm:items-center sm:justify-between"
+                    : "flex flex-col gap-3 rounded-sm border border-foreground bg-surface p-5 opacity-85 sm:flex-row sm:items-center sm:justify-between"
+            }
+        >
             <div>
-                <div className="flex items-center gap-2">
-                    <span className="font-medium text-surface-foreground">{appointment.service.name}</span>
-                    <Badge tone={STATUS_TONE[appointment.status]}>{appointment.status}</Badge>
+                <div className="font-serif text-lg font-bold text-surface-foreground">
+                    {appointment.service.name}
                 </div>
-                <p className="mt-1 text-sm text-muted-foreground">
-                    with {appointment.artist.name} &middot;{" "}
+                <p className="mt-1 text-sm text-muted-foreground">with {appointment.artist.name}</p>
+                <p className="mt-0.5 text-sm text-muted-foreground">
                     {new Date(appointment.startTime).toLocaleString("en-US", {
-                        weekday: "short",
                         month: "short",
                         day: "numeric",
+                        year: "numeric",
                         hour: "numeric",
                         minute: "2-digit",
                     })}
@@ -45,11 +50,20 @@ export function AppointmentCard({
                     {formatPrice(appointment.service.priceCents)}
                 </p>
             </div>
-            {cancellable && (
-                <Button variant="danger" size="md" onClick={onCancel} disabled={cancelling} className="sm:shrink-0">
-                    {cancelling ? "Cancelling..." : "Cancel"}
-                </Button>
-            )}
+            <div className="flex items-center gap-3">
+                <Badge tone={STATUS_TONE[appointment.status]}>{appointment.status}</Badge>
+                {cancellable && (
+                    <Button
+                        variant="danger"
+                        size="md"
+                        onClick={onCancel}
+                        disabled={cancelling}
+                        className="sm:shrink-0"
+                    >
+                        {cancelling ? "Cancelling..." : "Cancel"}
+                    </Button>
+                )}
+            </div>
         </div>
     )
 }

@@ -3,11 +3,11 @@ import { type HTMLAttributes } from "react"
 type Tone = "primary" | "accent" | "muted" | "danger" | "success"
 
 const tones: Record<Tone, string> = {
-    primary: "bg-primary/10 text-primary",
-    accent: "bg-accent/20 text-accent-foreground",
+    primary: "bg-primary text-primary-foreground",
+    accent: "bg-accent text-accent-foreground",
     muted: "bg-muted text-muted-foreground",
-    danger: "bg-danger/10 text-danger",
-    success: "bg-success/10 text-success",
+    danger: "bg-danger text-danger-foreground",
+    success: "bg-success text-success-foreground",
 }
 
 export function Badge({
@@ -17,7 +17,7 @@ export function Badge({
 }: HTMLAttributes<HTMLSpanElement> & { tone?: Tone }) {
     return (
         <span
-            className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${tones[tone]} ${className}`}
+            className={`inline-flex items-center rounded-sm px-3 py-1 text-xs font-semibold uppercase tracking-wide ${tones[tone]} ${className}`}
             {...props}
         />
     )

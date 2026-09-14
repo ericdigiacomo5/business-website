@@ -3,24 +3,28 @@
 /* Single light theme, deliberately — booking-app UIs are conventionally
    bright/light (OpenTable, Calendly), and a v1 portfolio build doesn't need
    to carry a second palette through every component. Revisit if this ever
-   needs a dark mode. */
+   needs a dark mode.
+
+   Palette/fonts: old-Hollywood pin-up theme ("Nail Image Inc.", Amityville
+   NY) — Bodoni Moda serif for headings, Yesteryear cursive for script
+   accents, Jost sans for body/UI text. Navy/blue/gold/cream palette. */
 :root {
-  --background: #ffffff;
-  --foreground: #241619;
+  --background: #f6ead9;
+  --foreground: #16212c;
 
-  --primary: #b33c5e;
-  --primary-foreground: #ffffff;
+  --primary: #b8863b;
+  --primary-foreground: #16212c;
 
-  --accent: #c9a15a;
-  --accent-foreground: #3a2a1a;
+  --accent: #2f6f9e;
+  --accent-foreground: #ffffff;
 
-  --surface: #fff9f7;
-  --surface-foreground: #1f1315;
+  --surface: #fbf3e7;
+  --surface-foreground: #16212c;
 
-  --border: #e8dad8;
+  --border: #16212c;
 
-  --muted: #f5edeb;
-  --muted-foreground: #8a7371;
+  --muted: #e6c8a4;
+  --muted-foreground: #5f6f7d;
 
   --danger: #c0392b;
   --danger-foreground: #ffffff;
@@ -45,21 +49,44 @@
   --color-danger-foreground: var(--danger-foreground);
   --color-success: var(--success);
   --color-success-foreground: var(--success-foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-jost);
+  --font-serif: var(--font-bodoni-moda);
+  --font-script: var(--font-yesteryear);
+  --font-mono: ui-monospace, monospace;
 }
 
-html {
-  /* Reserves the vertical scrollbar's gutter on every page, whether or not
-     that page actually needs to scroll — without this, pages shorter than
-     the viewport (no scrollbar) have more available width than pages taller
-     than the viewport (scrollbar present), so the centered Header's content
-     visibly shifts a few pixels between them on navigation. */
-  scrollbar-gutter: stable;
-}
+/* @layer base puts these rules in the same cascade layer Tailwind's own
+   utilities use — plain unlayered CSS always beats a layered rule regardless
+   of specificity, which previously made :where(a)'s color win over every
+   text-color utility (e.g. text-black, text-accent) despite the :where()
+   zero-specificity trick. Layering fixes that: a real class selector like
+   .text-black now correctly outranks :where(a) inside the same layer. */
+@layer base {
+  html {
+    /* Reserves the vertical scrollbar's gutter on every page, whether or not
+       that page actually needs to scroll — without this, pages shorter than
+       the viewport (no scrollbar) have more available width than pages taller
+       than the viewport (scrollbar present), so the centered Header's content
+       visibly shifts a few pixels between them on navigation. */
+    scrollbar-gutter: stable;
+  }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  body {
+    background: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  }
+
+  :where(a) {
+    color: var(--accent);
+  }
+
+  :where(a:hover) {
+    color: var(--primary);
+  }
+
+  ::selection {
+    background: var(--primary);
+    color: #ffffff;
+  }
 }

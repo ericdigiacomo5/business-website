@@ -23,19 +23,17 @@ export function StepIndicator({ current, adminMode = false }: { current: WizardS
                     <li key={step.key} className="flex flex-1 items-center gap-2">
                         <span
                             className={
-                                "flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold " +
-                                (isActive
-                                    ? "bg-primary text-primary-foreground"
-                                    : isDone
-                                        ? "bg-primary/20 text-primary"
-                                        : "bg-muted text-muted-foreground")
+                                "flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-full font-jost text-[13px] font-bold " +
+                                (isActive || isDone
+                                    ? "bg-accent text-accent-foreground"
+                                    : "bg-muted text-muted-foreground")
                             }
                         >
                             {index + 1}
                         </span>
                         {index < steps.length - 1 && (
                             <span
-                                className={"h-0.5 flex-1 " + (isDone ? "bg-primary/40" : "bg-border")}
+                                className={"h-0.5 flex-1 " + (isDone ? "bg-accent" : "bg-muted")}
                                 aria-hidden
                             />
                         )}

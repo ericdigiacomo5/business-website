@@ -28,22 +28,22 @@ export function ProfileForm({
     }
 
     return (
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4 rounded-xl border border-border bg-surface p-4">
+        <form onSubmit={handleSubmit} className="flex flex-col gap-5 border border-foreground bg-surface p-8">
             <div>
-                <label htmlFor="profile-name" className="block text-xs font-medium text-muted-foreground">
-                    Name
+                <label htmlFor="profile-name" className="block font-jost text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Full Name
                 </label>
                 <input
                     id="profile-name"
                     required
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    className="mt-1 h-11 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground"
+                    className="mt-1.5 h-12 w-full rounded-sm border border-foreground bg-background px-4 text-foreground"
                 />
             </div>
 
             <div>
-                <label htmlFor="profile-email" className="block text-xs font-medium text-muted-foreground">
+                <label htmlFor="profile-email" className="block font-jost text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                     Email
                 </label>
                 <input
@@ -52,12 +52,12 @@ export function ProfileForm({
                     required
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    className="mt-1 h-11 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground"
+                    className="mt-1.5 h-12 w-full rounded-sm border border-foreground bg-background px-4 text-foreground"
                 />
             </div>
 
             <div>
-                <label htmlFor="profile-phone" className="block text-xs font-medium text-muted-foreground">
+                <label htmlFor="profile-phone" className="block font-jost text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                     Phone
                 </label>
                 <input
@@ -65,17 +65,17 @@ export function ProfileForm({
                     required
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
-                    className="mt-1 h-11 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground"
+                    className="mt-1.5 h-12 w-full rounded-sm border border-foreground bg-background px-4 text-foreground"
                 />
             </div>
 
-            <div className="flex gap-2">
-                <Button type="submit">{submitLabel}</Button>
+            <div className="flex justify-end gap-2">
                 {onCancel && (
                     <Button type="button" variant="secondary" onClick={onCancel}>
                         Cancel
                     </Button>
                 )}
+                <Button type="submit">{submitLabel}</Button>
             </div>
         </form>
     )

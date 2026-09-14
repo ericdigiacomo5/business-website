@@ -21,17 +21,24 @@ export default async function ArtistDetailPage({
     }
 
     return (
-        <div className="mx-auto max-w-3xl px-4 py-12">
-            <div className="flex flex-col items-center text-center sm:items-start sm:text-left">
+        <div className="mx-auto max-w-3xl px-4 py-6">
+            <Link
+                href="/artists"
+                className="inline-block font-jost text-sm font-semibold uppercase tracking-wide text-foreground"
+            >
+                &larr; All Artists
+            </Link>
+
+            <div className="mt-8 flex flex-col items-center gap-10 text-center sm:flex-row sm:items-start sm:text-left">
                 {artist.photoUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
                         src={artist.photoUrl}
                         alt={artist.name}
-                        className="h-24 w-24 rounded-full object-cover"
+                        className="h-36 w-36 flex-none rounded-full border-2 border-accent object-cover"
                     />
                 ) : (
-                    <div className="flex h-24 w-24 items-center justify-center rounded-full bg-primary/10 text-2xl font-semibold text-primary">
+                    <div className="flex h-36 w-36 flex-none items-center justify-center rounded-full border-2 border-accent bg-muted text-3xl font-semibold text-accent">
                         {artist.name
                             .split(" ")
                             .map((p) => p[0])
@@ -40,20 +47,27 @@ export default async function ArtistDetailPage({
                             .toUpperCase()}
                     </div>
                 )}
-                <h1 className="mt-4 text-3xl font-semibold tracking-tight text-foreground">
-                    {artist.name}
-                </h1>
-                {artist.bio && <p className="mt-2 max-w-xl text-muted-foreground">{artist.bio}</p>}
-                <Link
-                    href={`/book?artistId=${artist.id}`}
-                    className={buttonVariants({ size: "lg", className: "mt-6" })}
-                >
-                    Book with {artist.name.split(" ")[0]}
-                </Link>
+                <div>
+                    <span className="font-script text-2xl text-accent">Meet</span>
+                    <h1 className="mt-1 font-serif text-4xl font-extrabold text-foreground">{artist.name}</h1>
+                    {artist.bio && (
+                        <p className="mt-4 max-w-xl text-[15px] leading-relaxed text-muted-foreground">
+                            {artist.bio}
+                        </p>
+                    )}
+                    <Link
+                        href={`/book?artistId=${artist.id}`}
+                        className={buttonVariants({ size: "lg", className: "mt-6" })}
+                    >
+                        Book with {artist.name.split(" ")[0]}
+                    </Link>
+                </div>
             </div>
 
-            <h2 className="mt-12 text-xl font-semibold text-foreground">Portfolio</h2>
-            <div className="mt-4">
+            <h2 className="mt-14 border-b-2 border-foreground pb-3 font-serif text-2xl font-extrabold text-foreground">
+                Portfolio
+            </h2>
+            <div className="mt-6">
                 <PortfolioGallery images={artist.portfolio} />
             </div>
         </div>

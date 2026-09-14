@@ -9,6 +9,7 @@ import { SITE_NAME } from "@/lib/site"
 import { buttonVariants } from "@/components/ui/button"
 
 const NAV_LINKS = [
+    { href: "/", label: "Home" },
     { href: "/services", label: "Services" },
     { href: "/artists", label: "Artists" },
     { href: "/about", label: "About" },
@@ -22,64 +23,50 @@ export function Header() {
 
     const closeMenu = () => setIsOpen(false)
 
+    const navLinkClass = (active: boolean) =>
+        active
+            ? "font-jost text-sm font-semibold uppercase tracking-wide text-accent"
+            : "font-jost text-sm font-semibold uppercase tracking-wide text-black hover:text-primary"
+
+    const mobileNavLinkClass = "flex h-11 items-center font-jost text-base font-semibold uppercase tracking-wide text-foreground"
+
     return (
-        <header className="sticky top-0 z-30 border-b border-border bg-background/95 backdrop-blur">
-            <div className="mx-auto flex h-16 max-w-5xl items-center justify-between px-4">
-                <Link
-                    href="/"
-                    onClick={closeMenu}
-                    className="flex items-center gap-2 text-lg font-semibold text-foreground"
-                >
-                    <img src="/nail-image.jpg" alt="" className="h-8 w-8 rounded-full object-cover" />
-                    {SITE_NAME}
+        <header className="sticky top-0 z-30 border-b-2 border-foreground bg-background/95 backdrop-blur">
+            <div className="mx-auto flex h-20 max-w-6xl items-center justify-between px-4">
+                <Link href="/" onClick={closeMenu} className="flex items-center gap-3">
+                    <img
+                        src="/nail-image.jpg"
+                        alt=""
+                        className="h-11 w-11 flex-none rounded-full border-2 border-accent object-cover"
+                    />
+                    <span className="flex flex-col leading-tight">
+                        <span className="font-serif text-lg font-extrabold tracking-wide text-foreground">
+                            {SITE_NAME.toUpperCase()}
+                        </span>
+                        <span className="font-script text-sm text-accent">Amityville, N.Y.</span>
+                    </span>
                 </Link>
 
                 <nav className="hidden items-center gap-6 md:flex">
                     {NAV_LINKS.map((link) => (
-                        <Link
-                            key={link.href}
-                            href={link.href}
-                            className={
-                                pathname === link.href
-                                    ? "text-sm font-medium text-primary"
-                                    : "text-sm font-medium text-foreground hover:text-primary"
-                            }
-                        >
+                        <Link key={link.href} href={link.href} className={navLinkClass(pathname === link.href)}>
                             {link.label}
                         </Link>
                     ))}
                     {status === "authenticated" && (
-                        <Link
-                            href="/appointments"
-                            className={
-                                pathname === "/appointments"
-                                    ? "text-sm font-medium text-primary"
-                                    : "text-sm font-medium text-foreground hover:text-primary"
-                            }
-                        >
+                        <Link href="/appointments" className={navLinkClass(pathname === "/appointments")}>
                             My Bookings
                         </Link>
                     )}
                     {status === "authenticated" && (
-                        <Link
-                            href="/account"
-                            className={
-                                pathname === "/account"
-                                    ? "text-sm font-medium text-primary"
-                                    : "text-sm font-medium text-foreground hover:text-primary"
-                            }
-                        >
+                        <Link href="/account" className={navLinkClass(pathname === "/account")}>
                             My Profile
                         </Link>
                     )}
                     {isAdmin && (
                         <Link
                             href="/admin"
-                            className={
-                                pathname === "/admin" || pathname.startsWith("/admin/")
-                                    ? "text-sm font-medium text-primary"
-                                    : "text-sm font-medium text-foreground hover:text-primary"
-                            }
+                            className={navLinkClass(pathname === "/admin" || pathname.startsWith("/admin/"))}
                         >
                             Admin
                         </Link>
@@ -87,16 +74,19 @@ export function Header() {
                     {status === "authenticated" ? (
                         <button
                             onClick={() => signOut({ callbackUrl: "/" })}
-                            className="text-sm font-medium text-foreground hover:text-primary"
+                            className="font-jost text-sm font-semibold uppercase tracking-wide text-muted-foreground hover:text-primary"
                         >
                             Sign Out
                         </button>
                     ) : (
-                        <Link href="/login" className="text-sm font-medium text-foreground hover:text-primary">
+                        <Link
+                            href="/login"
+                            className="font-jost text-sm font-semibold uppercase tracking-wide text-muted-foreground hover:text-primary"
+                        >
                             Sign In
                         </Link>
                     )}
-                    <Link href="/book" className={buttonVariants({ size: "md" })}>
+                    <Link href="/book" className={buttonVariants({ size: "md", className: "text-white!"})}>
                         Book Now
                     </Link>
                 </nav>
@@ -112,41 +102,24 @@ export function Header() {
             </div>
 
             {isOpen && (
-                <nav className="flex flex-col gap-1 border-t border-border px-4 py-3 md:hidden">
+                <nav className="flex flex-col gap-1 border-t-2 border-foreground px-4 py-3 md:hidden">
                     {NAV_LINKS.map((link) => (
-                        <Link
-                            key={link.href}
-                            href={link.href}
-                            onClick={closeMenu}
-                            className="flex h-11 items-center text-base font-medium text-foreground"
-                        >
+                        <Link key={link.href} href={link.href} onClick={closeMenu} className={mobileNavLinkClass}>
                             {link.label}
                         </Link>
                     ))}
                     {status === "authenticated" && (
-                        <Link
-                            href="/appointments"
-                            onClick={closeMenu}
-                            className="flex h-11 items-center text-base font-medium text-foreground"
-                        >
+                        <Link href="/appointments" onClick={closeMenu} className={mobileNavLinkClass}>
                             My Bookings
                         </Link>
                     )}
                     {status === "authenticated" && (
-                        <Link
-                            href="/account"
-                            onClick={closeMenu}
-                            className="flex h-11 items-center text-base font-medium text-foreground"
-                        >
+                        <Link href="/account" onClick={closeMenu} className={mobileNavLinkClass}>
                             My Profile
                         </Link>
                     )}
                     {isAdmin && (
-                        <Link
-                            href="/admin"
-                            onClick={closeMenu}
-                            className="flex h-11 items-center text-base font-medium text-foreground"
-                        >
+                        <Link href="/admin" onClick={closeMenu} className={mobileNavLinkClass}>
                             Admin
                         </Link>
                     )}
@@ -156,23 +129,19 @@ export function Header() {
                                 closeMenu()
                                 signOut({ callbackUrl: "/" })
                             }}
-                            className="flex h-11 items-center text-left text-base font-medium text-foreground"
+                            className={`${mobileNavLinkClass} text-left`}
                         >
                             Sign Out
                         </button>
                     ) : (
-                        <Link
-                            href="/login"
-                            onClick={closeMenu}
-                            className="flex h-11 items-center text-base font-medium text-foreground"
-                        >
+                        <Link href="/login" onClick={closeMenu} className={mobileNavLinkClass}>
                             Sign In
                         </Link>
                     )}
                     <Link
                         href="/book"
                         onClick={closeMenu}
-                        className={buttonVariants({ size: "md", className: "mt-2 w-full" })}
+                        className={buttonVariants({ size: "md", className: "mt-2 w-full text-white!" })}
                     >
                         Book Now
                     </Link>

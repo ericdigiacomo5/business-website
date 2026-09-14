@@ -12,8 +12,9 @@ export function ServiceStep({
 }) {
     return (
         <div>
-            <h2 className="text-lg font-semibold text-foreground">Choose a Service</h2>
-            <div className="mt-4 flex flex-col gap-3">
+            <h2 className="font-serif text-xl font-bold text-foreground">Choose a Service</h2>
+            <p className="mt-1 text-sm text-muted-foreground">Step 1 of 4</p>
+            <div className="mt-5 flex flex-col gap-3.5">
                 {services.map((service) => {
                     const selected = service.id === selectedId
                     return (
@@ -22,15 +23,32 @@ export function ServiceStep({
                             type="button"
                             onClick={() => onSelect(service.id)}
                             className={
-                                "flex min-h-11 flex-col rounded-xl border p-4 text-left transition-colors " +
+                                "flex min-h-11 items-center justify-between gap-4 rounded-sm p-5 text-left transition-colors " +
                                 (selected
-                                    ? "border-primary bg-primary/5"
-                                    : "border-border bg-surface hover:bg-muted")
+                                    ? "border-2 border-accent bg-background"
+                                    : "border border-foreground bg-surface hover:bg-muted")
                             }
                         >
-                            <span className="font-medium text-surface-foreground">{service.name}</span>
-                            <span className="mt-1 text-sm text-muted-foreground">
-                                {formatDuration(service.durationMinutes)} &middot; {formatPrice(service.priceCents)}
+                            <span>
+                                <span className="block font-serif text-base font-bold text-surface-foreground">
+                                    {service.name}
+                                </span>
+                                <span className="mt-0.5 block text-sm text-muted-foreground">
+                                    {formatDuration(service.durationMinutes)}
+                                </span>
+                            </span>
+                            <span className="flex items-center gap-3.5">
+                                <span className="font-serif text-lg font-bold text-accent">
+                                    {formatPrice(service.priceCents)}
+                                </span>
+                                <span
+                                    className={
+                                        "flex h-5 w-5 flex-none items-center justify-center rounded-full border-2 " +
+                                        (selected ? "border-accent bg-accent" : "border-muted-foreground")
+                                    }
+                                >
+                                    {selected && <span className="h-2 w-2 rounded-full bg-background" />}
+                                </span>
                             </span>
                         </button>
                     )

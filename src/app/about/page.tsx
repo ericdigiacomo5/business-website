@@ -4,9 +4,12 @@ import { SITE_NAME } from "@/lib/site"
 
 export default function AboutPage() {
     return (
-        <div className="mx-auto max-w-3xl px-4 py-12">
-            <h1 className="text-3xl font-semibold tracking-tight text-foreground">About {SITE_NAME}</h1>
-            <div className="mt-6 space-y-4 text-muted-foreground">
+        <div className="mx-auto max-w-3xl px-4 py-14">
+            <span className="font-script text-2xl text-accent">Our Story</span>
+            <h1 className="mt-1 font-serif text-4xl font-extrabold leading-tight text-foreground">
+                About {SITE_NAME}
+            </h1>
+            <div className="mt-6 space-y-4 text-[#4a3230]">
                 <p>
                     {SITE_NAME} is a nail studio built around one idea: booking an appointment should be as
                     easy as the manicure itself. Pick a service, pick an artist, pick a time that works for

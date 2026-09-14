@@ -35,9 +35,9 @@ export function RegisterForm() {
     }
 
     return (
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+        <form onSubmit={handleSubmit} className="flex flex-col gap-5 border border-foreground bg-surface p-8">
             <div>
-                <label htmlFor="email" className="block text-sm font-medium text-foreground">
+                <label htmlFor="email" className="block font-jost text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                     Email
                 </label>
                 <input
@@ -46,13 +46,14 @@ export function RegisterForm() {
                     type="email"
                     required
                     autoComplete="email"
+                    placeholder="you@example.com"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    className="mt-1 h-11 w-full rounded-lg border border-border bg-background px-3 text-foreground"
+                    className="mt-1.5 h-12 w-full rounded-sm border border-foreground bg-background px-4 text-foreground"
                 />
             </div>
             <div>
-                <label htmlFor="phone" className="block text-sm font-medium text-foreground">
+                <label htmlFor="phone" className="block font-jost text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                     Phone
                 </label>
                 <input
@@ -61,13 +62,14 @@ export function RegisterForm() {
                     type="tel"
                     required
                     autoComplete="tel"
+                    placeholder="(631) 555-0143"
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
-                    className="mt-1 h-11 w-full rounded-lg border border-border bg-background px-3 text-foreground"
+                    className="mt-1.5 h-12 w-full rounded-sm border border-foreground bg-background px-4 text-foreground"
                 />
             </div>
             <div>
-                <label htmlFor="password" className="block text-sm font-medium text-foreground">
+                <label htmlFor="password" className="block font-jost text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                     Password
                 </label>
                 <input
@@ -79,7 +81,7 @@ export function RegisterForm() {
                     autoComplete="new-password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="mt-1 h-11 w-full rounded-lg border border-border bg-background px-3 text-foreground"
+                    className="mt-1.5 h-12 w-full rounded-sm border border-foreground bg-background px-4 text-foreground"
                 />
                 <p className="mt-1 text-xs text-muted-foreground">At least 8 characters.</p>
             </div>
@@ -88,7 +90,7 @@ export function RegisterForm() {
                     {error}
                 </p>
             )}
-            <Button type="submit" disabled={pending} className="w-full">
+            <Button type="submit" disabled={pending} size="lg" className="w-full">
                 {pending ? "Creating account..." : "Create Account"}
             </Button>
         </form>

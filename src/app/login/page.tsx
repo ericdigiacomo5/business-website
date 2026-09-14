@@ -13,19 +13,22 @@ export default async function LoginPage({
     const callbackUrl = safeCallbackUrl(params.callbackUrl)
 
     return (
-        <div className="mx-auto max-w-sm px-4 py-12">
-            <h1 className="text-2xl font-semibold tracking-tight text-foreground">Sign In</h1>
+        <div className="mx-auto flex min-h-[70vh] max-w-sm flex-col items-center justify-center px-4 py-12">
+            <div className="w-full text-center">
+                <span className="font-script text-2xl text-accent">Welcome Back,</span>
+                <h1 className="mt-1 font-serif text-4xl font-extrabold text-foreground">Sign In</h1>
+            </div>
             {params.registered && (
-                <p className="mt-3 rounded-lg bg-success/10 px-3 py-2 text-sm text-success">
+                <p className="mt-4 w-full rounded-sm bg-success/10 px-3 py-2 text-center text-sm text-success">
                     Account created — sign in to continue.
                 </p>
             )}
-            <div className="mt-6">
+            <div className="mt-8 w-full">
                 <LoginForm callbackUrl={callbackUrl} />
             </div>
             <p className="mt-6 text-sm text-muted-foreground">
                 Don&apos;t have an account?{" "}
-                <Link href="/register" className="font-medium text-primary hover:underline">
+                <Link href="/register" className="font-semibold text-accent hover:text-primary">
                     Create one
                 </Link>
             </p>

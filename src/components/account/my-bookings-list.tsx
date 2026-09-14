@@ -55,8 +55,10 @@ export function MyBookingsList({ initialAppointments }: { initialAppointments: A
 
             {upcoming.length > 0 && (
                 <section>
-                    <h2 className="text-lg font-semibold text-foreground">Upcoming</h2>
-                    <div className="mt-4 flex flex-col gap-3">
+                    <h2 className="border-b-2 border-foreground pb-2.5 font-jost text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        Upcoming
+                    </h2>
+                    <div className="mt-5 flex flex-col gap-4">
                         {upcoming.map((appointment) => (
                             <AppointmentCard
                                 key={appointment.id}
@@ -72,8 +74,10 @@ export function MyBookingsList({ initialAppointments }: { initialAppointments: A
 
             {other.length > 0 && (
                 <section>
-                    <h2 className="text-lg font-semibold text-foreground">Past &amp; Cancelled</h2>
-                    <div className="mt-4 flex flex-col gap-3">
+                    <h2 className="border-b-2 border-foreground pb-2.5 font-jost text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        Past &amp; Cancelled
+                    </h2>
+                    <div className="mt-5 flex flex-col gap-4">
                         {other.map((appointment) => (
                             <AppointmentCard
                                 key={appointment.id}

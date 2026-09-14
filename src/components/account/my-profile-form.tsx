@@ -41,14 +41,17 @@ export function MyProfileForm({ initial }: { initial: ProfileFormValues }) {
     }
 
     return (
-        <div className="mt-6">
+        <div>
+            <h2 className="mb-5 border-b-2 border-foreground pb-3 font-serif text-xl font-bold text-foreground">
+                Profile Details
+            </h2>
             {error && (
                 <p role="alert" className="mb-3 text-sm text-danger">
                     {error}
                 </p>
             )}
             {success && !error && (
-                <p role="status" className="mb-3 text-sm text-primary">
+                <p role="status" className="mb-3 text-sm text-accent">
                     Profile updated.
                 </p>
             )}

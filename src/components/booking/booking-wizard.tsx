@@ -122,6 +122,12 @@ export function BookingWizard({
 
     return (
         <div className="mx-auto max-w-lg px-4 py-8">
+            {!adminMode && (
+                <div className="mb-8 text-center">
+                    <span className="font-script text-2xl text-accent">Let&apos;s get you</span>
+                    <h1 className="mt-0.5 font-serif text-3xl font-extrabold text-foreground">Booked In</h1>
+                </div>
+            )}
             <StepIndicator current={state.step} adminMode={adminMode} />
 
             <div className="mt-8">
