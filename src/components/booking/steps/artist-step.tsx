@@ -21,7 +21,7 @@ export function ArtistStep({
                             type="button"
                             onClick={() => onSelect(artist.id)}
                             className={
-                                "flex min-h-11 items-center gap-3 rounded-xl border p-4 text-left transition-colors " +
+                                "group flex min-h-11 cursor-pointer items-center gap-3 rounded-sm border p-4 text-left transition-colors " +
                                 (selected
                                     ? "border-primary bg-primary/5"
                                     : "border-border bg-surface hover:bg-muted")
@@ -35,7 +35,24 @@ export function ArtistStep({
                                     .join("")
                                     .toUpperCase()}
                             </span>
-                            <span className="font-medium text-surface-foreground">{artist.name}</span>
+                            <span className="flex-1 font-medium text-surface-foreground">{artist.name}</span>
+                            <span
+                                className={
+                                    "flex h-5 w-5 flex-none items-center justify-center rounded-full border-2 transition-colors " +
+                                    (selected
+                                        ? "border-primary bg-primary"
+                                        : "border-muted-foreground group-hover:border-primary")
+                                }
+                            >
+                                <span
+                                    className={
+                                        "h-2 w-2 rounded-full transition-colors " +
+                                        (selected
+                                            ? "bg-background"
+                                            : "bg-transparent group-hover:bg-primary")
+                                    }
+                                />
+                            </span>
                         </button>
                     )
                 })}

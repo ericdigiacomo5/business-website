@@ -7,6 +7,7 @@ const ADMIN_LINKS = [
     { href: "/admin", label: "Bookings" },
     { href: "/admin/book", label: "Book Appointment" },
     { href: "/admin/services", label: "Services" },
+    { href: "/admin/artists", label: "Artists" },
     { href: "/admin/availability", label: "Availability" },
     { href: "/admin/time-off", label: "Time Off" },
     { href: "/admin/users", label: "Users" },

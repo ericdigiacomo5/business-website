@@ -31,6 +31,20 @@
 
   --success: #2e7d5b;
   --success-foreground: #ffffff;
+
+  /* Opaque tints for schedule-grid appointment blocks (see
+     appointment-shared.ts's ARTIST_COLOR_CYCLE) — solid colors, not
+     translucent bg-color-with-opacity utilities, so grid lines never show
+     through a block. Deliberately deeper/more saturated than a simple pastel
+     mix of the theme color over --background: those washed out to nearly
+     the same lightness as --background and the empty grid cells, so blocks
+     barely stood out even once made opaque. These keep each artist's hue
+     recognizable while giving real lightness contrast against the page and
+     against the dark-navy block text/border. */
+  --schedule-tint-primary: #e8cd98;
+  --schedule-tint-accent: #b9d9ec;
+  --schedule-tint-success: #b7dcc9;
+  --schedule-tint-muted: #d7d9dd;
 }
 
 @theme inline {
@@ -49,6 +63,10 @@
   --color-danger-foreground: var(--danger-foreground);
   --color-success: var(--success);
   --color-success-foreground: var(--success-foreground);
+  --color-schedule-tint-primary: var(--schedule-tint-primary);
+  --color-schedule-tint-accent: var(--schedule-tint-accent);
+  --color-schedule-tint-success: var(--schedule-tint-success);
+  --color-schedule-tint-muted: var(--schedule-tint-muted);
   --font-sans: var(--font-jost);
   --font-serif: var(--font-bodoni-moda);
   --font-script: var(--font-yesteryear);

@@ -7,7 +7,7 @@ import { formatDuration, formatPrice } from "@/lib/format"
 export function ServiceCard({ service }: { service: Service }) {
     return (
         <Card className="relative flex flex-col p-7">
-            <span className="absolute -top-3 right-5 rounded-sm bg-primary px-3.5 py-1 font-jost text-xs font-semibold tracking-wide text-primary-foreground">
+            <span className="absolute -top-3 right-5 rounded-sm bg-primary px-3.5 py-1 font-jost text-xs font-semibold tracking-wide text-white">
                 {formatPrice(service.priceCents)}
             </span>
             <h3 className="mt-1 font-serif text-xl font-bold text-surface-foreground">{service.name}</h3>

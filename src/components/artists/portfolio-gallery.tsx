@@ -4,7 +4,7 @@ import { Camera } from "lucide-react"
 export function PortfolioGallery({ images }: { images: PortfolioImage[] }) {
     if (images.length === 0) {
         return (
-            <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border py-16 text-center text-muted-foreground">
+            <div className="flex flex-col items-center justify-center rounded-sm border border-dashed border-border py-16 text-center text-muted-foreground">
                 <Camera className="h-8 w-8" aria-hidden />
                 <p className="mt-3 text-sm">No portfolio photos yet — check back soon.</p>
             </div>
@@ -20,7 +20,7 @@ export function PortfolioGallery({ images }: { images: PortfolioImage[] }) {
                     key={image.id}
                     src={image.imageUrl}
                     alt={image.caption ?? "Portfolio photo"}
-                    className="aspect-square w-full rounded-lg object-cover"
+                    className="aspect-square w-full rounded-sm object-cover"
                 />
             ))}
         </div>

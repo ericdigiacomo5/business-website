@@ -32,7 +32,7 @@ export function AvailabilityForm({
     }
 
     return (
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4 rounded-xl border border-border bg-surface p-4">
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4 rounded-sm border border-border bg-surface p-4">
             <div>
                 <label htmlFor="availability-day" className="block text-xs font-medium text-muted-foreground">
                     Day of Week
@@ -41,7 +41,7 @@ export function AvailabilityForm({
                     id="availability-day"
                     value={dayOfWeek}
                     onChange={(e) => setDayOfWeek(e.target.value)}
-                    className="mt-1 h-11 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground"
+                    className="mt-1 h-11 w-full rounded-sm border border-border bg-background px-3 text-sm text-foreground"
                 >
                     {DAY_NAMES.map((name, index) => (
                         <option key={name} value={index}>
@@ -63,7 +63,7 @@ export function AvailabilityForm({
                         required
                         value={startTime}
                         onChange={(e) => setStartTime(e.target.value)}
-                        className="mt-1 h-11 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground"
+                        className="mt-1 h-11 w-full rounded-sm border border-border bg-background px-3 text-sm text-foreground"
                     />
                 </div>
 
@@ -78,7 +78,7 @@ export function AvailabilityForm({
                         required
                         value={endTime}
                         onChange={(e) => setEndTime(e.target.value)}
-                        className="mt-1 h-11 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground"
+                        className="mt-1 h-11 w-full rounded-sm border border-border bg-background px-3 text-sm text-foreground"
                     />
                 </div>
             </div>

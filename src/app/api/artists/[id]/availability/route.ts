@@ -31,7 +31,11 @@ export async function GET(
         where: { id: artistId }
     })
 
-    if (!artist) {
+    // A deactivated artist has no bookable time — treated as not found here,
+    // same rule GET /api/artists/[id] already applies, so this route can't
+    // be used to populate a slot grid for an artist no one should be able to
+    // book with.
+    if (!artist || !artist.active) {
         return Response.json(
             { error: 'Artist not found' },
             { status: 404 }

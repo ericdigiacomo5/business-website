@@ -27,7 +27,7 @@ export function ArtistSelector({
                     name="artistId"
                     defaultValue={currentArtistId}
                     onChange={autoSubmit}
-                    className="mt-1 h-11 rounded-lg border border-border bg-background px-3 text-sm text-foreground"
+                    className="mt-1 h-11 rounded-sm border border-border bg-background px-3 text-sm text-foreground"
                 >
                     {artists.map((artist) => (
                         <option key={artist.id} value={artist.id}>
@@ -39,7 +39,7 @@ export function ArtistSelector({
 
             <button
                 type="submit"
-                className="h-11 rounded-lg border border-border bg-surface px-4 text-sm font-medium text-surface-foreground hover:bg-muted"
+                className="h-11 cursor-pointer rounded-sm border border-border bg-surface px-4 text-sm font-medium text-surface-foreground hover:bg-muted"
             >
                 Switch
             </button>

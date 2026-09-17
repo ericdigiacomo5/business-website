@@ -34,7 +34,7 @@ export function AdminTimeOffRow({
     }
 
     return (
-        <div className="flex flex-col gap-3 rounded-xl border border-border bg-surface p-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-3 rounded-sm border border-border bg-surface p-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
                 <span className="font-medium text-surface-foreground">
                     {new Date(timeOff.date).toLocaleDateString("en-US", {

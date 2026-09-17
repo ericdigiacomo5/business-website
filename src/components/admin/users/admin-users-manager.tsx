@@ -115,7 +115,7 @@ export function AdminUsersManager() {
                 placeholder="Search by name, email, or phone"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                className="mt-4 h-11 w-full rounded-lg border border-border bg-background px-3 text-foreground"
+                className="mt-4 h-11 w-full rounded-sm border border-border bg-background px-3 text-foreground"
             />
 
             {error && (

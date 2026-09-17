@@ -121,7 +121,7 @@ export function ReviewStep({
         <div className="pb-28">
             <h2 className="text-lg font-semibold text-foreground">Review &amp; Confirm</h2>
 
-            <dl className="mt-4 divide-y divide-border rounded-xl border border-border bg-surface">
+            <dl className="mt-4 divide-y divide-border rounded-sm border border-border bg-surface">
                 <div className="flex justify-between px-4 py-3">
                     <dt className="text-sm text-muted-foreground">Service</dt>
                     <dd className="text-sm font-medium text-surface-foreground">{service.name}</dd>
@@ -160,7 +160,7 @@ export function ReviewStep({
                 </div>
             </dl>
 
-            <div className="mt-4 rounded-xl border border-border bg-surface p-4">
+            <div className="mt-4 rounded-sm border border-border bg-surface p-4">
                 <label className="flex items-center gap-3">
                     <input
                         type="checkbox"
@@ -183,7 +183,7 @@ export function ReviewStep({
                                 id="interval-weeks"
                                 value={intervalWeeks}
                                 onChange={(e) => setIntervalWeeks(Number(e.target.value))}
-                                className="mt-1 h-11 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground"
+                                className="mt-1 h-11 w-full rounded-sm border border-border bg-background px-3 text-sm text-foreground"
                             >
                                 {INTERVAL_OPTIONS.map((option) => (
                                     <option key={option.weeks} value={option.weeks}>
@@ -203,7 +203,7 @@ export function ReviewStep({
                                 value={seriesEnd}
                                 min={toLocalDateKey(new Date(startTime))}
                                 onChange={(e) => setSeriesEnd(e.target.value)}
-                                className="mt-1 h-11 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground"
+                                className="mt-1 h-11 w-full rounded-sm border border-border bg-background px-3 text-sm text-foreground"
                             />
                             <p className="mt-1 text-xs text-muted-foreground">
                                 Leave blank to repeat with no set end.

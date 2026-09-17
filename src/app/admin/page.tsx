@@ -71,7 +71,10 @@ export default async function AdminBookingsPage({
             },
             orderBy: { startTime: "asc" },
         }),
-        prisma.artist.findMany({ orderBy: { createdAt: "asc" } }),
+        // Inactive artists are hidden everywhere except admin/artists (where
+        // they can be reactivated) — this dashboard, its filters, and the
+        // schedule grid should never surface one.
+        prisma.artist.findMany({ where: { active: true }, orderBy: { createdAt: "asc" } }),
         isBookingEnabled(),
     ])
 

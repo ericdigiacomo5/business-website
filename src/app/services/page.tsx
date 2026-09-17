@@ -11,10 +11,10 @@ export default async function ServicesPage() {
         <div className="flex flex-col">
             <section className="bg-accent px-4 py-16 text-center">
                 <span className="font-script text-2xl text-primary">Our Menu of</span>
-                <h1 className="mt-1 font-serif text-5xl font-extrabold text-background">Services &amp; Pricing</h1>
+                <h1 className="mt-1 font-serif text-6xl font-extrabold text-background">Services &amp; Pricing</h1>
             </section>
 
-            <div className="mx-auto max-w-5xl px-4 py-14">
+            <div className="mx-auto max-w-6xl px-4 py-14">
                 {services.length === 0 ? (
                     <p className="text-muted-foreground">No services are available right now.</p>
                 ) : (

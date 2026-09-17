@@ -19,7 +19,7 @@ export function DatePicker({
     return (
         <form
             method="get"
-            className="mt-4 flex items-center justify-center gap-4 rounded-xl border border-border bg-surface p-3"
+            className="mt-4 flex items-center justify-center gap-4 rounded-sm border border-border bg-surface p-3"
         >
             <input type="hidden" name="dateString" value={toLocalDateKey(date)} />
             <input type="hidden" name="status" value={status} />
@@ -30,7 +30,7 @@ export function DatePicker({
                 name="dateDown"
                 value="-1"
                 aria-label="Previous day"
-                className="flex h-11 w-11 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                className="flex h-11 w-11 cursor-pointer items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             >
                 <ChevronLeft className="h-5 w-5" />
             </button>
@@ -48,7 +48,7 @@ export function DatePicker({
                 name="dateUp"
                 value="1"
                 aria-label="Next day"
-                className="flex h-11 w-11 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                className="flex h-11 w-11 cursor-pointer items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             >
                 <ChevronRight className="h-5 w-5" />
             </button>

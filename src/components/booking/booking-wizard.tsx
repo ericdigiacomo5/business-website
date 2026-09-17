@@ -136,11 +136,24 @@ export function BookingWizard({
                 )}
 
                 {state.step === "service" && (
-                    <ServiceStep
-                        services={initialServices}
-                        selectedId={state.serviceId}
-                        onSelect={(serviceId) => dispatch({ type: "SELECT_SERVICE", serviceId })}
-                    />
+                    <div className={adminMode ? "pb-28" : undefined}>
+                        <ServiceStep
+                            services={initialServices}
+                            selectedId={state.serviceId}
+                            onSelect={(serviceId) => dispatch({ type: "SELECT_SERVICE", serviceId })}
+                        />
+                        {adminMode && (
+                            <StickyActionBar>
+                                <Button
+                                    type="button"
+                                    variant="secondary"
+                                    onClick={() => dispatch({ type: "GO_BACK" })}
+                                >
+                                    Back
+                                </Button>
+                            </StickyActionBar>
+                        )}
+                    </div>
                 )}
 
                 {state.step === "artist" && (

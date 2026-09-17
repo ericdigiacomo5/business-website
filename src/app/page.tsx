@@ -7,7 +7,7 @@ import { ArtistCard } from "@/components/artists/artist-card"
 export default async function Home() {
     const [services, artists] = await Promise.all([
         prisma.service.findMany({ where: { active: true }, take: 3, orderBy: { createdAt: "asc" } }),
-        prisma.artist.findMany({ take: 3, orderBy: { createdAt: "asc" } }),
+        prisma.artist.findMany({ where: { active: true }, take: 3, orderBy: { createdAt: "asc" } }),
     ])
 
     return (

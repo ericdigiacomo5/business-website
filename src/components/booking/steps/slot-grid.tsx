@@ -21,7 +21,7 @@ export function SlotGrid({
                         type="button"
                         onClick={() => onSelect(slot)}
                         className={
-                            "min-h-11 rounded-lg border text-sm font-medium transition-colors " +
+                            "min-h-11 cursor-pointer rounded-sm border text-sm font-medium transition-colors " +
                             (selected
                                 ? "border-primary bg-primary text-primary-foreground"
                                 : "border-border bg-surface text-surface-foreground hover:bg-muted")

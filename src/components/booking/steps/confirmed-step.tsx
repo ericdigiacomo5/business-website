@@ -38,7 +38,7 @@ export function ConfirmedStep(props: ConfirmedStepProps) {
             </p>
 
             {props.recurringResult && (
-                <div className="mt-4 w-full rounded-xl border border-border bg-surface p-4 text-left">
+                <div className="mt-4 w-full rounded-sm border border-border bg-surface p-4 text-left">
                     <p className="text-sm font-medium text-surface-foreground">
                         {props.recurringResult.created.length} appointment
                         {props.recurringResult.created.length === 1 ? "" : "s"} booked

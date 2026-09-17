@@ -54,7 +54,7 @@ function UserResults({
                     key={user.id}
                     type="button"
                     onClick={() => onSelect(user)}
-                    className="flex min-h-11 flex-col rounded-xl border border-border bg-surface p-4 text-left transition-colors hover:bg-muted"
+                    className="flex min-h-11 cursor-pointer flex-col rounded-sm border border-border bg-surface p-4 text-left transition-colors hover:bg-muted"
                 >
                     <span className="font-medium text-surface-foreground">{user.name ?? user.email}</span>
                     <span className="mt-1 text-sm text-muted-foreground">
@@ -88,21 +88,21 @@ export function UserStep({ onSelect }: { onSelect: (user: SelectedUser) => void 
                 placeholder="Search by name, email, or phone"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                className="mt-4 h-11 w-full rounded-lg border border-border bg-background px-3 text-foreground"
+                className="mt-4 h-11 w-full rounded-sm border border-border bg-background px-3 text-foreground"
             />
 
             <div className="mt-4 flex flex-col gap-3">
                 <UserResults key={debouncedQuery} query={debouncedQuery} onSelect={onSelect} />
             </div>
 
-            <div className="mt-4 rounded-xl border border-border bg-surface p-4">
+            <div className="mt-4 rounded-sm border border-border bg-surface p-4">
                 {showCreateForm ? (
                     <NewCustomerForm onCreated={onSelect} onCancel={() => setShowCreateForm(false)} />
                 ) : (
                     <button
                         type="button"
                         onClick={() => setShowCreateForm(true)}
-                        className="min-h-11 w-full text-left text-sm font-medium text-primary"
+                        className="min-h-11 w-full cursor-pointer text-left text-sm font-medium text-primary"
                     >
                         + Add new customer
                     </button>
@@ -164,7 +164,7 @@ function NewCustomerForm({
                     required
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    className="mt-1 h-11 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground"
+                    className="mt-1 h-11 w-full rounded-sm border border-border bg-background px-3 text-sm text-foreground"
                 />
             </div>
             <div>
@@ -177,7 +177,7 @@ function NewCustomerForm({
                     required
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    className="mt-1 h-11 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground"
+                    className="mt-1 h-11 w-full rounded-sm border border-border bg-background px-3 text-sm text-foreground"
                 />
             </div>
             <div>
@@ -190,7 +190,7 @@ function NewCustomerForm({
                     required
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
-                    className="mt-1 h-11 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground"
+                    className="mt-1 h-11 w-full rounded-sm border border-border bg-background px-3 text-sm text-foreground"
                 />
             </div>
 
@@ -205,14 +205,14 @@ function NewCustomerForm({
                     type="button"
                     onClick={onCancel}
                     disabled={pending}
-                    className="min-h-11 flex-1 rounded-lg border border-border text-sm font-medium text-foreground"
+                    className="min-h-11 flex-1 cursor-pointer rounded-sm border border-border text-sm font-medium text-foreground disabled:cursor-not-allowed"
                 >
                     Cancel
                 </button>
                 <button
                     type="submit"
                     disabled={pending}
-                    className="min-h-11 flex-1 rounded-lg bg-primary text-sm font-medium text-primary-foreground"
+                    className="min-h-11 flex-1 cursor-pointer rounded-sm bg-primary text-sm font-medium text-primary-foreground disabled:cursor-not-allowed"
                 >
                     {pending ? "Creating..." : "Create & Select"}
                 </button>

@@ -95,6 +95,18 @@ export async function POST(request: Request) {
         )
     }
 
+    // A deactivated artist can't be booked by anyone, admins included — the
+    // toggle above only gates whether booking is open at all, this is a
+    // separate "this specific artist isn't bookable" check. The client is
+    // expected to already filter deactivated artists out of any picker, but
+    // this is the actual enforcement boundary — never trust that alone.
+    if (!artist.active) {
+        return Response.json(
+            { error: 'Artist not found' },
+            { status: 400 }
+        )
+    }
+
     if (!service) {
         return Response.json(
             { error: 'Service not found' },

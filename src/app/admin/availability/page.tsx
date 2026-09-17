@@ -9,7 +9,9 @@ export default async function AdminAvailabilityPage({
     searchParams: Promise<{ artistId?: string }>
 }) {
     const params = await searchParams
-    const artists = await prisma.artist.findMany({ orderBy: { createdAt: "asc" } })
+    // Inactive artists are hidden everywhere except admin/artists (where
+    // they can be reactivated) — including from this selector.
+    const artists = await prisma.artist.findMany({ where: { active: true }, orderBy: { createdAt: "asc" } })
 
     // Land on the first artist by default rather than showing an empty
     // "pick an artist" state on first visit.

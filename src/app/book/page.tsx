@@ -14,7 +14,7 @@ export default async function BookPage({
         auth(),
         isBookingEnabled(),
         prisma.service.findMany({ where: { active: true }, orderBy: { createdAt: "asc" } }),
-        prisma.artist.findMany({ orderBy: { createdAt: "asc" } }),
+        prisma.artist.findMany({ where: { active: true }, orderBy: { createdAt: "asc" } }),
     ])
 
     // Mirrors the exact bypass rule POST /api/appointments enforces server-side

@@ -19,8 +19,12 @@ export function StepIndicator({ current, adminMode = false }: { current: WizardS
             {steps.map((step, index) => {
                 const isDone = currentIndex > index
                 const isActive = currentIndex === index
+                const isLast = index === steps.length - 1
                 return (
-                    <li key={step.key} className="flex flex-1 items-center gap-2">
+                    <li
+                        key={step.key}
+                        className={"flex items-center gap-2 " + (isLast ? "flex-none" : "flex-1")}
+                    >
                         <span
                             className={
                                 "flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-full font-jost text-[13px] font-bold " +

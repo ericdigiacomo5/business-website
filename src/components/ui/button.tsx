@@ -4,8 +4,8 @@ type Variant = "primary" | "secondary" | "gold" | "inverse" | "danger" | "ghost"
 type Size = "md" | "lg"
 
 const base =
-    "inline-flex items-center justify-center gap-2 rounded-sm font-semibold uppercase tracking-wide transition-colors " +
-    "disabled:opacity-50 disabled:pointer-events-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+    "inline-flex items-center justify-center gap-2 rounded-sm font-semibold uppercase tracking-wide transition-colors cursor-pointer " +
+    "disabled:cursor-not-allowed disabled:opacity-50 disabled:pointer-events-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
 
 const variants: Record<Variant, string> = {
     // Header/nav "Book Now" — matches the mockup's blue CTA.

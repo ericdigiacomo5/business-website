@@ -39,7 +39,7 @@ export function ScheduleDetailSheet({
 
     return (
         <>
-            <div className="fixed inset-0 z-30 bg-foreground/40" onClick={onClose} aria-hidden />
+            <div className="fixed inset-0 z-30 cursor-pointer bg-foreground/40" onClick={onClose} aria-hidden />
             <div
                 role="dialog"
                 aria-modal="true"
@@ -57,7 +57,7 @@ export function ScheduleDetailSheet({
                         type="button"
                         onClick={onClose}
                         aria-label="Close"
-                        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
+                        className="flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-sm text-muted-foreground hover:bg-muted hover:text-foreground"
                     >
                         <X className="h-5 w-5" />
                     </button>

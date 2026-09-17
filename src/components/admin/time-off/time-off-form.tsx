@@ -29,7 +29,7 @@ export function TimeOffForm({
     }
 
     return (
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4 rounded-xl border border-border bg-surface p-4">
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4 rounded-sm border border-border bg-surface p-4">
             <div>
                 <label htmlFor="timeoff-date" className="block text-xs font-medium text-muted-foreground">
                     Date
@@ -40,7 +40,7 @@ export function TimeOffForm({
                     required
                     value={date}
                     onChange={(e) => setDate(e.target.value)}
-                    className="mt-1 h-11 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground"
+                    className="mt-1 h-11 w-full rounded-sm border border-border bg-background px-3 text-sm text-foreground"
                 />
             </div>
 
@@ -56,7 +56,7 @@ export function TimeOffForm({
                         required
                         value={startTime}
                         onChange={(e) => setStartTime(e.target.value)}
-                        className="mt-1 h-11 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground"
+                        className="mt-1 h-11 w-full rounded-sm border border-border bg-background px-3 text-sm text-foreground"
                     />
                 </div>
 
@@ -71,7 +71,7 @@ export function TimeOffForm({
                         required
                         value={endTime}
                         onChange={(e) => setEndTime(e.target.value)}
-                        className="mt-1 h-11 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground"
+                        className="mt-1 h-11 w-full rounded-sm border border-border bg-background px-3 text-sm text-foreground"
                     />
                 </div>
             </div>

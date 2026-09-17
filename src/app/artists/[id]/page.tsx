@@ -16,7 +16,9 @@ export default async function ArtistDetailPage({
         include: { portfolio: true },
     })
 
-    if (!artist) {
+    // A deactivated artist is treated as not found on this public page —
+    // matches GET /api/artists/[id]'s same rule.
+    if (!artist || !artist.active) {
         notFound()
     }
 
@@ -24,7 +26,7 @@ export default async function ArtistDetailPage({
         <div className="mx-auto max-w-3xl px-4 py-6">
             <Link
                 href="/artists"
-                className="inline-block font-jost text-sm font-semibold uppercase tracking-wide text-foreground"
+                className="inline-block font-jost text-sm font-semibold uppercase tracking-wide text-foreground hover:text-primary"
             >
                 &larr; All Artists
             </Link>

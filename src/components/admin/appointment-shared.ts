@@ -28,11 +28,14 @@ export const STATUS_TONE: Record<AppointmentStatus, "primary" | "success" | "dan
 // a skim aid for telling columns apart at a glance, not a unique identifier,
 // so the cycle repeating past 4 artists is an acceptable trade-off (blocks
 // are still labeled with text regardless of color).
+// `block` uses opaque bg-schedule-tint-* tokens (see globals.css), not
+// bg-*/opacity utilities — a translucent fill lets the grid lines underneath
+// show through the block, which is exactly what these are meant to hide.
 export const ARTIST_COLOR_CYCLE: { header: string; block: string; blockBorder: string }[] = [
-    { header: "bg-primary/10 text-primary", block: "bg-primary/10", blockBorder: "border-primary/40" },
-    { header: "bg-accent/20 text-accent-foreground", block: "bg-accent/15", blockBorder: "border-accent/50" },
-    { header: "bg-success/10 text-success", block: "bg-success/10", blockBorder: "border-success/40" },
-    { header: "bg-muted text-muted-foreground", block: "bg-muted", blockBorder: "border-border" },
+    { header: "bg-primary/10 text-primary", block: "bg-schedule-tint-primary", blockBorder: "border-primary/40" },
+    { header: "bg-accent/20 text-accent-foreground", block: "bg-schedule-tint-accent", blockBorder: "border-accent/50" },
+    { header: "bg-success/10 text-success", block: "bg-schedule-tint-success", blockBorder: "border-success/40" },
+    { header: "bg-muted text-muted-foreground", block: "bg-schedule-tint-muted", blockBorder: "border-border" },
 ]
 
 // Small left-edge bar color per status, layered on top of the artist's

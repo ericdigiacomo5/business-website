@@ -23,7 +23,7 @@ export function ServiceStep({
                             type="button"
                             onClick={() => onSelect(service.id)}
                             className={
-                                "flex min-h-11 items-center justify-between gap-4 rounded-sm p-5 text-left transition-colors " +
+                                "group flex min-h-11 cursor-pointer items-center justify-between gap-4 rounded-sm p-5 text-left transition-colors " +
                                 (selected
                                     ? "border-2 border-accent bg-background"
                                     : "border border-foreground bg-surface hover:bg-muted")
@@ -43,11 +43,20 @@ export function ServiceStep({
                                 </span>
                                 <span
                                     className={
-                                        "flex h-5 w-5 flex-none items-center justify-center rounded-full border-2 " +
-                                        (selected ? "border-accent bg-accent" : "border-muted-foreground")
+                                        "flex h-5 w-5 flex-none items-center justify-center rounded-full border-2 transition-colors " +
+                                        (selected
+                                            ? "border-accent bg-accent"
+                                            : "border-muted-foreground group-hover:border-accent")
                                     }
                                 >
-                                    {selected && <span className="h-2 w-2 rounded-full bg-background" />}
+                                    <span
+                                        className={
+                                            "h-2 w-2 rounded-full transition-colors " +
+                                            (selected
+                                                ? "bg-background"
+                                                : "bg-transparent group-hover:bg-accent")
+                                        }
+                                    />
                                 </span>
                             </span>
                         </button>

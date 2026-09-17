@@ -46,7 +46,7 @@ export function ServiceForm({
     }
 
     return (
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4 rounded-xl border border-border bg-surface p-4">
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4 rounded-sm border border-border bg-surface p-4">
             <div>
                 <label htmlFor="service-name" className="block text-xs font-medium text-muted-foreground">
                     Name
@@ -56,7 +56,7 @@ export function ServiceForm({
                     required
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    className="mt-1 h-11 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground"
+                    className="mt-1 h-11 w-full rounded-sm border border-border bg-background px-3 text-sm text-foreground"
                 />
             </div>
 
@@ -69,7 +69,7 @@ export function ServiceForm({
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
                     rows={2}
-                    className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground"
+                    className="mt-1 w-full rounded-sm border border-border bg-background px-3 py-2 text-sm text-foreground"
                 />
             </div>
 
@@ -86,7 +86,7 @@ export function ServiceForm({
                         required
                         value={durationMinutes}
                         onChange={(e) => setDurationMinutes(e.target.value)}
-                        className="mt-1 h-11 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground"
+                        className="mt-1 h-11 w-full rounded-sm border border-border bg-background px-3 text-sm text-foreground"
                     />
                 </div>
 
@@ -102,7 +102,7 @@ export function ServiceForm({
                         required
                         value={priceDollars}
                         onChange={(e) => setPriceDollars(e.target.value)}
-                        className="mt-1 h-11 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground"
+                        className="mt-1 h-11 w-full rounded-sm border border-border bg-background px-3 text-sm text-foreground"
                     />
                 </div>
             </div>

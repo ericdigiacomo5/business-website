@@ -152,6 +152,15 @@ export async function POST(request: Request) {
         )
     }
 
+    // Same rule as the one-off booking route: no one, admins included, can
+    // book (even a standing appointment) with a deactivated artist.
+    if (!artist.active) {
+        return Response.json(
+            { error: "Artist not found" },
+            { status: 404 }
+        )
+    }
+
     if (!service) {
         return Response.json(
             { error: "Service not found" },

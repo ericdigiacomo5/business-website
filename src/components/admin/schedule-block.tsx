@@ -34,7 +34,7 @@ export function ScheduleBlock({
             onClick={() => onSelect(appointment.id)}
             style={{ gridColumn: column, gridRow: `${startRow} / span ${rowSpan}` }}
             className={
-                "relative flex flex-col overflow-hidden rounded-md border px-2 py-1 text-left " +
+                "relative flex cursor-pointer flex-col overflow-hidden rounded-sm border px-2 py-1 text-left " +
                 `${color.block} ${color.blockBorder}`
             }
         >

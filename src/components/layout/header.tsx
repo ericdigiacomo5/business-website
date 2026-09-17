@@ -74,7 +74,7 @@ export function Header() {
                     {status === "authenticated" ? (
                         <button
                             onClick={() => signOut({ callbackUrl: "/" })}
-                            className="font-jost text-sm font-semibold uppercase tracking-wide text-muted-foreground hover:text-primary"
+                            className="cursor-pointer font-jost text-sm font-semibold uppercase tracking-wide text-muted-foreground hover:text-primary"
                         >
                             Sign Out
                         </button>
@@ -93,7 +93,7 @@ export function Header() {
 
                 <button
                     onClick={() => setIsOpen((open) => !open)}
-                    className="flex h-11 w-11 items-center justify-center md:hidden"
+                    className="flex h-11 w-11 cursor-pointer items-center justify-center md:hidden"
                     aria-label={isOpen ? "Close menu" : "Open menu"}
                     aria-expanded={isOpen}
                 >
@@ -129,7 +129,7 @@ export function Header() {
                                 closeMenu()
                                 signOut({ callbackUrl: "/" })
                             }}
-                            className={`${mobileNavLinkClass} text-left`}
+                            className={`${mobileNavLinkClass} cursor-pointer text-left`}
                         >
                             Sign Out
                         </button>

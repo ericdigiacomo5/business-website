@@ -20,7 +20,7 @@ export function DayStrip({
                         type="button"
                         onClick={() => onSelect(key)}
                         className={
-                            "flex h-16 w-14 shrink-0 flex-col items-center justify-center rounded-xl border text-sm transition-colors " +
+                            "flex h-16 w-14 shrink-0 cursor-pointer flex-col items-center justify-center rounded-sm border text-sm transition-colors " +
                             (selected
                                 ? "border-primary bg-primary text-primary-foreground"
                                 : "border-border bg-surface text-surface-foreground hover:bg-muted")
