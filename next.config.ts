@@ -42,7 +42,12 @@ const securityHeaders = [
       // is — that's the point at which imageUrl becomes user-influenced.
       "img-src 'self' https: data:",
       "font-src 'self' data:",
-      "connect-src 'self'",
+      // Cloudinary is now the chosen image host — the admin photo-upload
+      // component fetches directly to Cloudinary's upload API from the
+      // browser (see photo-upload-field.tsx), which is a cross-origin
+      // connect-src, not just an img-src load. Scoped to Cloudinary's own
+      // domain specifically, not a wildcard.
+      "connect-src 'self' https://api.cloudinary.com",
       "frame-ancestors 'none'",
       "base-uri 'self'",
       "form-action 'self'",

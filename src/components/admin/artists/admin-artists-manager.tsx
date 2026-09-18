@@ -1,12 +1,12 @@
 'use client'
 
 import { useState } from "react"
-import type { Artist } from "@/generated/prisma/client"
+import type { PortfolioImage } from "@/generated/prisma/client"
 import { Button } from "@/components/ui/button"
-import { AdminArtistCard } from "./admin-artist-card"
+import { AdminArtistCard, type ArtistWithPortfolio } from "./admin-artist-card"
 import { ArtistForm, type ArtistFormValues } from "./artist-form"
 
-export function AdminArtistsManager({ initialArtists }: { initialArtists: Artist[] }) {
+export function AdminArtistsManager({ initialArtists }: { initialArtists: ArtistWithPortfolio[] }) {
     const [artists, setArtists] = useState(initialArtists)
     const [isCreating, setIsCreating] = useState(false)
     const [editingId, setEditingId] = useState<string | null>(null)
@@ -29,7 +29,11 @@ export function AdminArtistsManager({ initialArtists }: { initialArtists: Artist
             }
 
             const body = await res.json()
-            setArtists((prev) => [...prev, body.data])
+            // POST /api/admin/artists returns a plain Artist — a brand-new
+            // artist has no portfolio images yet regardless, so this is
+            // always correct, not just a stand-in.
+            const created: ArtistWithPortfolio = { ...body.data, portfolio: [] }
+            setArtists((prev) => [...prev, created])
             setIsCreating(false)
         } catch {
             setError("Network error. Please try again.")
@@ -53,14 +57,20 @@ export function AdminArtistsManager({ initialArtists }: { initialArtists: Artist
             }
 
             const body = await res.json()
-            setArtists((prev) => prev.map((a) => (a.id === id ? body.data : a)))
+            // PATCH /api/admin/artists/[id] also returns a plain Artist —
+            // preserve the portfolio this artist already had in state,
+            // since the response itself says nothing about it (a PATCH here
+            // only ever touches name/bio/photoUrl/active, never portfolio).
+            setArtists((prev) =>
+                prev.map((a) => (a.id === id ? { ...body.data, portfolio: a.portfolio } : a))
+            )
             setEditingId(null)
         } catch {
             setError("Network error. Please try again.")
         }
     }
 
-    async function handleToggleActive(artist: Artist) {
+    async function handleToggleActive(artist: ArtistWithPortfolio) {
         setError(null)
 
         try {
@@ -77,10 +87,16 @@ export function AdminArtistsManager({ initialArtists }: { initialArtists: Artist
             }
 
             const body = await res.json()
-            setArtists((prev) => prev.map((a) => (a.id === artist.id ? body.data : a)))
+            setArtists((prev) =>
+                prev.map((a) => (a.id === artist.id ? { ...body.data, portfolio: a.portfolio } : a))
+            )
         } catch {
             setError("Network error. Please try again.")
         }
+    }
+
+    function handlePortfolioChange(artistId: string, images: PortfolioImage[]) {
+        setArtists((prev) => prev.map((a) => (a.id === artistId ? { ...a, portfolio: images } : a)))
     }
 
     return (
@@ -123,6 +139,7 @@ export function AdminArtistsManager({ initialArtists }: { initialArtists: Artist
                             onCancelEdit={() => setEditingId(null)}
                             onSave={(values) => handleSaveEdit(artist.id, values)}
                             onToggleActive={() => handleToggleActive(artist)}
+                            onPortfolioChange={(images) => handlePortfolioChange(artist.id, images)}
                         />
                     ))}
                 </div>

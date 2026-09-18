@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react"
 import { Button } from "@/components/ui/button"
+import { PhotoUploadField } from "@/components/admin/photo-upload-field"
 
 export type ArtistFormValues = {
     name: string
@@ -62,20 +63,40 @@ export function ArtistForm({
             </div>
 
             <div>
-                <label htmlFor="artist-photo-url" className="block text-xs font-medium text-muted-foreground">
-                    Photo URL
-                </label>
-                <input
-                    id="artist-photo-url"
-                    type="url"
-                    value={photoUrl}
-                    onChange={(e) => setPhotoUrl(e.target.value)}
-                    placeholder="https://..."
-                    className="mt-1 h-11 w-full rounded-sm border border-border bg-background px-3 text-sm text-foreground"
-                />
-                <p className="mt-1 text-xs text-muted-foreground">
-                    Paste a link to an already-hosted image. Leave blank to show initials instead.
-                </p>
+                <span className="block text-xs font-medium text-muted-foreground">Photo</span>
+
+                {photoUrl && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                        src={photoUrl}
+                        alt="Current"
+                        className="mt-2 h-20 w-20 rounded-full border-2 border-accent object-cover"
+                    />
+                )}
+
+                <div className="mt-2">
+                    <PhotoUploadField
+                        label={photoUrl ? "Replace Photo" : "Upload Photo"}
+                        onUploaded={(url) => setPhotoUrl(url)}
+                    />
+                </div>
+
+                <div className="mt-3">
+                    <label htmlFor="artist-photo-url" className="block text-xs font-medium text-muted-foreground">
+                        Or paste an image URL
+                    </label>
+                    <input
+                        id="artist-photo-url"
+                        type="url"
+                        value={photoUrl}
+                        onChange={(e) => setPhotoUrl(e.target.value)}
+                        placeholder="https://..."
+                        className="mt-1 h-11 w-full rounded-sm border border-border bg-background px-3 text-sm text-foreground"
+                    />
+                    <p className="mt-1 text-xs text-muted-foreground">
+                        Leave blank to show initials instead.
+                    </p>
+                </div>
             </div>
 
             <div className="flex gap-2">

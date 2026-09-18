@@ -33,21 +33,21 @@ export function Header() {
     return (
         <header className="sticky top-0 z-30 border-b-2 border-foreground bg-background/95 backdrop-blur">
             <div className="mx-auto flex h-20 max-w-6xl items-center justify-between px-4">
-                <Link href="/" onClick={closeMenu} className="flex items-center gap-3">
+                <Link href="/" onClick={closeMenu} className="flex min-w-0 items-center gap-3">
                     <img
                         src="/nail-image.jpg"
                         alt=""
                         className="h-11 w-11 flex-none rounded-full border-2 border-accent object-cover"
                     />
-                    <span className="flex flex-col leading-tight">
-                        <span className="font-serif text-lg font-extrabold tracking-wide text-foreground">
+                    <span className="flex min-w-0 flex-col leading-tight">
+                        <span className="truncate font-serif text-lg font-extrabold tracking-wide text-foreground">
                             {SITE_NAME.toUpperCase()}
                         </span>
-                        <span className="font-script text-sm text-accent">Amityville, N.Y.</span>
+                        <span className="truncate font-script text-sm text-accent">Amityville, N.Y.</span>
                     </span>
                 </Link>
 
-                <nav className="hidden items-center gap-6 md:flex">
+                <nav className="hidden items-center gap-6 lg:flex">
                     {NAV_LINKS.map((link) => (
                         <Link key={link.href} href={link.href} className={navLinkClass(pathname === link.href)}>
                             {link.label}
@@ -93,7 +93,7 @@ export function Header() {
 
                 <button
                     onClick={() => setIsOpen((open) => !open)}
-                    className="flex h-11 w-11 cursor-pointer items-center justify-center md:hidden"
+                    className="flex h-11 w-11 cursor-pointer items-center justify-center lg:hidden"
                     aria-label={isOpen ? "Close menu" : "Open menu"}
                     aria-expanded={isOpen}
                 >
@@ -102,7 +102,7 @@ export function Header() {
             </div>
 
             {isOpen && (
-                <nav className="flex flex-col gap-1 border-t-2 border-foreground px-4 py-3 md:hidden">
+                <nav className="flex flex-col gap-1 border-t-2 border-foreground px-4 py-3 lg:hidden">
                     {NAV_LINKS.map((link) => (
                         <Link key={link.href} href={link.href} onClick={closeMenu} className={mobileNavLinkClass}>
                             {link.label}
