@@ -1,38 +1,53 @@
 'use client'
 
 import { useState } from "react"
-import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { signIn } from "next-auth/react"
 import { Button } from "@/components/ui/button"
 
-export function LoginForm({ callbackUrl }: { callbackUrl: string }) {
-    const router = useRouter()
+export function ForgotPasswordForm() {
     const [email, setEmail] = useState("")
-    const [password, setPassword] = useState("")
     const [error, setError] = useState<string | null>(null)
     const [pending, setPending] = useState(false)
+    const [submitted, setSubmitted] = useState(false)
 
     async function handleSubmit(e: React.FormEvent) {
         e.preventDefault()
         setError(null)
         setPending(true)
 
-        const result = await signIn("credentials", {
-            email,
-            password,
-            redirect: false,
+        const response = await fetch("/api/auth/forgot-password", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email }),
         })
 
         setPending(false)
 
-        if (!result || result.error) {
-            setError("Incorrect email or password.")
+        // The API returns the same 200 whether or not an account exists — by
+        // design, so this can never be an email-enumeration oracle. Only a
+        // genuine request problem (bad JSON, missing field) surfaces an
+        // error; every other outcome shows the identical confirmation.
+        if (!response.ok) {
+            const body = await response.json().catch(() => null)
+            setError(body?.error ?? "Something went wrong. Please try again.")
             return
         }
 
-        router.push(callbackUrl)
-        router.refresh()
+        setSubmitted(true)
+    }
+
+    if (submitted) {
+        return (
+            <div className="flex flex-col gap-4 border border-foreground bg-surface p-8 text-center">
+                <p className="text-sm text-foreground">
+                    If an account exists for that email, we&apos;ve sent a password reset link.
+                    It expires in 15 minutes.
+                </p>
+                <Link href="/login" className="text-sm font-semibold text-accent hover:text-primary">
+                    Back to sign in
+                </Link>
+            </div>
+        )
     }
 
     return (
@@ -53,33 +68,13 @@ export function LoginForm({ callbackUrl }: { callbackUrl: string }) {
                     className="mt-1.5 h-12 w-full rounded-sm border border-foreground bg-background px-4 text-foreground"
                 />
             </div>
-            <div>
-                <div className="flex items-baseline justify-between">
-                    <label htmlFor="password" className="block font-jost text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                        Password
-                    </label>
-                    <Link href="/forgot-password" className="text-xs font-semibold text-accent hover:text-primary">
-                        Forgot password?
-                    </Link>
-                </div>
-                <input
-                    id="password"
-                    name="password"
-                    type="password"
-                    required
-                    autoComplete="current-password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="mt-1.5 h-12 w-full rounded-sm border border-foreground bg-background px-4 text-foreground"
-                />
-            </div>
             {error && (
                 <p role="alert" className="text-sm text-danger">
                     {error}
                 </p>
             )}
             <Button type="submit" disabled={pending} size="lg" className="w-full">
-                {pending ? "Signing in..." : "Sign In"}
+                {pending ? "Sending..." : "Send Reset Link"}
             </Button>
         </form>
     )

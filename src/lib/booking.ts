@@ -19,8 +19,13 @@ export async function bookOccurrence(params: {
     serviceDurationMinutes: number;
     startTime: Date;
     recurringAppointmentId?: string;
+    // Lets an admin caller book a slot whose startTime is already in the
+    // past (e.g. entering a walk-in after the fact — see FEATURE_GAPS.md Gap
+    // 3). Callers must derive this from the session's role themselves, never
+    // from client input — this function has no way to verify it on its own.
+    allowPast?: boolean;
 }): Promise<BookOccurrenceResult> {
-    const { userId, artistId, serviceId, serviceDurationMinutes, startTime, recurringAppointmentId } = params;
+    const { userId, artistId, serviceId, serviceDurationMinutes, startTime, recurringAppointmentId, allowPast } = params;
 
     const endTime = new Date(startTime.getTime() + serviceDurationMinutes * 60_000);
 
@@ -31,7 +36,7 @@ export async function bookOccurrence(params: {
         current = new Date(current.getTime() + SLOT_DURATION_MS);
     }
 
-    const openSlots = await getOpenSlots(artistId, startTime);
+    const openSlots = await getOpenSlots(artistId, startTime, { allowPast });
     const openSlotTimes = new Set(openSlots.map((slot) => slot.getTime()));
     const isFullyAvailable = slots.every((slot) => openSlotTimes.has(slot.getTime()));
 

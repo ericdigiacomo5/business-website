@@ -2,6 +2,7 @@ import { NextRequest } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { getOpenSlots } from "@/lib/availability"
 import { parseLocalDate } from "@/lib/format"
+import { auth } from "@/auth"
 
 export async function GET(
     request: NextRequest,
@@ -42,7 +43,20 @@ export async function GET(
         );
     }
 
-    const openSlots = await getOpenSlots(artist.id, date)
+    // Only an admin's excludeAppointmentId is honored — same silently-ignore
+    // pattern the booking routes already use for a non-admin's userId
+    // override. This route stays public/unauthenticated for the ordinary
+    // customer-booking case; the param exists so the admin reschedule UI can
+    // show an appointment's own currently-held slots as open (the PATCH
+    // route already frees them before checking the new time — hiding them
+    // here would make the picker lie about what a reschedule would allow).
+    const session = await auth()
+    const isAdmin = session?.user?.role === "ADMIN"
+    const excludeAppointmentId = isAdmin
+        ? request.nextUrl.searchParams.get("excludeAppointmentId") ?? undefined
+        : undefined
+
+    const openSlots = await getOpenSlots(artist.id, date, { excludeAppointmentId })
 
     return Response.json(openSlots)
 }

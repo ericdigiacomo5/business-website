@@ -104,6 +104,7 @@ export default async function AdminBookingsPage({
                 artists={artists}
                 workingWindows={workingWindows}
                 gridBounds={gridBounds}
+                date={date}
             />
         </div>
     )

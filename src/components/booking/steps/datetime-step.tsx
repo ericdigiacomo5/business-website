@@ -38,11 +38,13 @@ function SlotFetcher({
     artistId,
     date,
     serviceDurationMinutes,
+    excludeAppointmentId,
     onSelect,
 }: {
     artistId: string
     date: string
     serviceDurationMinutes: number
+    excludeAppointmentId?: string
     onSelect: (startTime: string) => void
 }) {
     const [slots, setSlots] = useState<string[] | null>(null)
@@ -51,7 +53,12 @@ function SlotFetcher({
     useEffect(() => {
         let cancelled = false
 
-        fetch(`/api/artists/${artistId}/availability?date=${date}`)
+        const url = `/api/artists/${artistId}/availability?date=${date}`
+        // Only meaningful for an admin caller rescheduling — the API itself
+        // silently ignores this param for anyone else, so appending it here
+        // for the ordinary customer booking flow (where this is never
+        // passed) is simply a no-op, not a security concern.
+        fetch(excludeAppointmentId ? `${url}&excludeAppointmentId=${excludeAppointmentId}` : url)
             .then(async (res) => {
                 if (!res.ok) throw new Error("Failed to load availability")
                 return res.json() as Promise<string[]>
@@ -66,7 +73,7 @@ function SlotFetcher({
         return () => {
             cancelled = true
         }
-    }, [artistId, date, serviceDurationMinutes])
+    }, [artistId, date, serviceDurationMinutes, excludeAppointmentId])
 
     if (error) {
         return <p className="mt-4 text-sm text-danger">{error}</p>
@@ -87,11 +94,15 @@ export function DateTimeStep({
     artistId,
     initialDate,
     serviceDurationMinutes,
+    excludeAppointmentId,
+    heading = "Choose a Date & Time",
     onSelect,
 }: {
     artistId: string
     initialDate: string | null
     serviceDurationMinutes: number
+    excludeAppointmentId?: string
+    heading?: string
     onSelect: (date: string, startTime: string) => void
 }) {
     const days = useMemo(() => {
@@ -107,7 +118,7 @@ export function DateTimeStep({
 
     return (
         <div>
-            <h2 className="text-lg font-semibold text-foreground">Choose a Date &amp; Time</h2>
+            <h2 className="text-lg font-semibold text-foreground">{heading}</h2>
             <div className="mt-4">
                 <DayStrip days={days} selectedDate={selectedDate} onSelect={setSelectedDate} />
             </div>
@@ -117,6 +128,7 @@ export function DateTimeStep({
                 artistId={artistId}
                 date={selectedDate}
                 serviceDurationMinutes={serviceDurationMinutes}
+                excludeAppointmentId={excludeAppointmentId}
                 onSelect={(startTime) => onSelect(selectedDate, startTime)}
             />
         </div>

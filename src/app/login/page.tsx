@@ -5,7 +5,7 @@ import { safeCallbackUrl } from "@/lib/validation"
 export default async function LoginPage({
     searchParams,
 }: {
-    searchParams: Promise<{ callbackUrl?: string; registered?: string }>
+    searchParams: Promise<{ callbackUrl?: string; registered?: string; reset?: string }>
 }) {
     const params = await searchParams
     // Validated server-side so the untrusted query value never reaches the
@@ -21,6 +21,11 @@ export default async function LoginPage({
             {params.registered && (
                 <p className="mt-4 w-full rounded-sm bg-success/10 px-3 py-2 text-center text-sm text-success">
                     Account created — sign in to continue.
+                </p>
+            )}
+            {params.reset && (
+                <p className="mt-4 w-full rounded-sm bg-success/10 px-3 py-2 text-center text-sm text-success">
+                    Password updated — sign in with your new password.
                 </p>
             )}
             <div className="mt-8 w-full">

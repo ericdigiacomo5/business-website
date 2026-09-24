@@ -46,7 +46,11 @@ function generateSlotsInWindow(date: Date, startTime: string, endTime: string): 
   return slots;
 }
 
-export async function getOpenSlots(artistId: string, date: Date): Promise<Date[]> {
+export async function getOpenSlots(
+  artistId: string,
+  date: Date,
+  options?: { allowPast?: boolean; excludeAppointmentId?: string }
+): Promise<Date[]> {
   const dayOfWeek = date.getDay();
   const dayStart = startOfDay(date);
   const dayEnd = endOfDay(date);
@@ -57,7 +61,16 @@ export async function getOpenSlots(artistId: string, date: Date): Promise<Date[]
       where: { artistId, date: { gte: dayStart, lte: dayEnd } },
     }),
     prisma.appointmentSlot.findMany({
-      where: { artistId, slotStart: { gte: dayStart, lte: dayEnd } },
+      where: {
+        artistId,
+        slotStart: { gte: dayStart, lte: dayEnd },
+        // Lets a reschedule flow treat an appointment's own currently-held
+        // slots as open when showing what times are available to move it
+        // to — the PATCH route itself already frees these before checking
+        // the new time, so hiding them here would just make the picker lie
+        // about what a reschedule request would actually be allowed to do.
+        ...(options?.excludeAppointmentId ? { appointmentId: { not: options.excludeAppointmentId } } : {}),
+      },
     }),
   ]);
 
@@ -73,9 +86,14 @@ export async function getOpenSlots(artistId: string, date: Date): Promise<Date[]
   );
 
   const now = Date.now();
+  const allowPast = options?.allowPast ?? false;
 
   const openSlots = candidateSlots.filter((slot) => {
-    if (slot.getTime() < now) return false;
+    // Skipped only when an admin caller explicitly opts in (see
+    // bookOccurrence) — every other caller, including the public
+    // GET /api/artists/:id/availability route customers browse against,
+    // keeps the default false and never sees a past slot as open.
+    if (!allowPast && slot.getTime() < now) return false;
     if (bookedTimes.has(slot.getTime())) return false;
     return !timeOffRanges.some((range) => slot >= range.start && slot < range.end);
   });

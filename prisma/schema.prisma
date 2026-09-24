@@ -31,20 +31,27 @@ model Service {
 }
 
 model User {
-  id            String    @id @default(cuid())
-  name          String?
-  email         String    @unique
-  emailVerified DateTime?
-  image         String?
-  phone         String
-  passwordHash  String?
-  role          Role      @default(CUSTOMER)
-  createdAt     DateTime  @default(now())
+  id                String    @id @default(cuid())
+  name              String?
+  email             String    @unique
+  emailVerified     DateTime?
+  image             String?
+  phone             String
+  passwordHash      String?
+  // Stamped on every successful password reset. Compared against a JWT
+  // session's `iat` claim in src/auth.ts so a reset invalidates any session
+  // that predates it — the JWT strategy has no server-side session row to
+  // delete, so this is the substitute revocation mechanism. Null means
+  // "never reset," which correctly invalidates nothing.
+  passwordChangedAt DateTime?
+  role              Role      @default(CUSTOMER)
+  createdAt         DateTime  @default(now())
 
   appointments          Appointment[]
   accounts              Account[]
   sessions              Session[]
   recurringAppointments RecurringAppointment[]
+  passwordResetTokens   PasswordResetToken[]
 }
 
 model Account {
@@ -84,6 +91,32 @@ model VerificationToken {
   expires    DateTime
 
   @@id([identifier, token])
+}
+
+// Deliberately separate from VerificationToken above, even though that table
+// is currently unused (it exists only for Auth.js's Email/magic-link
+// provider, which this project doesn't use). Reusing it would mean storing a
+// hashed reset token in a table Auth.js semantically owns — its composite PK
+// has no userId relation and no "used" column — and the two purposes would
+// collide the moment an email-verification provider is ever added.
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  // SHA-256 hash of the token, never the plaintext — a DB leak would
+  // otherwise hand over live account takeover. Unique because it's looked up
+  // directly by hash (the plaintext, only ever known to the emailed link,
+  // never touches the database).
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  // Cascade, not this schema's usual RESTRICT default — same reasoning as
+  // Account/Session above: a reset token has no independent meaning once its
+  // user is gone.
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 model Artist {
@@ -126,6 +159,12 @@ enum RecurringStatus {
   CANCELLED
 }
 
+enum PaymentMethod {
+  CASH
+  CARD
+  OTHER
+}
+
 model RecurringAppointment {
   id            String          @id @default(cuid())
   userId        String
@@ -155,6 +194,8 @@ model Appointment {
   status                 AppointmentStatus @default(UPCOMING)
   createdAt              DateTime          @default(now())
   recurringAppointmentId String?
+  paymentMethod          PaymentMethod?
+  checkedOutAt           DateTime?
 
   user                 User                  @relation(fields: [userId], references: [id])
   artist               Artist                @relation(fields: [artistId], references: [id])

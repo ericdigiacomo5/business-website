@@ -75,7 +75,7 @@ export async function POST(request: Request) {
         parsedStartTime.getSeconds() === 0 &&
         parsedStartTime.getMilliseconds() === 0
     const isInPast = parsedStartTime.getTime() < Date.now()
-    if (isNaN(parsedStartTime.getTime()) || !isOnSlotGrid || isInPast) {
+    if (isNaN(parsedStartTime.getTime()) || !isOnSlotGrid || (!isAdmin && isInPast)) {
         return Response.json(
             { error: 'Time is invalid' },
             { status: 400 }
@@ -127,6 +127,7 @@ export async function POST(request: Request) {
         serviceId,
         serviceDurationMinutes: service.durationMinutes,
         startTime: parsedStartTime,
+        allowPast: isAdmin,
     })
 
     if (!result.ok) {

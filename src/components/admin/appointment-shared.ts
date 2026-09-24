@@ -1,4 +1,4 @@
-import type { Appointment, AppointmentStatus, Artist, Service, User } from "@/generated/prisma/client"
+import type { Appointment, AppointmentStatus, Artist, PaymentMethod, Service, User } from "@/generated/prisma/client"
 
 // Deliberately a Pick, not the full `User`. This type crosses a Server→Client
 // boundary, so every field named here is serialized into the browser payload —
@@ -47,4 +47,10 @@ export const STATUS_BAR_COLOR: Record<AppointmentStatus, string> = {
     CONFIRMED: "bg-success",
     CANCELLED: "bg-danger",
     COMPLETED: "bg-muted-foreground",
+}
+
+export const PAYMENT_METHOD_LABEL: Record<PaymentMethod, string> = {
+    CASH: "Cash",
+    CARD: "Card",
+    OTHER: "Other",
 }

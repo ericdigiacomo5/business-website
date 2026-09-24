@@ -1,17 +1,7 @@
 import bcrypt from "bcryptjs"
 import { prisma } from "@/lib/prisma"
 import { isValidEmail, isValidPhone } from "@/lib/validation"
-
-// Same cost factor as DUMMY_PASSWORD_HASH in src/auth.ts — keep these in sync,
-// since a mismatch wouldn't break anything functionally, but would make the
-// timing-safety comment in auth.ts inaccurate.
-const BCRYPT_COST = 10
-
-// No composition rules (no forced uppercase/number/symbol) — current
-// guidance (NIST 800-63B) recommends against them, since they tend to push
-// people toward predictable patterns ("Password1!") rather than actually
-// stronger passwords. A length floor is the higher-value, lower-friction check.
-const PASSWORD_MIN_LENGTH = 8
+import { BCRYPT_COST, PASSWORD_MIN_LENGTH } from "@/lib/password"
 
 export async function POST(request: Request) {
     let body: unknown;

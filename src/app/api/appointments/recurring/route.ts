@@ -131,8 +131,12 @@ export async function POST(request: Request) {
         }
     }
 
+    // Same admin exemption as the one-off booking route (see FEATURE_GAPS.md
+    // Gap 3) — an admin backdating a series' start lets a standing
+    // appointment be recorded as if it began in the past, e.g. entering a
+    // recurring walk-in relationship that already started off-system.
     const firstOccurrenceStart = timeStringToDate(parsedSeriesStart, startTime)
-    if (firstOccurrenceStart.getTime() < Date.now()) {
+    if (!isAdmin && firstOccurrenceStart.getTime() < Date.now()) {
         return Response.json(
             { error: "Series start time is in the past" },
             { status: 400 }
@@ -204,6 +208,7 @@ export async function POST(request: Request) {
             serviceDurationMinutes: service.durationMinutes,
             startTime: occurrenceStart,
             recurringAppointmentId: recurringAppointment.id,
+            allowPast: isAdmin,
         })
 
         if (result.ok) {

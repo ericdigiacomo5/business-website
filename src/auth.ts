@@ -133,12 +133,25 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (token.id) {
         const fresh = await prisma.user.findUnique({
           where: { id: token.id },
-          select: { name: true, email: true, role: true },
+          select: { name: true, email: true, role: true, passwordChangedAt: true },
         })
 
         // Returning null tells Auth.js to clear the session cookie, so a
         // deleted account can't keep using an already-signed token.
         if (!fresh) return null
+
+        // A password reset can't delete this token the way a database
+        // session could (JWT strategy has no server-side row to revoke) —
+        // this is the substitute. Any token minted before the last reset is
+        // treated the same as a deleted account: signed out on its very next
+        // request, rather than staying valid until it expires on its own.
+        if (
+          fresh.passwordChangedAt &&
+          token.iat &&
+          token.iat * 1000 < fresh.passwordChangedAt.getTime()
+        ) {
+          return null
+        }
 
         token.name = fresh.name
         token.email = fresh.email
