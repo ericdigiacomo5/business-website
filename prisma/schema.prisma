@@ -227,13 +227,22 @@ model Availability {
 }
 
 model TimeOff {
-  id        String   @id @default(cuid())
-  artistId  String
+  id        String    @id @default(cuid())
+  // Nullable = salon-wide (blocks every artist, present and future — see
+  // PLAN_SALON_CLOSURES.md for why this beats a list of artist ids: a list
+  // has to be re-populated by hand every time staff changes, while null
+  // covers everyone with zero maintenance). A concrete id keeps the original
+  // per-artist behavior unchanged.
+  artistId  String?
   date      DateTime
+  // Nullable = single-day (today's behavior, unchanged). A value makes the
+  // range [date, endDate] inclusive — a multi-day closure without needing
+  // one row per day.
+  endDate   DateTime?
   startTime String
   endTime   String
 
-  artist Artist @relation(fields: [artistId], references: [id])
+  artist Artist? @relation(fields: [artistId], references: [id])
 }
 
 model AppSettings {

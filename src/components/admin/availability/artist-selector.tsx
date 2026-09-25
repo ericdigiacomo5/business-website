@@ -2,15 +2,21 @@
 
 import type { ChangeEvent } from "react"
 import type { Artist } from "@/generated/prisma/client"
+import { SALON_WIDE_VALUE } from "@/lib/time-off"
 
 // Plain GET form, auto-submitted on change (same pattern as BookingFilters)
 // — re-renders the Server Component page scoped to the chosen artist.
 export function ArtistSelector({
     artists,
     currentArtistId,
+    allowSalonWide = false,
 }: {
     artists: Artist[]
     currentArtistId: string
+    // Adds an "All Artists (Salon-Wide)" option, opted into per-caller so
+    // this stays a no-op for admin/availability, which reuses this exact
+    // component and has no concept of a salon-wide row.
+    allowSalonWide?: boolean
 }) {
     function autoSubmit(e: ChangeEvent<HTMLSelectElement>) {
         e.currentTarget.form?.requestSubmit()
@@ -29,6 +35,9 @@ export function ArtistSelector({
                     onChange={autoSubmit}
                     className="mt-1 h-11 rounded-sm border border-border bg-background px-3 text-sm text-foreground"
                 >
+                    {allowSalonWide && (
+                        <option value={SALON_WIDE_VALUE}>All Artists (Salon-Wide)</option>
+                    )}
                     {artists.map((artist) => (
                         <option key={artist.id} value={artist.id}>
                             {artist.name}

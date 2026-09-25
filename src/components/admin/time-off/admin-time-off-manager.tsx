@@ -10,7 +10,9 @@ export function AdminTimeOffManager({
     artistId,
     initialEntries,
 }: {
-    artistId: string
+    // null means salon-wide — this manager is scoped to whichever mode the
+    // page is currently viewing, same as before for a concrete artist.
+    artistId: string | null
     initialEntries: TimeOff[]
 }) {
     const [windows, setWindows] = useState<TimeOff[]>(initialEntries)

@@ -1,6 +1,6 @@
 import { requireAdmin } from "@/lib/require-admin";
 import { prisma } from "@/lib/prisma"
-import { isValidTimeString, isGridAligned, startOfDay, endOfDay } from "@/lib/availability"
+import { isValidTimeString, isGridAligned, startOfDay, endOfDay, timeOffDateRangeOverlap } from "@/lib/availability"
 import { parseLocalDate } from "@/lib/format"
 
 export async function POST(request: Request) {
@@ -24,24 +24,32 @@ export async function POST(request: Request) {
         )
     }
 
-    const { artistId, date, startTime, endTime } = body as Record<string, unknown>
+    const { artistId, date, endDate, startTime, endTime } = body as Record<string, unknown>
 
-    if (!artistId || typeof artistId !== 'string') {
+    // artistId is optional — omitted (or explicitly null) means salon-wide,
+    // blocking every artist including ones created after this row (see
+    // PLAN_SALON_CLOSURES.md). Only validated against a real Artist when a
+    // specific one is actually being targeted.
+    if (artistId !== undefined && artistId !== null && typeof artistId !== 'string') {
         return Response.json(
-            { error: 'Artist is required' },
+            { error: 'Artist is invalid' },
             { status: 400 }
         )
     }
 
-    const artist = await prisma.artist.findUnique({
-        where: { id: artistId }
-    })
+    const targetArtistId = (typeof artistId === 'string' && artistId) ? artistId : null
 
-    if (!artist) {
-        return Response.json(
-            { error: 'Artist not found' },
-            { status: 404 }
-        )
+    if (targetArtistId) {
+        const artist = await prisma.artist.findUnique({
+            where: { id: targetArtistId }
+        })
+
+        if (!artist) {
+            return Response.json(
+                { error: 'Artist not found' },
+                { status: 404 }
+            )
+        }
     }
 
     if (typeof date !== 'string') {
@@ -58,6 +66,36 @@ export async function POST(request: Request) {
             { error: 'Date is invalid' },
             { status: 400 }
         )
+    }
+
+    // endDate is optional — omitted (or null) means a single-day entry,
+    // unchanged from before. A value makes this a multi-day range
+    // [date, endDate] inclusive.
+    let parsedEndDate: Date | null = null
+    if (endDate !== undefined && endDate !== null) {
+        if (typeof endDate !== 'string') {
+            return Response.json(
+                { error: 'End date is invalid' },
+                { status: 400 }
+            )
+        }
+
+        const parsed = parseLocalDate(endDate)
+        if (!parsed) {
+            return Response.json(
+                { error: 'End date is invalid' },
+                { status: 400 }
+            )
+        }
+
+        if (parsed.getTime() < parsedDate.getTime()) {
+            return Response.json(
+                { error: 'End date must be on or after the start date' },
+                { status: 400 }
+            )
+        }
+
+        parsedEndDate = parsed
     }
 
     if (
@@ -90,10 +128,27 @@ export async function POST(request: Request) {
     }
 
     const dayStart = startOfDay(parsedDate)
-    const dayEnd = endOfDay(parsedDate)
+    const dayEnd = endOfDay(parsedEndDate ?? parsedDate)
 
+    // Widened in both directions a plain artistId-and-single-day check would
+    // miss: (1) the artist condition is dropped entirely when creating a
+    // salon-wide row (targetArtistId === null) — it must be checked against
+    // every existing row regardless of artist, since a salon-wide closure
+    // landing on a day an individual artist already has personal time off is
+    // still a real overlap worth flagging (redundant, not harmful, but
+    // confusing data if silently allowed to stack); when creating a
+    // per-artist row, only that artist's rows and existing salon-wide rows
+    // are relevant. (2) The check spans this new row's whole range, not just
+    // its start day, so a multi-day entry can't silently collide with
+    // something in its middle. Same date-overlap shape as getOpenSlots's
+    // query, for the same reason.
     const priorTimeOff = await prisma.timeOff.findMany({
-        where: { artistId: artistId, date: { gte: dayStart, lte: dayEnd } }
+        where: {
+            AND: [
+                targetArtistId ? { OR: [{ artistId: targetArtistId }, { artistId: null }] } : {},
+                timeOffDateRangeOverlap(dayStart, dayEnd),
+            ],
+        },
     })
 
     const isOverlapping = priorTimeOff.some((t) => {
@@ -109,8 +164,9 @@ export async function POST(request: Request) {
 
     const timeOff = await prisma.timeOff.create({
         data: {
-            artistId: artistId,
+            artistId: targetArtistId,
             date: parsedDate,
+            endDate: parsedEndDate,
             startTime: startTime,
             endTime: endTime
         }

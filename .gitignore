@@ -45,3 +45,4 @@ next-env.d.ts
 # local-only security audit notes — describes unpatched-at-time-of-writing
 # vulnerabilities and exact exploit steps; keep out of a public repo
 SECURITY_AUDIT.md
+PLAN_SALON_CLOSURES.md

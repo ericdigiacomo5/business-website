@@ -1,6 +1,6 @@
 import { requireAdmin } from "@/lib/require-admin";
 import { prisma } from "@/lib/prisma"
-import { isGridAligned, isValidTimeString, startOfDay, endOfDay } from "@/lib/availability";
+import { isGridAligned, isValidTimeString, startOfDay, endOfDay, timeOffDateRangeOverlap } from "@/lib/availability";
 import { parseLocalDate } from "@/lib/format";
 import { Prisma } from "@/generated/prisma/client";
 
@@ -41,16 +41,20 @@ export async function PATCH(
         )
     }
 
-    const { artistId, date, startTime, endTime } = body as Record<string, unknown>
+    const { artistId, date, endDate, startTime, endTime } = body as Record<string, unknown>
 
-    if (artistId !== undefined && typeof artistId !== 'string') {
+    // Three-way, same convention admin/services's PATCH established for
+    // Service.description: undefined = don't touch, null = clear it (make
+    // salon-wide), a string = set/change it. Only validated against a real
+    // Artist when a specific one is actually being set.
+    if (artistId !== undefined && artistId !== null && typeof artistId !== 'string') {
         return Response.json(
             { error: 'Artist is invalid' },
             { status: 400 }
         )
     }
 
-    if (artistId !== undefined) {
+    if (typeof artistId === 'string') {
         const artist = await prisma.artist.findUnique({
             where: { id: artistId }
         })
@@ -82,6 +86,29 @@ export async function PATCH(
         }
 
         parsedDate = parsed
+    }
+
+    // Same three-way convention as artistId: undefined = don't touch,
+    // null = clear it (make single-day again), a string = set/change it.
+    let parsedEndDate: Date | null | undefined = undefined
+    if (endDate !== undefined) {
+        if (endDate === null) {
+            parsedEndDate = null
+        } else if (typeof endDate !== 'string') {
+            return Response.json(
+                { error: 'End date is invalid' },
+                { status: 400 }
+            )
+        } else {
+            const parsed = parseLocalDate(endDate)
+            if (!parsed) {
+                return Response.json(
+                    { error: 'End date is invalid' },
+                    { status: 400 }
+                )
+            }
+            parsedEndDate = parsed
+        }
     }
 
     if (
@@ -117,18 +144,33 @@ export async function PATCH(
         )
     }
 
-    const effectiveArtistId = artistId !== undefined ? artistId : timeOff.artistId
+    const effectiveArtistId: string | null = artistId !== undefined ? (artistId as string | null) : timeOff.artistId
     const effectiveDate = parsedDate !== undefined ? parsedDate : timeOff.date
+    const effectiveEndDate = parsedEndDate !== undefined ? parsedEndDate : timeOff.endDate
+
+    if (effectiveEndDate && effectiveEndDate.getTime() < effectiveDate.getTime()) {
+        return Response.json(
+            { error: 'End date must be on or after the start date' },
+            { status: 400 }
+        )
+    }
 
     const dayStart = startOfDay(effectiveDate)
-    const dayEnd = endOfDay(effectiveDate)
+    const dayEnd = endOfDay(effectiveEndDate ?? effectiveDate)
 
+    // Same widening as POST: the artist condition is dropped entirely when
+    // the row ends up salon-wide (effectiveArtistId is null), since it must
+    // then be checked against every existing row regardless of artist — see
+    // that route's own comment for the full reasoning. The date-range
+    // overlap spans this row's whole effective range, not just its start day.
     const priorTimeOff = await prisma.timeOff.findMany({
         where: {
-            id: { not: timeOff.id },
-            artistId: effectiveArtistId,
-            date: { gte: dayStart, lte: dayEnd }
-        }
+            AND: [
+                { id: { not: timeOff.id } },
+                effectiveArtistId ? { OR: [{ artistId: effectiveArtistId }, { artistId: null }] } : {},
+                timeOffDateRangeOverlap(dayStart, dayEnd),
+            ],
+        },
     })
 
     const isOverlapping = priorTimeOff.some((t) => {
@@ -145,6 +187,7 @@ export async function PATCH(
     const data: Record<string, unknown> = {}
     if (artistId !== undefined) data.artistId = artistId;
     if (parsedDate !== undefined) data.date = parsedDate;
+    if (parsedEndDate !== undefined) data.endDate = parsedEndDate;
     if (startTime !== undefined) data.startTime = startTime;
     if (endTime !== undefined) data.endTime = endTime;
 

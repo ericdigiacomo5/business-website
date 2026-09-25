@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@/generated/prisma/client";
 import { SLOT_MINUTES, getGridBounds, type ArtistWorkingWindow } from "@/lib/schedule-grid";
 
 // Re-exported so server-side code can keep importing these from this file —
@@ -33,6 +34,26 @@ export function endOfDay(date: Date): Date {
   return result;
 }
 
+// "Does [date, endDate ?? date] overlap [rangeStart, rangeEnd]" as a
+// TimeOffWhereInput fragment — shared by getOpenSlots and both admin
+// time-off routes' overlap checks, so the same date-range logic isn't
+// hand-written three times (the admin/availability overlap check went
+// through this exact duplication once already before being unified — see
+// PROJECT_STATUS.md). A range row's relevant end is endDate when present,
+// date otherwise; Prisma can't express that COALESCE directly in a filter,
+// hence the inner OR.
+export function timeOffDateRangeOverlap(
+  rangeStart: Date,
+  rangeEnd: Date
+): Prisma.TimeOffWhereInput {
+  return {
+    AND: [
+      { date: { lte: rangeEnd } },
+      { OR: [{ endDate: null, date: { gte: rangeStart } }, { endDate: { gte: rangeStart } }] },
+    ],
+  };
+}
+
 function generateSlotsInWindow(date: Date, startTime: string, endTime: string): Date[] {
   const slots: Date[] = [];
   let current = timeStringToDate(date, startTime);
@@ -57,8 +78,16 @@ export async function getOpenSlots(
 
   const [availability, timeOff, bookedSlots] = await Promise.all([
     prisma.availability.findMany({ where: { artistId, dayOfWeek } }),
+    // A row applies to this artist either directly (artistId matches) or
+    // salon-wide (artistId is null — see PLAN_SALON_CLOSURES.md), combined
+    // with the shared date-range overlap check.
     prisma.timeOff.findMany({
-      where: { artistId, date: { gte: dayStart, lte: dayEnd } },
+      where: {
+        AND: [
+          { OR: [{ artistId }, { artistId: null }] },
+          timeOffDateRangeOverlap(dayStart, dayEnd),
+        ],
+      },
     }),
     prisma.appointmentSlot.findMany({
       where: {

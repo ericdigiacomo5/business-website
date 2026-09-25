@@ -30,8 +30,8 @@ Nearly every gap below sits in the ring *around* that core, and they cluster int
 | 2 | **BLOCKER** | No email sending of any kind | *(absent codebase-wide)* | **PARTIAL** — sending infra exists; only password reset uses it |
 | 3 | **BLOCKER** | Admins can't book in the past — walk-in revenue unrecordable | `src/app/api/appointments/route.ts` | **CLOSED** |
 | 4 | **BLOCKER** | No reschedule — status is the only editable field | `src/app/api/admin/appointments/[id]/route.ts` | **CLOSED** |
-| 5 | **BLOCKER** | No cancellation notice window | `src/app/api/appointments/[id]/route.ts` | Open |
-| 6 | **BLOCKER** | No salon-wide closure (holidays) | `prisma/schema.prisma` — `TimeOff` | Open |
+| 5 | **BLOCKER** | No cancellation notice window | `src/app/api/appointments/[id]/route.ts` | **CLOSED** |
+| 6 | **BLOCKER** | No salon-wide closure (holidays) | `prisma/schema.prisma` — `TimeOff` | **CLOSED** |
 | 7 | **SHOULD** | No reporting/revenue view despite data being captured | *(absent)* | Open |
 | 8 | **SHOULD** | No no-show tracking | `prisma/schema.prisma` — `AppointmentStatus` | Open |
 | 9 | **SHOULD** | No customer history view | `src/app/admin/users/` | Open |
@@ -48,7 +48,7 @@ Nearly every gap below sits in the ring *around* that core, and they cluster int
 | 20 | NICE | Confirmation step is a dead end | `src/components/booking/steps/confirmed-step.tsx` | Open |
 | 21 | NICE | No audit log | *(absent)* | Open |
 
-All four closed gaps were verified live against the real dev database (not just typechecked or reasoned through) at the time each was fixed — see `PROJECT_STATUS.md`'s "Completed so far" section for the full build/verification account of each.
+All closed/partial gaps were verified live against the real dev database (not just typechecked or reasoned through) at the time each was fixed — see `PROJECT_STATUS.md`'s "Completed so far" section for the full build/verification account of each. Of the six original blockers: five fully closed (1, 3, 4, 5, 6), one partially closed (2 — the send path exists, but only password reset uses it).
 
 ---
 
@@ -140,7 +140,11 @@ So there is no way to move a booking to a different time, artist, or service. "C
 
 ### Gap 5 — BLOCKER — Customers can cancel at any time, including after the appointment
 
+**Status: CLOSED.** Full account in `PROJECT_STATUS.md`. `DELETE /api/appointments/[id]` now rejects cancelling any appointment whose `startTime` is less than 24 hours away, and separately rejects cancelling one already in a terminal state (`CANCELLED`/`COMPLETED`) regardless of timing — together these close all three bullets in the original finding below: "cancel five minutes before" (the 24h check), "cancel one that already happened" (a past `startTime` is always inside the 24h-out window, caught by the same check with no separate past-time branch needed), and "re-cancel one that is already `CANCELLED` or `COMPLETED`" (the status check, added in a follow-up pass after the 24h check alone was shipped and found to still let a far-future terminal-status appointment through). The admin-vs-customer scoping question this gap's fix required got resolved along the way: this route only ever cancels the caller's *own* appointment, so it needs no admin-awareness at all — an admin acting on someone else's behalf already goes through the separate `PATCH /api/admin/appointments/[id]`, which correctly has no notice-window restriction.
+
 **Location:** `src/app/api/appointments/[id]/route.ts`
+
+**Original finding, preserved for the record (describes the state before the fix, not current code):**
 
 The DELETE handler enforces exactly two rules: the caller is signed in, and the appointment is theirs. There is no check on timing or current status. A customer can therefore:
 
@@ -157,13 +161,17 @@ The UI does hide the button appropriately, but this is explicitly cosmetic. From
 // appointment — this is a frontend-only UX guard, not a security boundary.
 ```
 
-Note this also interacts with Gap 11: cancelling one materialized occurrence of a standing appointment does not touch the parent `RecurringAppointment`, so nothing prevents the series from re-materializing it.
+Note this also interacts with Gap 11: cancelling one materialized occurrence of a standing appointment does not touch the parent `RecurringAppointment`, so nothing prevents the series from re-materializing it. (Also still true after the fix — unaffected.)
 
 ---
 
 ### Gap 6 — BLOCKER — The salon can't close for a holiday
 
+**Status: CLOSED.** Full account in `PROJECT_STATUS.md`; the design decision behind it is in `PLAN_SALON_CLOSURES.md`. Summary: `TimeOff.artistId` is now nullable (`null` = salon-wide, blocking every artist including ones created after the row exists) and `TimeOff.endDate` is new and nullable (a value makes it a `[date, endDate]` inclusive multi-day range). This was chosen over Eric's initial idea of a list of artist ids on `TimeOff`, which was rejected for two reasons worth remembering if the topic resurfaces: a list has to be re-populated by hand every time staff changes (the nullable design instead covers everyone with zero maintenance), and it wouldn't have touched the date-range half of this finding at all.
+
 **Location:** `prisma/schema.prisma` — `TimeOff`, `AppSettings`
+
+**Original finding, preserved for the record (describes the state before the fix, not current code):**
 
 `TimeOff.artistId` is a non-nullable foreign key and `TimeOff.date` is a single date, so time off is strictly per-artist, per-day. Closing for Thanksgiving means manually adding one row per artist for that date; a multi-day closure multiplies that again, since there is no date range.
 
@@ -366,13 +374,13 @@ Ordered by what unblocks the most, not by size. Steps 1 and 2, and the reschedul
 Copy `priceCents` onto `Appointment` at booking time first — otherwise every report built on top is wrong as soon as prices change. Then build daily takings and the payment-method split; the rest of the data is already captured.
 *Covers Gaps 17, 7. Still open.*
 
-~~**4. Reschedule**~~**, and a cancellation notice window.**
-~~The two policy gaps the salon will hit on the phone every week. Reschedule reuses the existing booking transaction shape~~; the cancellation window wants a configurable value rather than a hardcoded 24h, which means extending `AppSettings`.
-*Reschedule (Gap 4) done — admin-only, time-only, same-artist, per the scoping discussion recorded in `PROJECT_STATUS.md`. Gap 5 (cancellation notice window) is still open.*
+~~**4. Reschedule, and a cancellation notice window.**~~
+~~The two policy gaps the salon will hit on the phone every week. Reschedule reuses the existing booking transaction shape; the cancellation window wants a configurable value rather than a hardcoded 24h, which means extending `AppSettings`.~~
+*Reschedule (Gap 4) done — admin-only, time-only, same-artist, per the scoping discussion recorded in `PROJECT_STATUS.md`. Cancellation window (Gap 5) fully done as a hardcoded 24h in `DELETE /api/appointments/[id]`, including the terminal-status re-cancellation guard — not the configurable `AppSettings` value this line originally floated, which remains a nice-to-have rather than a gap.*
 
-**5. Salon-wide closures, no-show status, and notes.**
-Three small additive schema changes that remove recurring manual work and make the reporting from step 3 substantially more useful.
-*Covers Gaps 6, 8, 10. Still open.*
+~~**5. Salon-wide closures**~~**, no-show status, and notes.**
+~~Three small additive schema changes that remove recurring manual work and make the reporting from step 3 substantially more useful.~~
+*Salon-wide closures (Gap 6) done — see `PLAN_SALON_CLOSURES.md` and `PROJECT_STATUS.md` for the full account, including a real RSC-boundary bug found and fixed along the way. No-show status (Gap 8) and notes (Gap 10) are still open, and this session confirmed the "small additive schema change" framing holds for those too, since it held for Gap 6.*
 
 **6. Standing-appointment management.**
 Finish the half-built feature — a series list with pause/cancel, and make single-occurrence cancellation series-aware.
