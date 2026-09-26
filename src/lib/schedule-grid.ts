@@ -9,6 +9,17 @@ export const SLOT_MINUTES = 15;
 
 export type ArtistWorkingWindow = { artistId: string; start: string | null; end: string | null };
 
+// No timezone handling yet: times are interpreted in the server's local
+// timezone. Fine for now with a single-location salon, but will need
+// date-fns-tz or Temporal once this runs somewhere other than the salon's
+// own timezone.
+export function timeStringToDate(date: Date, time: string): Date {
+  const [hours, minutes] = time.split(":").map(Number);
+  const result = new Date(date);
+  result.setHours(hours, minutes, 0, 0);
+  return result;
+}
+
 // Default range used only when NO artist has any Availability configured for
 // the requested day — the schedule grid must always be renderable, never a
 // hard empty state just because nobody has set up hours yet.

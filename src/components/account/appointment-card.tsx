@@ -10,6 +10,23 @@ const STATUS_TONE: Record<AppointmentStatus, "primary" | "success" | "danger" | 
     CONFIRMED: "success",
     CANCELLED: "danger",
     COMPLETED: "muted",
+    // A customer's own appointment can reach NO_SHOW only via an admin
+    // marking it so — this map just needs to render it, same tone as
+    // CANCELLED ("didn't happen").
+    NO_SHOW: "danger",
+}
+
+// Only NO_SHOW's label differs from its raw enum value — the underscore
+// reads oddly in a plain-text Badge. Mirrors STATUS_LABEL in
+// src/components/admin/appointment-shared.ts, kept as its own local copy
+// here rather than imported since this is a customer-facing component and
+// that module lives under the admin tree.
+const STATUS_LABEL: Record<AppointmentStatus, string> = {
+    UPCOMING: "UPCOMING",
+    CONFIRMED: "CONFIRMED",
+    CANCELLED: "CANCELLED",
+    COMPLETED: "COMPLETED",
+    NO_SHOW: "NO-SHOW",
 }
 
 export function AppointmentCard({
@@ -51,7 +68,7 @@ export function AppointmentCard({
                 </p>
             </div>
             <div className="flex items-center gap-3">
-                <Badge tone={STATUS_TONE[appointment.status]}>{appointment.status}</Badge>
+                <Badge tone={STATUS_TONE[appointment.status]}>{STATUS_LABEL[appointment.status]}</Badge>
                 {cancellable && (
                     <Button
                         variant="danger"

@@ -11,6 +11,7 @@ const ADMIN_LINKS = [
     { href: "/admin/availability", label: "Availability" },
     { href: "/admin/time-off", label: "Time Off" },
     { href: "/admin/users", label: "Users" },
+    { href: "/admin/recurring", label: "Standing Appointments" },
 ]
 
 export function AdminNav() {

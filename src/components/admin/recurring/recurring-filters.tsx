@@ -2,23 +2,19 @@
 
 import type { ChangeEvent } from "react"
 import type { Artist } from "@/generated/prisma/client"
-import { STATUS_LABEL } from "./appointment-shared"
 
-const STATUS_OPTIONS = ["UPCOMING", "CONFIRMED", "CANCELLED", "COMPLETED", "NO_SHOW"] as const
+const STATUS_OPTIONS = ["ACTIVE", "PAUSED", "CANCELLED"] as const
 
-// Plain GET form, submitted either automatically on select change or via the
-// button — either way it just re-renders this Server Component page with
-// the new query params, no fetch/client state involved.
-export function BookingFilters({
+// Plain GET form, auto-submitted on change — re-renders this Server
+// Component page with the new query params. Same pattern as BookingFilters.
+export function RecurringFilters({
     artists,
     currentStatus,
     currentArtistId,
-    currentDateString,
 }: {
     artists: Artist[]
     currentStatus: string
     currentArtistId: string
-    currentDateString: string
 }) {
     function autoSubmit(e: ChangeEvent<HTMLSelectElement>) {
         e.currentTarget.form?.requestSubmit()
@@ -26,11 +22,6 @@ export function BookingFilters({
 
     return (
         <form method="get" className="flex flex-wrap items-end gap-3">
-            {/* Carries the currently-viewed date forward — a GET form
-                submission replaces the whole query string with only its own
-                fields, so without this, changing a filter would silently
-                reset DatePicker back to today. */}
-            <input type="hidden" name="dateString" value={currentDateString} />
             <div>
                 <label htmlFor="status" className="block text-xs font-medium text-muted-foreground">
                     Status
@@ -45,7 +36,7 @@ export function BookingFilters({
                     <option value="">All</option>
                     {STATUS_OPTIONS.map((status) => (
                         <option key={status} value={status}>
-                            {STATUS_LABEL[status]}
+                            {status}
                         </option>
                     ))}
                 </select>
@@ -77,8 +68,6 @@ export function BookingFilters({
             >
                 Filter
             </button>
-
         </form>
-
     )
 }

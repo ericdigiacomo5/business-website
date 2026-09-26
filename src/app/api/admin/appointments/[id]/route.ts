@@ -143,10 +143,12 @@ export async function PATCH(
                 data.checkedOutAt = new Date()
             }
 
-            if (status === AppointmentStatus.CANCELLED) {
+            if (status === AppointmentStatus.CANCELLED || status === AppointmentStatus.NO_SHOW) {
                 // Same soft-cancel contract as DELETE /api/appointments/:id
                 // — free the slots so the grid opens back up, keep the
-                // Appointment row as a historical record.
+                // Appointment row as a historical record. A no-show frees the
+                // slot for the same reason a cancellation does: the customer
+                // isn't coming, so there's no reason to keep the time blocked.
                 await tx.appointmentSlot.deleteMany({
                     where: { appointmentId: id }
                 })

@@ -33,10 +33,10 @@ Nearly every gap below sits in the ring *around* that core, and they cluster int
 | 5 | **BLOCKER** | No cancellation notice window | `src/app/api/appointments/[id]/route.ts` | **CLOSED** |
 | 6 | **BLOCKER** | No salon-wide closure (holidays) | `prisma/schema.prisma` — `TimeOff` | **CLOSED** |
 | 7 | **SHOULD** | No reporting/revenue view despite data being captured | *(absent)* | Open |
-| 8 | **SHOULD** | No no-show tracking | `prisma/schema.prisma` — `AppointmentStatus` | Open |
-| 9 | **SHOULD** | No customer history view | `src/app/admin/users/` | Open |
+| 8 | **SHOULD** | No no-show tracking | `prisma/schema.prisma` — `AppointmentStatus` | **CLOSED** |
+| 9 | **SHOULD** | No customer history view | `src/app/admin/users/` | **CLOSED** |
 | 10 | **SHOULD** | No notes field anywhere (customer or appointment) | `prisma/schema.prisma` | Open |
-| 11 | **SHOULD** | Standing appointments can be created but never managed | `src/lib/recurring.ts` | Open |
+| 11 | **SHOULD** | Standing appointments can be created but never managed | `src/lib/recurring.ts` | **CLOSED** |
 | 12 | **SHOULD** | Artists can't log in — admin-only role model | `prisma/schema.prisma` — `Role` | Open |
 | 13 | **SHOULD** | No rate limiting on public routes | *(absent)* | Open |
 | 14 | **SHOULD** | Site never states address, hours, or phone | `src/app/about/page.tsx` | Open |
@@ -48,7 +48,7 @@ Nearly every gap below sits in the ring *around* that core, and they cluster int
 | 20 | NICE | Confirmation step is a dead end | `src/components/booking/steps/confirmed-step.tsx` | Open |
 | 21 | NICE | No audit log | *(absent)* | Open |
 
-All closed/partial gaps were verified live against the real dev database (not just typechecked or reasoned through) at the time each was fixed — see `PROJECT_STATUS.md`'s "Completed so far" section for the full build/verification account of each. Of the six original blockers: five fully closed (1, 3, 4, 5, 6), one partially closed (2 — the send path exists, but only password reset uses it).
+All closed/partial gaps were verified live against the real dev database (not just typechecked or reasoned through) at the time each was fixed — see `PROJECT_STATUS.md`'s "Completed so far" section for the full build/verification account of each. Of the six original blockers: five fully closed (1, 3, 4, 5, 6), one partially closed (2 — the send path exists, but only password reset uses it). Of the "should have" findings, three more are also now closed (8, 9, 11).
 
 ---
 
@@ -208,21 +208,35 @@ This is the highest value-per-effort item in this document. **Do Gap 17 (price s
 
 ### Gap 8 — SHOULD — No no-show tracking
 
+**Status: CLOSED.** Full account in `PROJECT_STATUS.md` under "No-show tracking (Gap 8) and admin customer history (Gap 9)," built together with Gap 9. Summary: `NO_SHOW` added to `AppointmentStatus` via a hand-written `ALTER TYPE ... ADD VALUE` migration (`20260925010000_add_no_show_status`), following the exact precedent this finding named. `PATCH /api/admin/appointments/[id]` frees the appointment's slots on a transition to `NO_SHOW` the same way it already did for `CANCELLED` — the two remain genuinely distinct statuses (not folded together) so a salon can tell "cancelled politely" apart from "didn't show," which is the actual point of the gap. The admin schedule UI (`ScheduleDetailSheet`) gained a "No-Show" action, offered only on a `CONFIRMED` appointment (an unconfirmed one is more naturally just cancelled).
+
+**A real bug this feature exposed, found and fixed in the same session (see "Follow-up fix" under Gap 8/9 in `PROJECT_STATUS.md`):** since `NO_SHOW` frees its slot the same as `CANCELLED`, the same artist+time can be legitimately rebooked afterward — and the admin schedule grid had no collision handling, so a terminal appointment and the live one that reused its slot rendered as two blocks stacked in the same grid cell, one invisibly hiding the other. Fixed by excluding `CANCELLED`/`NO_SHOW` from the grid's default (no-filter) view — the existing status filter still surfaces them on request, scoped to just that status so there's no overlap to hide behind.
+
 **Location:** `prisma/schema.prisma` — `AppointmentStatus`
+
+**Original finding, preserved for the record (describes the state before the fix, not current code):**
 
 The enum is `UPCOMING | CONFIRMED | CANCELLED | COMPLETED`. A customer who simply doesn't turn up must be recorded as one of these — in practice `CANCELLED`, which makes them indistinguishable from someone who called ahead to cancel politely.
 
 Salons track no-shows because repeat offenders inform real decisions: requiring a deposit, or declining to book them. Adding a `NO_SHOW` value is a small enum migration (and there is precedent — `PENDING` → `UPCOMING` was handled with a hand-written `ALTER TYPE` migration); the value comes from surfacing it in Gaps 7 and 9.
 
+**Not addressed, carried forward:** Gap 7 (reporting) still doesn't exist, so no-show *counts* per customer aren't surfaced anywhere yet — this gap only closed the data model and the ability to record one, not the aggregate view Gap 7 would build on top of it.
+
 ---
 
 ### Gap 9 — SHOULD — No customer history view
 
+**Status: CLOSED.** Full account in `PROJECT_STATUS.md` under "No-show tracking (Gap 8) and admin customer history (Gap 9)," built together with Gap 8. Summary: new `/admin/users/[id]` Server Component detail page, direct-Prisma read of the user plus their appointments (`orderBy: startTime desc` — most recent first). Inline editing moved from the list row (removed entirely) to this page, reusing the same `PATCH /api/admin/users/[id]` route that already existed and already excluded `passwordHash`. `AdminUserRow` in the list is now a plain link, not an editable row.
+
 **Location:** `src/app/admin/users/`
+
+**Original finding, preserved for the record (describes the state before the fix, not current code):**
 
 The users page is a flat, searchable list showing name, email, phone, and role. There is no `/admin/users/[id]` detail page, and `GET /api/admin/users/[id]` never queries `appointment`.
 
 So there is no way to see a customer's past appointments, lifetime spend, usual artist, no-show count, or notes. "What did she have last time, and who did it?" is a question asked before nearly every returning client, and answering it today means scrolling the schedule by hand.
+
+**Not addressed, carried forward:** lifetime spend, usual artist, and no-show count are not computed/surfaced as summary stats on the new page — it lists raw appointment history (which does let someone answer "what did she have last time" by reading the top row), but doesn't aggregate it. Notes (Gap 10) are also still absent. Both are natural follow-ups to layer onto this same page rather than reasons this gap remains open — the finding was specifically "no view at all," which is now fixed.
 
 ---
 
@@ -244,7 +258,11 @@ Two small additions cover nearly all real use: a customer-supplied note captured
 
 ### Gap 11 — SHOULD — Standing appointments can be created but never managed
 
-**Location:** `src/lib/recurring.ts`, `prisma/schema.prisma` — `RecurringAppointment`
+**Status: CLOSED.** Full account in `PROJECT_STATUS.md` under "Recurring appointment management (Gap 11)"; the design is written up in `PLAN_RECURRING_MANAGEMENT.md` (gitignored — local planning doc, not checked in). Summary: `PATCH` routes for both admin (`/api/admin/recurring-appointments/[id]`) and the owning customer (`/api/recurring-appointments/[id]`) now write `RecurringStatus`, sharing one transaction (`applyRecurringStatusChange()` in `src/lib/booking.ts`) that also frees the series' future `UPCOMING`/`CONFIRMED` occurrences on Pause/Cancel — without that cascade, flipping the status alone would do nothing visible on the schedule for up to 8 weeks. A `respectNoticeWindow` flag is the one behavioral difference between the two callers: a customer's own cancel/pause leaves any occurrence less than 24h out untouched, same policy as cancelling one directly; an admin has no such restriction. Two admin surfaces: a new dedicated `/admin/recurring` page (salon-wide, filterable by status/artist — the thing no prior view could answer without opening every customer one at a time) and a `userId`-scoped section on the existing `/admin/users/[id]` page. A new customer-facing "Standing Appointments" section was added to `/appointments` too — Resume is hidden there specifically (via a `RecurringSeriesRow` `allowResume` prop), since resuming a paused series doesn't re-materialize anything until the still-unbuilt rolling re-materialization job exists, and a customer has no context for why that's incomplete the way an admin does. Single-occurrence cancellation (`DELETE /api/appointments/[id]`, the admin appointment `PATCH`) was deliberately left untouched — "skip this one" and "end the whole series" are different intents that shouldn't be conflated into one button.
+
+**A real RSC-boundary bug found and fixed while building this, the second instance of the same failure mode this project has now hit** (the first is documented under Gap 6's "Salon-wide closures" write-up): `src/lib/recurring.ts` is imported by a Client Component (`review-step.tsx`, for the `MATERIALIZE_WEEKS` constant), so adding a `prisma` import to that file for the new shared transaction broke the browser bundle outright (`Module not found: Can't resolve 'net'`, from `pg` being pulled in transitively) — confirmed live via a real `500` on `/admin/book` before the fix. Moved the transaction to `src/lib/booking.ts` (server-only, no client consumers) instead. Hit the *identical* class of bug a second time in the same session: `RecurringSeriesRow` (shared with customer-facing UI) imported `timeStringToDate` from `src/lib/availability.ts`, which also pulls in Prisma — broke `/admin/recurring` the same way. Fixed by moving `timeStringToDate` into the already-existing `src/lib/schedule-grid.ts` (the "pure, DB-free" sibling file `availability.ts`'s own header comment already documents as the pattern for exactly this situation), re-exported from `availability.ts` for server callers. Worth remembering as a recurring failure shape in this codebase: a shared `src/lib/*.ts` module used by both server and client code can be silently poisoned by *any* transitive Prisma import, not just a direct one — the fix is always the same (split the client-safe pieces into their own file), and this project now has three files following that split (`schedule-grid.ts`/`availability.ts`, plus the `time-off.ts` sentinel fix from Gap 6).
+
+**Verified live** against the real dev database: admin `GET` (unfiltered salon-wide, `userId`-scoped, `status`-filtered) and `PATCH` (Pause frees future occurrences and confirmed via `getOpenSlots` that the slot reopens; Resume correctly freed zero occurrences and did not re-create the paused-and-freed slot, confirming no re-materialization happens; Cancel; unknown-id `404`; invalid-status `400`; unauthenticated `401`) all confirmed via direct API calls. Customer self-service verified with a real registered account: `GET` own series, `PATCH` own series (pause/cancel), and a `403` confirmed when attempting to `PATCH` a different customer's series by id. The notice-window behavior specifically verified with a dedicated near-term fixture (an occurrence booked ~2 hours out): the customer's own cancel correctly froze the series but left that one imminent occurrence `UPCOMING` and unfreed, while a subsequent admin cancel of the same (already-cancelled) series correctly freed it — proving the two paths' notice-window policies are genuinely independent, not just differently worded. Browser verification (Playwright, `--no-save`, `try/finally`-wrapped, fully uninstalled afterward) confirmed all three UI surfaces render and mutate correctly with zero console errors: the dedicated admin page (customer name shown, Pause/Cancel with the inline confirmation swap, status badges updating in place), the per-customer secondary view (same series visible, status persisted across navigating between the two admin surfaces), and the customer's own account page (series visible, own name/email correctly never rendered on their own row, Resume button correctly absent on a paused series, "contact the salon" copy shown instead). All disposable test artists created during this and prior sessions' verification were confirmed deactivated afterward (a stray one from an earlier session's Playwright run had been left `active: true` — found via a direct `GET /api/artists` check and fixed, rather than assumed clean).
 
 Both customers and admins can create a recurring series, and the schema supports pausing or ending one:
 
@@ -378,13 +396,13 @@ Copy `priceCents` onto `Appointment` at booking time first — otherwise every r
 ~~The two policy gaps the salon will hit on the phone every week. Reschedule reuses the existing booking transaction shape; the cancellation window wants a configurable value rather than a hardcoded 24h, which means extending `AppSettings`.~~
 *Reschedule (Gap 4) done — admin-only, time-only, same-artist, per the scoping discussion recorded in `PROJECT_STATUS.md`. Cancellation window (Gap 5) fully done as a hardcoded 24h in `DELETE /api/appointments/[id]`, including the terminal-status re-cancellation guard — not the configurable `AppSettings` value this line originally floated, which remains a nice-to-have rather than a gap.*
 
-~~**5. Salon-wide closures**~~**, no-show status, and notes.**
+~~**5. Salon-wide closures, no-show status**~~**, and notes.**
 ~~Three small additive schema changes that remove recurring manual work and make the reporting from step 3 substantially more useful.~~
-*Salon-wide closures (Gap 6) done — see `PLAN_SALON_CLOSURES.md` and `PROJECT_STATUS.md` for the full account, including a real RSC-boundary bug found and fixed along the way. No-show status (Gap 8) and notes (Gap 10) are still open, and this session confirmed the "small additive schema change" framing holds for those too, since it held for Gap 6.*
+*Salon-wide closures (Gap 6) done — see `PLAN_SALON_CLOSURES.md` and `PROJECT_STATUS.md` for the full account, including a real RSC-boundary bug found and fixed along the way. No-show status (Gap 8) done, built together with the customer history view (Gap 9) — see `PROJECT_STATUS.md`. Notes (Gap 10) is still open; the "small additive schema change" framing has now held for three gaps in a row (6, 8, and by extension 9's page addition), so it's a reasonable prior for 10 too.*
 
-**6. Standing-appointment management.**
-Finish the half-built feature — a series list with pause/cancel, and make single-occurrence cancellation series-aware.
-*Covers Gap 11. Still open.*
+~~**6. Standing-appointment management.**~~
+~~Finish the half-built feature — a series list with pause/cancel, and make single-occurrence cancellation series-aware.~~
+*Covers Gap 11 — done. Two admin surfaces (dedicated `/admin/recurring`, plus a scoped view on `/admin/users/[id]`) and customer self-service on `/appointments`, sharing one status-change transaction. Single-occurrence cancellation was deliberately left unchanged rather than made "series-aware" in the sense originally floated — see `PROJECT_STATUS.md`/`PLAN_RECURRING_MANAGEMENT.md` for why that turned out to be the right call once the real series-level cancel routes existed. A rolling re-materialization job for the 8-week horizon remains a separate, still-open follow-up this work surfaced but deliberately didn't build.*
 
 ---
 

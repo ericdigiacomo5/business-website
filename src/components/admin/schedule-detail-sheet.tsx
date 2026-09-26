@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { formatDuration, formatPrice } from "@/lib/format"
 import { DateTimeStep } from "@/components/booking/steps/datetime-step"
-import { PAYMENT_METHOD_LABEL, STATUS_TONE, type AdminAppointment } from "./appointment-shared"
+import { PAYMENT_METHOD_LABEL, STATUS_LABEL, STATUS_TONE, type AdminAppointment } from "./appointment-shared"
 
 const PAYMENT_METHODS: PaymentMethod[] = ["CASH", "CARD", "OTHER"]
 
@@ -21,6 +21,7 @@ export function ScheduleDetailSheet({
     onConfirm,
     onCheckout,
     onCancel,
+    onNoShow,
     onReschedule,
     onClose,
 }: {
@@ -29,6 +30,7 @@ export function ScheduleDetailSheet({
     onConfirm: () => void
     onCheckout: (paymentMethod: PaymentMethod) => void
     onCancel: () => void
+    onNoShow: () => void
     onReschedule: (startTime: string) => void
     onClose: () => void
 }) {
@@ -57,14 +59,14 @@ export function ScheduleDetailSheet({
                 aria-modal="true"
                 onClick={(e) => e.stopPropagation()}
                 className={
-                    "max-h-[85vh] w-full max-w-sm cursor-auto overflow-y-auto rounded-2xl border " +
+                    "max-h-[92vh] w-full max-w-md cursor-auto overflow-y-auto rounded-2xl border " +
                     "border-border bg-background px-4 pt-4 pb-6 shadow-lg"
                 }
             >
                 <div className="flex items-start justify-between gap-3">
                     <div className="flex items-center gap-2">
                         <span className="font-medium text-foreground">{appointment.service.name}</span>
-                        <Badge tone={STATUS_TONE[appointment.status]}>{appointment.status}</Badge>
+                        <Badge tone={STATUS_TONE[appointment.status]}>{STATUS_LABEL[appointment.status]}</Badge>
                     </div>
                     <button
                         type="button"
@@ -186,6 +188,11 @@ export function ScheduleDetailSheet({
                                 >
                                     Reschedule
                                 </Button>
+                                {appointment.status === "CONFIRMED" && (
+                                    <Button variant="danger" size="md" onClick={onNoShow} disabled={busy} className="flex-1">
+                                        No-Show
+                                    </Button>
+                                )}
                                 <Button variant="danger" size="md" onClick={onCancel} disabled={busy} className="flex-1">
                                     Cancel
                                 </Button>

@@ -1,26 +1,16 @@
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@/generated/prisma/client";
-import { SLOT_MINUTES, getGridBounds, type ArtistWorkingWindow } from "@/lib/schedule-grid";
+import { SLOT_MINUTES, getGridBounds, timeStringToDate, type ArtistWorkingWindow } from "@/lib/schedule-grid";
 
 // Re-exported so server-side code can keep importing these from this file —
-// only the schedule grid's Client Component needs to import them from
+// only a Client Component (the schedule grid, and now RecurringSeriesRow,
+// shared with customer-facing UI) needs to import them from
 // @/lib/schedule-grid directly, to avoid pulling this file's Prisma/pg
 // dependency chain into a client bundle (see that file's own comment).
-export { SLOT_MINUTES, getGridBounds, type ArtistWorkingWindow };
+export { SLOT_MINUTES, getGridBounds, timeStringToDate, type ArtistWorkingWindow };
 
 // "HH:mm", 24-hour, zero-padded — matches what timeStringToDate() expects to parse.
 const TIME_PATTERN = /^([01]\d|2[0-3]):([0-5]\d)$/
-
-// No timezone handling yet: times are interpreted in the server's local
-// timezone. Fine for now with a single-location salon, but will need
-// date-fns-tz or Temporal once this runs somewhere other than the salon's
-// own timezone.
-export function timeStringToDate(date: Date, time: string): Date {
-  const [hours, minutes] = time.split(":").map(Number);
-  const result = new Date(date);
-  result.setHours(hours, minutes, 0, 0);
-  return result;
-}
 
 export function startOfDay(date: Date): Date {
   const result = new Date(date);

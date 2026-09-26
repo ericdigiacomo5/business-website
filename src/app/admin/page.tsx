@@ -51,6 +51,17 @@ export default async function AdminBookingsPage({
 
     if (statusParam && (Object.values(AppointmentStatus) as string[]).includes(statusParam)) {
         where.status = statusParam as AppointmentStatus
+    } else {
+        // No status filter selected — this is the grid's default, "what does
+        // today actually look like" view. CANCELLED/NO_SHOW appointments no
+        // longer hold a real AppointmentSlot (both free their slots on that
+        // transition), so a rebooked time and its cancelled/no-show
+        // predecessor would otherwise render as two blocks stacked in the
+        // exact same grid cell, with one completely hiding the other. Hide
+        // both terminal-and-vacated statuses here; picking "Cancelled" or
+        // "No-Show" explicitly in the filter above still shows them, scoped
+        // to just that status so there's no competing block to hide behind.
+        where.status = { notIn: [AppointmentStatus.CANCELLED, AppointmentStatus.NO_SHOW] }
     }
 
     if (artistIdParam) {

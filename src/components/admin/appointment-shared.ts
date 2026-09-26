@@ -19,6 +19,20 @@ export const STATUS_TONE: Record<AppointmentStatus, "primary" | "success" | "dan
     CONFIRMED: "success",
     CANCELLED: "danger",
     COMPLETED: "muted",
+    // Shares CANCELLED's tone — both mean "didn't happen," distinguished by
+    // label rather than a third color.
+    NO_SHOW: "danger",
+}
+
+// Display label per status — only NO_SHOW differs from its raw enum value
+// (the underscore reads oddly wherever status renders as plain text, e.g. a
+// Badge). Every other status's label is identical to its value.
+export const STATUS_LABEL: Record<AppointmentStatus, string> = {
+    UPCOMING: "UPCOMING",
+    CONFIRMED: "CONFIRMED",
+    CANCELLED: "CANCELLED",
+    COMPLETED: "COMPLETED",
+    NO_SHOW: "NO-SHOW",
 }
 
 // Indexed by an artist's position in the existing createdAt-ascending order
@@ -47,6 +61,7 @@ export const STATUS_BAR_COLOR: Record<AppointmentStatus, string> = {
     CONFIRMED: "bg-success",
     CANCELLED: "bg-danger",
     COMPLETED: "bg-muted-foreground",
+    NO_SHOW: "bg-danger",
 }
 
 export const PAYMENT_METHOD_LABEL: Record<PaymentMethod, string> = {

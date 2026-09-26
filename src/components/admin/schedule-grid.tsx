@@ -173,6 +173,7 @@ export function ScheduleGrid({
                 onConfirm={() => selectedId && updateStatus(selectedId, "CONFIRMED")}
                 onCheckout={(paymentMethod) => selectedId && updateStatus(selectedId, "COMPLETED", paymentMethod)}
                 onCancel={() => selectedId && updateStatus(selectedId, "CANCELLED")}
+                onNoShow={() => selectedId && updateStatus(selectedId, "NO_SHOW")}
                 onReschedule={(startTime) => selectedId && rescheduleAppointment(selectedId, startTime)}
                 onClose={() => setSelectedId(null)}
             />

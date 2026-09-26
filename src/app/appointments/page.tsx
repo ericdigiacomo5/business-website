@@ -2,6 +2,7 @@ import { redirect } from "next/navigation"
 import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
 import { MyBookingsList } from "@/components/account/my-bookings-list"
+import { MyRecurringAppointments } from "@/components/account/my-recurring-appointments"
 
 export default async function AppointmentsPage() {
     const session = await auth()
@@ -21,6 +22,7 @@ export default async function AppointmentsPage() {
             <span className="font-script text-2xl text-accent">Your</span>
             <h1 className="mt-1 font-serif text-4xl font-extrabold text-foreground">Bookings</h1>
             <MyBookingsList initialAppointments={appointments} />
+            <MyRecurringAppointments />
         </div>
     )
 }
