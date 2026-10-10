@@ -197,6 +197,12 @@ model Appointment {
   recurringAppointmentId String?
   paymentMethod          PaymentMethod?
   checkedOutAt           DateTime?
+  // Set once the 24h reminder email has gone out (or once some other email
+  // already told the customer about an imminent time — see
+  // src/lib/appointment-emails.ts). The reminder job claims rows by flipping
+  // this from null, so a reminder can never send twice. Reset to null on
+  // reschedule, since the old reminder was for the old time.
+  reminderSentAt         DateTime?
 
   user                 User                  @relation(fields: [userId], references: [id])
   artist               Artist                @relation(fields: [artistId], references: [id])

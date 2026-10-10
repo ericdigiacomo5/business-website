@@ -1,5 +1,7 @@
+import { after } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
+import { sendRecurringConfirmation } from "@/lib/appointment-emails";
 import { isGridAligned, isValidTimeString, startOfDay, timeStringToDate } from "@/lib/availability";
 import { generateOccurrenceDates, MATERIALIZE_WEEKS } from "@/lib/recurring";
 import { bookOccurrence } from "@/lib/booking";
@@ -197,6 +199,7 @@ export async function POST(request: Request) {
 
     const created = []
     const skipped: { date: string; reason: string }[] = []
+    const skippedStartTimes: Date[] = []
 
     for (const date of occurrenceDates) {
         const occurrenceStart = timeStringToDate(date, startTime)
@@ -215,8 +218,14 @@ export async function POST(request: Request) {
             created.push(result.appointment)
         } else {
             skipped.push({ date: toLocalDateKey(date), reason: result.error })
+            skippedStartTimes.push(occurrenceStart)
         }
     }
+
+    // One summary email for the whole series, sent after the loop — not
+    // from bookOccurrence(), which would send one per occurrence.
+    const createdIds = created.map((a) => a.id)
+    after(() => sendRecurringConfirmation(recurringAppointment.id, createdIds, skippedStartTimes))
 
     return Response.json(
         { data: { recurringAppointment, created, skipped } },

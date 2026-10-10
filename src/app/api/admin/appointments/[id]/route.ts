@@ -1,4 +1,6 @@
+import { after } from "next/server";
 import { requireAdmin } from "@/lib/require-admin";
+import { sendCancellationNotice, sendReceipt, sendRescheduleNotice } from "@/lib/appointment-emails";
 import { prisma } from "@/lib/prisma";
 import { AppointmentStatus, PaymentMethod, Prisma } from "@/generated/prisma/client";
 import { getOpenSlots } from "@/lib/availability";
@@ -191,6 +193,9 @@ export async function PATCH(
 
                 data.startTime = parsedStartTime
                 data.endTime = newEndTime
+                // Any reminder already sent was for the old time — clear it
+                // so the job reminds about the new one.
+                data.reminderSentAt = null
             }
 
             return tx.appointment.update({
@@ -198,6 +203,23 @@ export async function PATCH(
                 data,
             })
         })
+
+        // Customer emails, scheduled after the response — each only on an
+        // actual transition, so re-sending the same status (e.g. re-marking a
+        // completed appointment complete to fix its payment method) doesn't
+        // re-send. CONFIRMED and NO_SHOW are internal bookkeeping and send
+        // nothing: the customer already got a booking confirmation, and a
+        // no-show email isn't something a salon would want automated.
+        if (status === AppointmentStatus.CANCELLED && appointment.status !== AppointmentStatus.CANCELLED) {
+            after(() => sendCancellationNotice(id, "salon"))
+        }
+        if (status === AppointmentStatus.COMPLETED && appointment.status !== AppointmentStatus.COMPLETED) {
+            after(() => sendReceipt(id))
+        }
+        if (parsedStartTime && parsedStartTime.getTime() !== appointment.startTime.getTime()) {
+            const previousStartTime = appointment.startTime
+            after(() => sendRescheduleNotice(id, previousStartTime))
+        }
 
         return Response.json({ data: updated }, { status: 200 })
     } catch (error) {

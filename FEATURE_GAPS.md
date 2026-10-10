@@ -74,7 +74,7 @@ Grep for `forgot` or `reset.*password` across `src/app/` returns nothing.
 
 ### Gap 2 — BLOCKER — Nothing is ever emailed, including booking confirmations
 
-**Status: CLOSED** (for the password-reset use case — see Gap 1). Full account in `PROJECT_STATUS.md`. Summary: `src/lib/email.ts` sends via Resend's REST API (raw `fetch()`, no SDK — see that doc for why), with a console dev-driver when no API key is configured. **Not closed for its other consequences** — booking confirmations, reminders, and cancellation notices below are still unbuilt; only the password-reset email exists today.
+**Status: CLOSED.** Full account in `PROJECT_STATUS.md` ("Email + password reset" and "Booking emails (Gap 2)"). `src/lib/email.ts` sends via Resend's REST API (raw `fetch()`, no SDK), with a console dev-driver when no API key is configured. Every consequence below now has an email: booking confirmation (one-off, plus one summary per standing appointment), 24h reminder, cancellation notice (customer- and salon-initiated), reschedule notice, standing-appointment pause/cancel notice, password reset, and a checkout receipt. **One remaining operational step:** the reminder job (`POST /api/jobs/send-reminders`, `CRON_SECRET`-guarded) is built and verified but nothing calls it on a schedule until deploy.
 
 **Location:** absent codebase-wide
 

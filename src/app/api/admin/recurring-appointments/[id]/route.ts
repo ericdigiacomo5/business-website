@@ -1,4 +1,7 @@
+import { after } from "next/server";
+import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/require-admin";
+import { sendRecurringStatusNotice } from "@/lib/appointment-emails";
 import { RecurringStatus, Prisma } from "@/generated/prisma/client";
 import { applyRecurringStatusChange } from "@/lib/booking";
 
@@ -36,12 +39,25 @@ export async function PATCH(
     // over-constrain it (see e.g. admin/appointments' PATCH allowing any
     // status combination, trusting requireAdmin() as the actual gate).
 
+    // Read the current status first so the customer is only emailed on an
+    // actual transition (re-cancelling an already-cancelled series stays
+    // silent). A missing row is still left to the P2025 catch below.
+    const previous = await prisma.recurringAppointment.findUnique({
+        where: { id },
+        select: { status: true },
+    });
+
     try {
         const result = await applyRecurringStatusChange(id, status as RecurringStatus, {
             // Admin: no notice-window restriction, same as
             // PATCH /api/admin/appointments/[id].
             respectNoticeWindow: false,
         });
+
+        if ((status === "PAUSED" || status === "CANCELLED") && previous?.status !== status) {
+            const freedIds = result.freedAppointmentIds;
+            after(() => sendRecurringStatusNotice(id, status, "salon", freedIds));
+        }
 
         return Response.json({ data: result });
     } catch (error) {

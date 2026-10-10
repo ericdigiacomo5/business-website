@@ -1,4 +1,6 @@
+import { after } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { sendRecurringStatusNotice } from "@/lib/appointment-emails";
 import { requireUser } from "@/lib/require-user";
 import { RecurringStatus } from "@/generated/prisma/client";
 import { applyRecurringStatusChange } from "@/lib/booking";
@@ -55,6 +57,13 @@ export async function PATCH(
         // notice-window policy that already exists one layer down.
         respectNoticeWindow: true,
     });
+
+    // Only on an actual transition into PAUSED/CANCELLED — re-sending the
+    // current status, or resuming, doesn't email.
+    if ((status === "PAUSED" || status === "CANCELLED") && recurringAppointment.status !== status) {
+        const freedIds = result.freedAppointmentIds;
+        after(() => sendRecurringStatusNotice(id, status, "customer", freedIds));
+    }
 
     return Response.json({ data: result });
 }

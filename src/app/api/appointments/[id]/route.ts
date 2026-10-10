@@ -1,4 +1,5 @@
-import { NextRequest } from "next/server"
+import { NextRequest, after } from "next/server"
+import { sendCancellationNotice } from "@/lib/appointment-emails"
 import { prisma } from "@/lib/prisma"
 import { Prisma } from "@/generated/prisma/client"
 import { requireUser } from "@/lib/require-user"
@@ -69,6 +70,8 @@ export async function DELETE(
                 data: { status: "CANCELLED" },
             })
         })
+
+        after(() => sendCancellationNotice(cancelled.id, "customer"))
 
         return Response.json({ data: cancelled })
     } catch (error) {

@@ -1,5 +1,7 @@
+import { after } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { bookOccurrence } from "@/lib/booking";
+import { sendBookingConfirmation } from "@/lib/appointment-emails";
 import { auth } from "@/auth";
 import { isBookingEnabled } from "@/lib/settings";
 
@@ -133,6 +135,12 @@ export async function POST(request: Request) {
     if (!result.ok) {
         return Response.json({ error: result.error }, { status: result.status })
     }
+
+    // after(), not awaited — the booking has already committed, so the
+    // response shouldn't wait on (or fail because of) the email. Sent from
+    // here, not from bookOccurrence(), because the recurring route calls
+    // that once per occurrence and sends its own single summary instead.
+    after(() => sendBookingConfirmation(result.appointment.id))
 
     return Response.json({ data: result.appointment }, { status: 201 });
 }
