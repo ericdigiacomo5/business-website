@@ -3,8 +3,8 @@ import { DayStrip } from "./day-strip"
 import { SlotGrid } from "./slot-grid"
 import { Spinner } from "@/components/ui/spinner"
 import { toLocalDateKey } from "@/lib/format"
+import { BOOKING_WINDOW_DAYS, addDays } from "@/lib/recurring"
 
-const DAYS_AHEAD = 14
 const SLOT_MINUTES = 15
 
 // A slot is only offered if the full service duration fits without running
@@ -96,6 +96,7 @@ export function DateTimeStep({
     serviceDurationMinutes,
     excludeAppointmentId,
     heading = "Choose a Date & Time",
+    daysAhead = BOOKING_WINDOW_DAYS,
     onSelect,
 }: {
     artistId: string
@@ -103,16 +104,17 @@ export function DateTimeStep({
     serviceDurationMinutes: number
     excludeAppointmentId?: string
     heading?: string
+    // Defaults to the customer booking window the server enforces. Admin
+    // callers (reschedule, /admin/book) pass a wider value — admins are
+    // exempt from the window, and a strip capped at 14 days would quietly
+    // apply it to them anyway.
+    daysAhead?: number
     onSelect: (date: string, startTime: string) => void
 }) {
     const days = useMemo(() => {
         const today = new Date()
-        return Array.from({ length: DAYS_AHEAD }, (_, i) => {
-            const d = new Date(today)
-            d.setDate(d.getDate() + i)
-            return d
-        })
-    }, [])
+        return Array.from({ length: daysAhead }, (_, i) => addDays(today, i))
+    }, [daysAhead])
 
     const [selectedDate, setSelectedDate] = useState(initialDate ?? toLocalDateKey(days[0]))
 

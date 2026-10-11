@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { formatDuration, formatPrice } from "@/lib/format"
 import { DateTimeStep } from "@/components/booking/steps/datetime-step"
+import { ADMIN_DAYS_AHEAD } from "@/lib/recurring"
 import { PAYMENT_METHOD_LABEL, STATUS_LABEL, STATUS_TONE, type AdminAppointment } from "./appointment-shared"
 
 const PAYMENT_METHODS: PaymentMethod[] = ["CASH", "CARD", "OTHER"]
@@ -149,6 +150,7 @@ export function ScheduleDetailSheet({
                                         serviceDurationMinutes={appointment.service.durationMinutes}
                                         excludeAppointmentId={appointment.id}
                                         heading="Move to a New Time"
+                                        daysAhead={ADMIN_DAYS_AHEAD}
                                         onSelect={(_date, startTime) => onReschedule(startTime)}
                                     />
                                 </div>

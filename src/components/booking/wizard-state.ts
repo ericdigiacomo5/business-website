@@ -43,11 +43,16 @@ export type WizardAction =
 
 // The same "what's the furthest step this partial selection supports" logic
 // answers both "the user arrived via ?serviceId=/?artistId= query params" and
-// "we're rehydrating from sessionStorage after a login redirect." Admin mode
-// never rehydrates this way (see booking-wizard.tsx), so it always starts at
-// "user" regardless of a passed-in selection.
-export function computeInitialStep(selection: Partial<WizardSelection>, adminMode: boolean): WizardStep {
-    if (adminMode) {
+// "we're rehydrating from sessionStorage after a login redirect." In admin
+// mode the customer has to be chosen first — unless one was preselected
+// (e.g. "Change Time" on a standing appointment links here with the
+// customer, service, and artist already known).
+export function computeInitialStep(
+    selection: Partial<WizardSelection>,
+    adminMode: boolean,
+    hasSelectedUser: boolean = false
+): WizardStep {
+    if (adminMode && !hasSelectedUser) {
         return "user"
     }
     if (selection.serviceId && selection.artistId && selection.date && selection.startTime) {
@@ -64,12 +69,14 @@ export function computeInitialStep(selection: Partial<WizardSelection>, adminMod
 
 export function initialWizardState(
     selection: Partial<WizardSelection>,
-    adminMode: boolean = false
+    adminMode: boolean = false,
+    initialUser: SelectedUser | null = null
 ): WizardState {
+    const selectedUser = adminMode ? initialUser : null
     return {
         adminMode,
-        step: computeInitialStep(selection, adminMode),
-        selectedUser: null,
+        step: computeInitialStep(selection, adminMode, selectedUser !== null),
+        selectedUser,
         serviceId: selection.serviceId ?? null,
         artistId: selection.artistId ?? null,
         date: selection.date ?? null,

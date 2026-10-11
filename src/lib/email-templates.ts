@@ -277,6 +277,46 @@ export function recurringStatusChangedEmail(
     })
 }
 
+export function recurringResumedEmail(
+    s: SeriesEmailDetails & { upcoming: Date[]; couldNotRestore: Date[] },
+): RenderedEmail {
+    const paragraphs = [
+        greeting(s.customerName),
+        `Your standing ${s.serviceName} appointment with ${s.artistName} (${cadence(s.intervalWeeks)}) is back on.`,
+    ]
+    if (s.upcoming.length > 0) paragraphs.push("Your upcoming appointments:")
+
+    const footer =
+        s.couldNotRestore.length > 0
+            ? `These dates couldn't be restored because the time is no longer available: ${s.couldNotRestore.map(formatShortDate).join(", ")}. ${CONTACT_FOOTER}`
+            : "You'll get a reminder the day before each visit."
+
+    return render(`Standing appointment resumed: ${s.serviceName}`, {
+        heading: "Your standing appointment has resumed",
+        paragraphs,
+        list: s.upcoming.length > 0 ? s.upcoming.map(formatAppointmentWhen) : undefined,
+        button: manageButton(s.manageUrl),
+        footer,
+    })
+}
+
+// Sent by the daily materialization job when a week of a standing
+// appointment couldn't be booked — once per week, never repeated, since
+// skipped weeks are never retried.
+export function recurringSkippedWeeksEmail(s: SeriesEmailDetails & { skippedDates: Date[] }): RenderedEmail {
+    const plural = s.skippedDates.length > 1
+    return render(`We couldn't book ${plural ? "some dates" : "a date"} for your standing appointment`, {
+        heading: `${plural ? "Some dates" : "A date"} couldn't be booked`,
+        paragraphs: [
+            greeting(s.customerName),
+            `We couldn't book your standing ${s.serviceName} appointment with ${s.artistName} on ${plural ? "these dates" : "this date"} because the time wasn't available:`,
+        ],
+        list: s.skippedDates.map(formatAppointmentWhen),
+        button: manageButton(s.manageUrl),
+        footer: "Your standing appointment continues as normal on other dates. If you'd like a different time for these dates, contact the salon.",
+    })
+}
+
 type PasswordResetEmailArgs = {
     resetUrl: string
 }

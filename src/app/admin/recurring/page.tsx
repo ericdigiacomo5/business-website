@@ -3,6 +3,7 @@ import { RecurringStatus, type Prisma } from "@/generated/prisma/client"
 import { RecurringFilters } from "@/components/admin/recurring/recurring-filters"
 import { AdminRecurringList } from "@/components/admin/recurring/admin-recurring-list"
 import { SAFE_USER_SELECT_BASIC } from "@/lib/user-select"
+import { upcomingSkipsInclude } from "@/lib/booking"
 
 export default async function AdminRecurringPage({
     searchParams,
@@ -30,6 +31,7 @@ export default async function AdminRecurringPage({
                 artist: true,
                 service: true,
                 user: { select: SAFE_USER_SELECT_BASIC },
+                ...upcomingSkipsInclude(),
             },
             orderBy: { createdAt: "desc" },
         }),

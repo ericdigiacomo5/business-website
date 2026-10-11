@@ -10,9 +10,22 @@ export const SLOT_MINUTES = 15;
 export type ArtistWorkingWindow = { artistId: string; start: string | null; end: string | null };
 
 // No timezone handling yet: times are interpreted in the server's local
-// timezone. Fine for now with a single-location salon, but will need
-// date-fns-tz or Temporal once this runs somewhere other than the salon's
-// own timezone.
+// timezone. Fine for local dev, but a hard blocker for the Cloudflare
+// Workers deploy (Workers always run in UTC — see PROJECT_STATUS.md's
+// timezone note). Keep all local-time date math in helpers like these so the
+// eventual fix lands in one place.
+export function startOfDay(date: Date): Date {
+  const result = new Date(date);
+  result.setHours(0, 0, 0, 0);
+  return result;
+}
+
+export function endOfDay(date: Date): Date {
+  const result = new Date(date);
+  result.setHours(23, 59, 59, 999);
+  return result;
+}
+
 export function timeStringToDate(date: Date, time: string): Date {
   const [hours, minutes] = time.split(":").map(Number);
   const result = new Date(date);

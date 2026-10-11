@@ -1,17 +1,22 @@
 'use client'
 
 import { useEffect, useState } from "react"
+import { useRouter } from "next/navigation"
 import type { RecurringStatus } from "@/generated/prisma/client"
 import {
     RecurringSeriesRow,
+    describeResume,
     type RecurringAppointmentWithRelations,
+    type SeriesConfirmation,
 } from "@/components/recurring/recurring-series-row"
 
-export function MyRecurringAppointments() {
+export function MyRecurringAppointments({ canRebook }: { canRebook: boolean }) {
+    const router = useRouter()
     const [series, setSeries] = useState<RecurringAppointmentWithRelations[] | null>(null)
     const [error, setError] = useState<string | null>(null)
+    const [notice, setNotice] = useState<string | null>(null)
     const [busyId, setBusyId] = useState<string | null>(null)
-    const [confirmingCancelId, setConfirmingCancelId] = useState<string | null>(null)
+    const [confirming, setConfirming] = useState<{ id: string; action: SeriesConfirmation } | null>(null)
 
     useEffect(() => {
         let cancelled = false
@@ -33,8 +38,9 @@ export function MyRecurringAppointments() {
         }
     }, [])
 
-    async function handleStatusChange(id: string, status: RecurringStatus) {
+    async function handleStatusChange(id: string, status: RecurringStatus): Promise<boolean> {
         setError(null)
+        setNotice(null)
         setBusyId(id)
 
         try {
@@ -47,7 +53,7 @@ export function MyRecurringAppointments() {
             if (!res.ok) {
                 const body = await res.json().catch(() => null)
                 setError(body?.error ?? "Couldn't update that series. Please try again.")
-                return
+                return false
             }
 
             const body = await res.json()
@@ -56,11 +62,32 @@ export function MyRecurringAppointments() {
                     ? prev.map((s) => (s.id === id ? { ...s, ...body.data.recurringAppointment } : s))
                     : prev
             )
-            setConfirmingCancelId(null)
+            setConfirming(null)
+            if (body.data.materialization) {
+                setNotice(describeResume(body.data.materialization))
+            }
+            // Pause/cancel free upcoming weeks and resume restores them —
+            // re-render the server-side bookings list above so it reflects
+            // that without a manual reload (see the key on MyBookingsList in
+            // app/appointments/page.tsx).
+            router.refresh()
+            return true
         } catch {
             setError("Network error. Please try again.")
+            return false
         } finally {
             setBusyId(null)
+        }
+    }
+
+    // "Change time" is cancel + book a new standing appointment (there's no
+    // edit). Deep-links the wizard to the same service/artist so only the
+    // day/time needs choosing.
+    async function handleConfirm(s: RecurringAppointmentWithRelations) {
+        const action = confirming?.action
+        const ok = await handleStatusChange(s.id, "CANCELLED")
+        if (ok && action === "change") {
+            router.push(`/book?serviceId=${s.serviceId}&artistId=${s.artistId}`)
         }
     }
 
@@ -84,34 +111,29 @@ export function MyRecurringAppointments() {
                     {error}
                 </p>
             )}
+            {notice && (
+                <p role="status" className="mt-3 text-sm text-foreground">
+                    {notice}
+                </p>
+            )}
 
             <div className="mt-5 flex flex-col gap-4">
                 {series.map((s) => (
-                    <div key={s.id} className="flex flex-col gap-1">
-                        <RecurringSeriesRow
-                            series={s}
-                            showCustomer={false}
-                            // See RecurringSeriesRow's own doc comment on
-                            // allowResume: resuming doesn't re-materialize
-                            // anything until a still-unbuilt rolling job
-                            // exists, which is fine for an admin who has
-                            // PLAN_RECURRING_MANAGEMENT.md for context but
-                            // would look broken to a customer.
-                            allowResume={false}
-                            busy={busyId === s.id}
-                            confirmingCancel={confirmingCancelId === s.id}
-                            onPause={() => handleStatusChange(s.id, "PAUSED")}
-                            onResume={() => handleStatusChange(s.id, "ACTIVE")}
-                            onCancel={() => setConfirmingCancelId(s.id)}
-                            onConfirmCancel={() => handleStatusChange(s.id, "CANCELLED")}
-                            onCancelBack={() => setConfirmingCancelId(null)}
-                        />
-                        {s.status === "PAUSED" && (
-                            <p className="pl-1 text-xs text-muted-foreground">
-                                Paused. Contact the salon to resume this standing appointment.
-                            </p>
-                        )}
-                    </div>
+                    <RecurringSeriesRow
+                        key={s.id}
+                        series={s}
+                        showCustomer={false}
+                        busy={busyId === s.id}
+                        confirming={confirming?.id === s.id ? confirming.action : null}
+                        onPause={() => handleStatusChange(s.id, "PAUSED")}
+                        onResume={() => handleStatusChange(s.id, "ACTIVE")}
+                        onCancel={() => setConfirming({ id: s.id, action: "cancel" })}
+                        // Hidden while online booking is closed: the customer
+                        // would cancel their series with no way to rebook it.
+                        onChangeTime={canRebook ? () => setConfirming({ id: s.id, action: "change" }) : undefined}
+                        onConfirm={() => handleConfirm(s)}
+                        onConfirmBack={() => setConfirming(null)}
+                    />
                 ))}
             </div>
         </section>

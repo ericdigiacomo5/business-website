@@ -7,10 +7,14 @@ import {
     bookingConfirmationEmail,
     receiptEmail,
     recurringConfirmationEmail,
+    recurringResumedEmail,
+    recurringSkippedWeeksEmail,
     recurringStatusChangedEmail,
     type AppointmentEmailDetails,
 } from "@/lib/email-templates"
 import { PAYMENT_METHOD_LABEL } from "@/components/admin/appointment-shared"
+import type { MaterializeResult } from "@/lib/booking"
+import { isCustomerNotifiableSkip } from "@/lib/recurring"
 
 // Server-only (imports prisma) — never import this from a Client Component or
 // from any module one imports; see PROJECT_STATUS.md's RSC-boundary notes.
@@ -221,6 +225,66 @@ export function sendRecurringStatusNotice(
                 status,
                 changedBy,
                 cancelledOccurrences: cancelled.map((a) => a.startTime),
+            }),
+        })
+    })
+}
+
+// Sent on a real resume (non-ACTIVE -> ACTIVE). Lists what's actually on
+// the books afterward — not just what this resume restored — so the
+// customer sees one complete picture, plus any weeks it couldn't restore.
+export function sendRecurringResumedNotice(recurringAppointmentId: string, materialization: MaterializeResult) {
+    return safely("recurring resumed notice", async () => {
+        const [series, upcoming] = await Promise.all([
+            loadSeries(recurringAppointmentId),
+            prisma.appointment.findMany({
+                where: {
+                    recurringAppointmentId,
+                    status: { in: ["UPCOMING", "CONFIRMED"] },
+                    startTime: { gt: new Date() },
+                },
+                select: { id: true, startTime: true },
+                orderBy: { startTime: "asc" },
+            }),
+        ])
+        if (!series) return
+
+        const { ok } = await sendEmail({
+            to: series.user.email,
+            ...recurringResumedEmail({
+                ...seriesDetails(series),
+                upcoming: upcoming.map((a) => a.startTime),
+                couldNotRestore: materialization.skipped
+                    .filter((s) => isCustomerNotifiableSkip(s.reason))
+                    .map((s) => s.startTime),
+            }),
+        })
+        if (ok) {
+            for (const a of upcoming) await markReminderCoveredIfImminent(a.id, a.startTime)
+        }
+    })
+}
+
+// Sent by the daily materialization job for weeks newly found to be
+// unbookable. Only customer-actionable reasons — see
+// isCustomerNotifiableSkip() for why an inactive artist or an
+// already-passed date isn't emailed.
+export function sendSkippedWeeksNotice(
+    recurringAppointmentId: string,
+    skipped: { startTime: Date; reason: string }[],
+) {
+    return safely("skipped weeks notice", async () => {
+        const notifiable = skipped.filter((s) => isCustomerNotifiableSkip(s.reason))
+        if (notifiable.length === 0) return
+
+        const series = await loadSeries(recurringAppointmentId)
+        if (!series) return
+
+        await sendEmail({
+            to: series.user.email,
+            ...recurringSkippedWeeksEmail({
+                ...seriesDetails(series),
+                skippedDates: notifiable.map((s) => s.startTime),
             }),
         })
     })

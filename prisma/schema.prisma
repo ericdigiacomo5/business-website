@@ -178,11 +178,37 @@ model RecurringAppointment {
   seriesEnd     DateTime?
   status        RecurringStatus @default(ACTIVE)
   createdAt     DateTime        @default(now())
+  // High-water mark: every occurrence date on or before this has already
+  // been attempted (booked, reactivated, or recorded as skipped). The
+  // rolling materialization job only looks at dates after it — which is
+  // also what keeps it from ever retrying a skipped week. See
+  // PLAN_RECURRING_MATERIALIZATION.md.
+  materializedThrough DateTime?
 
-  user         User          @relation(fields: [userId], references: [id])
-  artist       Artist        @relation(fields: [artistId], references: [id])
-  service      Service       @relation(fields: [serviceId], references: [id])
-  appointments Appointment[]
+  user               User                         @relation(fields: [userId], references: [id])
+  artist             Artist                       @relation(fields: [artistId], references: [id])
+  service            Service                      @relation(fields: [serviceId], references: [id])
+  appointments       Appointment[]
+  skippedOccurrences RecurringSkippedOccurrence[]
+}
+
+// A week of a standing appointment that couldn't be booked (a conflict, the
+// artist was deactivated, ...). Recorded once and never retried, so it can
+// be shown on the series and emailed to the customer exactly once.
+model RecurringSkippedOccurrence {
+  id                     String   @id @default(cuid())
+  recurringAppointmentId String
+  // "YYYY-MM-DD", same identity format as Appointment.occurrenceDate.
+  occurrenceDate         String
+  reason                 String
+  createdAt              DateTime @default(now())
+
+  // Cascade, a deliberate exception to this schema's RESTRICT default (same
+  // reasoning as Account/Session): a skip record means nothing without its
+  // series.
+  recurringAppointment RecurringAppointment @relation(fields: [recurringAppointmentId], references: [id], onDelete: Cascade)
+
+  @@unique([recurringAppointmentId, occurrenceDate])
 }
 
 model Appointment {
@@ -203,12 +229,30 @@ model Appointment {
   // this from null, so a reminder can never send twice. Reset to null on
   // reschedule, since the old reminder was for the old time.
   reminderSentAt         DateTime?
+  // Which week of its series this row was materialized for ("YYYY-MM-DD"),
+  // null for one-off appointments. Set once and never changed by a
+  // reschedule, so a moved occurrence still counts as "handled" for its
+  // original date. A string rather than a DateTime on purpose: it's compared
+  // by exact equality, and a DateTime "date" is local midnight stored as a
+  // UTC instant, which can silently fail to match if computed differently.
+  occurrenceDate         String?
+  // True only when a series-level pause/cancel freed this occurrence — the
+  // one bit that lets Resume restore exactly those weeks without
+  // resurrecting a week the customer cancelled on its own.
+  cancelledBySeries      Boolean           @default(false)
 
   user                 User                  @relation(fields: [userId], references: [id])
   artist               Artist                @relation(fields: [artistId], references: [id])
   service              Service               @relation(fields: [serviceId], references: [id])
   slots                AppointmentSlot[]
   recurringAppointment RecurringAppointment? @relation(fields: [recurringAppointmentId], references: [id])
+
+  // Each week of a series can be materialized at most once — the database,
+  // not careful call-site logic, is what makes a concurrent job run or a
+  // job racing a Resume click harmless (same instinct as AppointmentSlot's
+  // unique constraint). Postgres treats NULLs as distinct, so one-off
+  // appointments (both columns null) are unaffected.
+  @@unique([recurringAppointmentId, occurrenceDate])
 }
 
 model AppointmentSlot {

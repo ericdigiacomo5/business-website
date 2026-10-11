@@ -27,7 +27,7 @@ Nearly every gap below sits in the ring *around* that core, and they cluster int
 | # | Severity | Gap | Primary location | Status |
 |---|----------|-----|------------------|--------|
 | 1 | **BLOCKER** | No password reset — forgotten password = permanent lockout | `src/app/api/auth/` | **CLOSED** |
-| 2 | **BLOCKER** | No email sending of any kind | *(absent codebase-wide)* | **PARTIAL** — sending infra exists; only password reset uses it |
+| 2 | **BLOCKER** | No email sending of any kind | *(absent codebase-wide)* | **CLOSED** — reminder job not yet scheduled (waits on deploy) |
 | 3 | **BLOCKER** | Admins can't book in the past — walk-in revenue unrecordable | `src/app/api/appointments/route.ts` | **CLOSED** |
 | 4 | **BLOCKER** | No reschedule — status is the only editable field | `src/app/api/admin/appointments/[id]/route.ts` | **CLOSED** |
 | 5 | **BLOCKER** | No cancellation notice window | `src/app/api/appointments/[id]/route.ts` | **CLOSED** |
@@ -48,7 +48,7 @@ Nearly every gap below sits in the ring *around* that core, and they cluster int
 | 20 | NICE | Confirmation step is a dead end | `src/components/booking/steps/confirmed-step.tsx` | Open |
 | 21 | NICE | No audit log | *(absent)* | Open |
 
-All closed/partial gaps were verified live against the real dev database (not just typechecked or reasoned through) at the time each was fixed — see `PROJECT_STATUS.md`'s "Completed so far" section for the full build/verification account of each. Of the six original blockers: five fully closed (1, 3, 4, 5, 6), one partially closed (2 — the send path exists, but only password reset uses it). Of the "should have" findings, three more are also now closed (8, 9, 11).
+All closed/partial gaps were verified live against the real dev database (not just typechecked or reasoned through) at the time each was fixed — see `PROJECT_STATUS.md`'s "Completed so far" section for the full build/verification account of each. All six original blockers are closed (1–6). Of the "should have" findings, three more are also now closed (8, 9, 11).
 
 ---
 
@@ -161,7 +161,7 @@ The UI does hide the button appropriately, but this is explicitly cosmetic. From
 // appointment — this is a frontend-only UX guard, not a security boundary.
 ```
 
-Note this also interacts with Gap 11: cancelling one materialized occurrence of a standing appointment does not touch the parent `RecurringAppointment`, so nothing prevents the series from re-materializing it. (Also still true after the fix — unaffected.)
+Note this also interacts with Gap 11: cancelling one materialized occurrence of a standing appointment does not touch the parent `RecurringAppointment`, so nothing prevents the series from re-materializing it. (Also still true after the fix — unaffected.) **Addressed by design in the planned rolling-materialization job** (`PROJECT_STATUS.md` Roadmap item 15 / `PLAN_RECURRING_MATERIALIZATION.md`): each occurrence gets a stable `occurrenceDate` identity, and any existing row not freed by a series-level pause/cancel — including an individually cancelled one — counts as already handled, so the job never re-creates it.
 
 ---
 
@@ -402,7 +402,7 @@ Copy `priceCents` onto `Appointment` at booking time first — otherwise every r
 
 ~~**6. Standing-appointment management.**~~
 ~~Finish the half-built feature — a series list with pause/cancel, and make single-occurrence cancellation series-aware.~~
-*Covers Gap 11 — done. Two admin surfaces (dedicated `/admin/recurring`, plus a scoped view on `/admin/users/[id]`) and customer self-service on `/appointments`, sharing one status-change transaction. Single-occurrence cancellation was deliberately left unchanged rather than made "series-aware" in the sense originally floated — see `PROJECT_STATUS.md`/`PLAN_RECURRING_MANAGEMENT.md` for why that turned out to be the right call once the real series-level cancel routes existed. A rolling re-materialization job for the 8-week horizon remains a separate, still-open follow-up this work surfaced but deliberately didn't build.*
+*Covers Gap 11 — done. Two admin surfaces (dedicated `/admin/recurring`, plus a scoped view on `/admin/users/[id]`) and customer self-service on `/appointments`, sharing one status-change transaction. Single-occurrence cancellation was deliberately left unchanged rather than made "series-aware" in the sense originally floated — see `PROJECT_STATUS.md`/`PLAN_RECURRING_MANAGEMENT.md` for why that turned out to be the right call once the real series-level cancel routes existed. A rolling re-materialization job for the 8-week horizon remains a separate follow-up — now fully planned (not built) as `PROJECT_STATUS.md` Roadmap item 15, implementation plan in `PLAN_RECURRING_MATERIALIZATION.md` — that this work surfaced but deliberately didn't build.*
 
 ---
 

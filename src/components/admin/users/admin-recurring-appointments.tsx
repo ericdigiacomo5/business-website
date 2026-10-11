@@ -1,11 +1,15 @@
 'use client'
 
 import { useEffect, useState } from "react"
+import { useRouter } from "next/navigation"
 import type { RecurringStatus } from "@/generated/prisma/client"
 import {
     RecurringSeriesRow,
+    describeResume,
     type RecurringAppointmentWithRelations,
+    type SeriesConfirmation,
 } from "@/components/recurring/recurring-series-row"
+import { adminRebookUrl } from "@/components/recurring/admin-rebook-url"
 
 // Unlike the appointment-history list on the same page (a direct Prisma
 // read in the Server Component), this list is fetched client-side — the
@@ -13,10 +17,12 @@ import {
 // story, this project's established pattern is Client Component + fetch(),
 // same as every other admin CRUD page.
 export function AdminRecurringAppointments({ userId }: { userId: string }) {
+    const router = useRouter()
     const [series, setSeries] = useState<RecurringAppointmentWithRelations[] | null>(null)
     const [error, setError] = useState<string | null>(null)
+    const [notice, setNotice] = useState<string | null>(null)
     const [busyId, setBusyId] = useState<string | null>(null)
-    const [confirmingCancelId, setConfirmingCancelId] = useState<string | null>(null)
+    const [confirming, setConfirming] = useState<{ id: string; action: SeriesConfirmation } | null>(null)
 
     useEffect(() => {
         let cancelled = false
@@ -38,8 +44,9 @@ export function AdminRecurringAppointments({ userId }: { userId: string }) {
         }
     }, [userId])
 
-    async function handleStatusChange(id: string, status: RecurringStatus) {
+    async function handleStatusChange(id: string, status: RecurringStatus): Promise<boolean> {
         setError(null)
+        setNotice(null)
         setBusyId(id)
 
         try {
@@ -52,7 +59,7 @@ export function AdminRecurringAppointments({ userId }: { userId: string }) {
             if (!res.ok) {
                 const body = await res.json().catch(() => null)
                 setError(body?.error ?? "Couldn't update that series. Please try again.")
-                return
+                return false
             }
 
             const body = await res.json()
@@ -63,12 +70,26 @@ export function AdminRecurringAppointments({ userId }: { userId: string }) {
                     ? prev.map((s) => (s.id === id ? { ...s, ...body.data.recurringAppointment } : s))
                     : prev
             )
-            setConfirmingCancelId(null)
+            setConfirming(null)
+            if (body.data.materialization) {
+                setNotice(describeResume(body.data.materialization))
+            }
+            // The appointment history on this same page is server-rendered;
+            // pause/cancel/resume change which weeks are booked.
+            router.refresh()
+            return true
         } catch {
             setError("Network error. Please try again.")
+            return false
         } finally {
             setBusyId(null)
         }
+    }
+
+    async function handleConfirm(s: RecurringAppointmentWithRelations) {
+        const action = confirming?.action
+        const ok = await handleStatusChange(s.id, "CANCELLED")
+        if (ok && action === "change") router.push(adminRebookUrl(s))
     }
 
     if (series === null) {
@@ -82,6 +103,11 @@ export function AdminRecurringAppointments({ userId }: { userId: string }) {
                     {error}
                 </p>
             )}
+            {notice && (
+                <p role="status" className="mb-3 text-sm text-foreground">
+                    {notice}
+                </p>
+            )}
 
             {series.length === 0 ? (
                 <p className="mt-3 text-sm text-muted-foreground">No standing appointments.</p>
@@ -93,12 +119,13 @@ export function AdminRecurringAppointments({ userId }: { userId: string }) {
                             series={s}
                             showCustomer={false}
                             busy={busyId === s.id}
-                            confirmingCancel={confirmingCancelId === s.id}
+                            confirming={confirming?.id === s.id ? confirming.action : null}
                             onPause={() => handleStatusChange(s.id, "PAUSED")}
                             onResume={() => handleStatusChange(s.id, "ACTIVE")}
-                            onCancel={() => setConfirmingCancelId(s.id)}
-                            onConfirmCancel={() => handleStatusChange(s.id, "CANCELLED")}
-                            onCancelBack={() => setConfirmingCancelId(null)}
+                            onCancel={() => setConfirming({ id: s.id, action: "cancel" })}
+                            onChangeTime={() => setConfirming({ id: s.id, action: "change" })}
+                            onConfirm={() => handleConfirm(s)}
+                            onConfirmBack={() => setConfirming(null)}
                         />
                     ))}
                 </div>

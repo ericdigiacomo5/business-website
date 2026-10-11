@@ -4,7 +4,7 @@ import { useEffect, useReducer } from "react"
 import { useRouter } from "next/navigation"
 import { useSession } from "next-auth/react"
 import type { Artist, Service } from "@/generated/prisma/client"
-import { wizardReducer, initialWizardState, type WizardSelection } from "./wizard-state"
+import { wizardReducer, initialWizardState, type SelectedUser, type WizardSelection } from "./wizard-state"
 import { StepIndicator } from "./step-indicator"
 import { UserStep } from "./steps/user-step"
 import { ServiceStep } from "./steps/service-step"
@@ -15,6 +15,7 @@ import { ConfirmedStep } from "./steps/confirmed-step"
 import { StickyActionBar } from "@/components/ui/sticky-action-bar"
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
+import { ADMIN_DAYS_AHEAD } from "@/lib/recurring"
 
 const STORAGE_KEY = "booking-wizard"
 
@@ -24,12 +25,15 @@ export function BookingWizard({
     initialServiceId,
     initialArtistId,
     adminMode = false,
+    initialUser = null,
 }: {
     initialServices: Service[]
     initialArtists: Artist[]
     initialServiceId: string | null
     initialArtistId: string | null
     adminMode?: boolean
+    // Admin mode only: skip the customer-picker step for a known customer.
+    initialUser?: SelectedUser | null
 }) {
     const router = useRouter()
     const { data: session, status } = useSession()
@@ -37,7 +41,7 @@ export function BookingWizard({
     const [state, dispatch] = useReducer(
         wizardReducer,
         { serviceId: initialServiceId, artistId: initialArtistId, date: null, startTime: null },
-        (selection) => initialWizardState(selection, adminMode)
+        (selection) => initialWizardState(selection, adminMode, initialUser)
     )
 
 
@@ -177,6 +181,8 @@ export function BookingWizard({
                             artistId={selectedArtist.id}
                             initialDate={state.date}
                             serviceDurationMinutes={selectedService.durationMinutes}
+                            // Admins are exempt from the customer booking window.
+                            daysAhead={adminMode ? ADMIN_DAYS_AHEAD : undefined}
                             onSelect={(date, startTime) => dispatch({ type: "SELECT_DATETIME", date, startTime })}
                         />
                         <StickyActionBar>

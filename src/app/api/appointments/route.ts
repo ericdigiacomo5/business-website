@@ -2,6 +2,7 @@ import { after } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { bookOccurrence } from "@/lib/booking";
 import { sendBookingConfirmation } from "@/lib/appointment-emails";
+import { BOOKING_WINDOW_DAYS, bookingWindowEnd } from "@/lib/recurring";
 import { auth } from "@/auth";
 import { isBookingEnabled } from "@/lib/settings";
 
@@ -80,6 +81,18 @@ export async function POST(request: Request) {
     if (isNaN(parsedStartTime.getTime()) || !isOnSlotGrid || (!isAdmin && isInPast)) {
         return Response.json(
             { error: 'Time is invalid' },
+            { status: 400 }
+        )
+    }
+
+    // The booking window is enforced here, not just by the UI's 14-day day
+    // strip — without this, any direct API call could book past a standing
+    // appointment's materialized horizon and take that customer's week
+    // before the series claims it. Admins are exempt (same latitude as
+    // past-time booking above).
+    if (!isAdmin && parsedStartTime.getTime() >= bookingWindowEnd().getTime()) {
+        return Response.json(
+            { error: `You can book up to ${BOOKING_WINDOW_DAYS} days in advance` },
             { status: 400 }
         )
     }

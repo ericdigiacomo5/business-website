@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import type { Appointment, Artist, Service } from "@/generated/prisma/client"
 import { Button } from "@/components/ui/button"
 import { StickyActionBar } from "@/components/ui/sticky-action-bar"
@@ -14,6 +14,52 @@ const INTERVAL_OPTIONS = [
     { weeks: 3, label: "Every 3 weeks" },
     { weeks: 4, label: "Every 4 weeks" },
 ]
+
+type StandingConflict = { recurringAppointmentId: string; customerName: string | null; customerEmail: string }
+
+// Admin-only, advisory: booking far ahead can take a week another customer's
+// standing appointment will claim but hasn't booked yet (past its 8-week
+// horizon). The booking would succeed and that customer's week would later
+// be skipped — so warn, but never block. State is only ever set inside the
+// fetch callback (not synchronously in the effect body), and the review step
+// remounts this whenever the selection changes.
+function StandingConflictWarning({
+    artistId,
+    serviceId,
+    startTime,
+}: {
+    artistId: string
+    serviceId: string
+    startTime: string
+}) {
+    const [conflicts, setConflicts] = useState<StandingConflict[]>([])
+
+    useEffect(() => {
+        let cancelled = false
+        const params = new URLSearchParams({ artistId, serviceId, startTime })
+
+        fetch(`/api/admin/recurring-appointments/conflicts?${params.toString()}`)
+            .then(async (res) => (res.ok ? ((await res.json()) as { data: StandingConflict[] }) : { data: [] }))
+            .then((body) => {
+                if (!cancelled) setConflicts(body.data)
+            })
+            // Advisory only — a failed check just means no warning.
+            .catch(() => {})
+
+        return () => {
+            cancelled = true
+        }
+    }, [artistId, serviceId, startTime])
+
+    if (conflicts.length === 0) return null
+
+    const names = conflicts.map((c) => c.customerName ?? c.customerEmail).join(", ")
+    return (
+        <p role="alert" className="mt-4 rounded-sm border border-danger p-3 text-sm text-danger">
+            This is {names}&apos;s standing appointment time. Booking it will skip their week on this date.
+        </p>
+    )
+}
 
 export function ReviewStep({
     service,
@@ -160,6 +206,10 @@ export function ReviewStep({
                 </div>
             </dl>
 
+            {adminMode && (
+                <StandingConflictWarning artistId={artist.id} serviceId={service.id} startTime={startTime} />
+            )}
+
             <div className="mt-4 rounded-sm border border-border bg-surface p-4">
                 <label className="flex items-center gap-3">
                     <input
@@ -211,7 +261,8 @@ export function ReviewStep({
                         </div>
 
                         <p className="text-xs text-muted-foreground">
-                            We&apos;ll book your next {MATERIALIZE_WEEKS} weeks right away.
+                            We&apos;ll keep your next {MATERIALIZE_WEEKS} weeks booked automatically, and let you
+                            know if a week can&apos;t be booked.
                         </p>
                     </div>
                 )}

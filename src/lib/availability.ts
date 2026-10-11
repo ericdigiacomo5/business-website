@@ -1,28 +1,16 @@
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@/generated/prisma/client";
-import { SLOT_MINUTES, getGridBounds, timeStringToDate, type ArtistWorkingWindow } from "@/lib/schedule-grid";
+import { SLOT_MINUTES, getGridBounds, timeStringToDate, startOfDay, endOfDay, type ArtistWorkingWindow } from "@/lib/schedule-grid";
 
 // Re-exported so server-side code can keep importing these from this file —
-// only a Client Component (the schedule grid, and now RecurringSeriesRow,
-// shared with customer-facing UI) needs to import them from
+// only a Client Component (the schedule grid, RecurringSeriesRow, and the
+// booking window in src/lib/recurring.ts) needs to import them from
 // @/lib/schedule-grid directly, to avoid pulling this file's Prisma/pg
 // dependency chain into a client bundle (see that file's own comment).
-export { SLOT_MINUTES, getGridBounds, timeStringToDate, type ArtistWorkingWindow };
+export { SLOT_MINUTES, getGridBounds, timeStringToDate, startOfDay, endOfDay, type ArtistWorkingWindow };
 
 // "HH:mm", 24-hour, zero-padded — matches what timeStringToDate() expects to parse.
 const TIME_PATTERN = /^([01]\d|2[0-3]):([0-5]\d)$/
-
-export function startOfDay(date: Date): Date {
-  const result = new Date(date);
-  result.setHours(0, 0, 0, 0);
-  return result;
-}
-
-export function endOfDay(date: Date): Date {
-  const result = new Date(date);
-  result.setHours(23, 59, 59, 999);
-  return result;
-}
 
 // "Does [date, endDate ?? date] overlap [rangeStart, rangeEnd]" as a
 // TimeOffWhereInput fragment — shared by getOpenSlots and both admin

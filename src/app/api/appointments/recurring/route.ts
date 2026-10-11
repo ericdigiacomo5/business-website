@@ -2,10 +2,10 @@ import { after } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { sendRecurringConfirmation } from "@/lib/appointment-emails";
-import { isGridAligned, isValidTimeString, startOfDay, timeStringToDate } from "@/lib/availability";
-import { generateOccurrenceDates, MATERIALIZE_WEEKS } from "@/lib/recurring";
-import { bookOccurrence } from "@/lib/booking";
-import { toLocalDateKey, parseLocalDate } from "@/lib/format";
+import { isGridAligned, isValidTimeString, timeStringToDate } from "@/lib/availability";
+import { addDays, BOOKING_WINDOW_DAYS, bookingWindowEnd, materializationHorizon } from "@/lib/recurring";
+import { materializeSeries } from "@/lib/booking";
+import { parseLocalDate } from "@/lib/format";
 import { isBookingEnabled } from "@/lib/settings";
 
 export async function POST(request: Request) {
@@ -145,6 +145,16 @@ export async function POST(request: Request) {
         )
     }
 
+    // Same booking window as the one-off route, applied to the first
+    // occurrence only — the series itself is what's allowed to reach past
+    // the window (that's the point of a standing appointment).
+    if (!isAdmin && firstOccurrenceStart.getTime() >= bookingWindowEnd().getTime()) {
+        return Response.json(
+            { error: `A standing appointment must start within the next ${BOOKING_WINDOW_DAYS} days` },
+            { status: 400 }
+        )
+    }
+
     const [artist, service, targetUser] = await Promise.all([
         prisma.artist.findUnique({ where: { id: artistId } }),
         prisma.service.findUnique({ where: { id: serviceId } }),
@@ -194,41 +204,37 @@ export async function POST(request: Request) {
         },
     })
 
-    const horizonEnd = startOfDay(new Date(Date.now() + MATERIALIZE_WEEKS * 7 * 24 * 60 * 60 * 1000))
-    const occurrenceDates = generateOccurrenceDates(parsedSeriesStart, intervalWeeks, horizonEnd, parsedSeriesEnd)
+    // Same shared materializer the daily job and Resume use, so all three
+    // agree on occurrence identity and skip handling. Creation-time skips
+    // are persisted too, so they stay visible on the series afterward.
+    // allowPast: an admin backdating a series (Gap 3) can still record
+    // weeks that already happened; the job and Resume never can.
+    const now = new Date()
+    const materialization = await materializeSeries(recurringAppointment.id, {
+        fromDateExclusive: addDays(parsedSeriesStart, -1),
+        now,
+        allowPast: isAdmin,
+    })
+    const updatedSeries = await prisma.recurringAppointment.update({
+        where: { id: recurringAppointment.id },
+        data: { materializedThrough: materializationHorizon(now) },
+    })
 
-    const created = []
-    const skipped: { date: string; reason: string }[] = []
-    const skippedStartTimes: Date[] = []
+    const created = await prisma.appointment.findMany({
+        where: { id: { in: materialization.created.map((c) => c.appointmentId) } },
+        orderBy: { startTime: "asc" },
+    })
+    // Same { date, reason } shape this route has always returned, so the
+    // booking wizard's review/confirmed steps need no change.
+    const skipped = materialization.skipped.map((s) => ({ date: s.occurrenceDate, reason: s.reason }))
 
-    for (const date of occurrenceDates) {
-        const occurrenceStart = timeStringToDate(date, startTime)
-
-        const result = await bookOccurrence({
-            userId: targetUserId,
-            artistId,
-            serviceId,
-            serviceDurationMinutes: service.durationMinutes,
-            startTime: occurrenceStart,
-            recurringAppointmentId: recurringAppointment.id,
-            allowPast: isAdmin,
-        })
-
-        if (result.ok) {
-            created.push(result.appointment)
-        } else {
-            skipped.push({ date: toLocalDateKey(date), reason: result.error })
-            skippedStartTimes.push(occurrenceStart)
-        }
-    }
-
-    // One summary email for the whole series, sent after the loop — not
-    // from bookOccurrence(), which would send one per occurrence.
+    // One summary email for the whole series — not one per occurrence.
     const createdIds = created.map((a) => a.id)
+    const skippedStartTimes = materialization.skipped.map((s) => s.startTime)
     after(() => sendRecurringConfirmation(recurringAppointment.id, createdIds, skippedStartTimes))
 
     return Response.json(
-        { data: { recurringAppointment, created, skipped } },
+        { data: { recurringAppointment: updatedSeries, created, skipped } },
         { status: 201 }
     )
 }

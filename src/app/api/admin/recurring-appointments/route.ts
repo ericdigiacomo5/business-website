@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/require-admin";
 import { RecurringStatus, type Prisma } from "@/generated/prisma/client";
 import { SAFE_USER_SELECT_BASIC } from "@/lib/user-select";
+import { upcomingSkipsInclude } from "@/lib/booking";
 
 // No userId required — the dedicated /admin/recurring page runs this
 // unfiltered (every series, salon-wide); /admin/users/[id]'s own view calls
@@ -38,6 +39,7 @@ export async function GET(request: NextRequest) {
             // query shape serving both callers is simpler than branching the
             // include on who's asking.
             user: { select: SAFE_USER_SELECT_BASIC },
+            ...upcomingSkipsInclude(),
         },
         orderBy: { createdAt: "desc" },
     });

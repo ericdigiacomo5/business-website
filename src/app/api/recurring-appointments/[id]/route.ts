@@ -1,9 +1,9 @@
 import { after } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { sendRecurringStatusNotice } from "@/lib/appointment-emails";
+import { sendRecurringResumedNotice, sendRecurringStatusNotice } from "@/lib/appointment-emails";
 import { requireUser } from "@/lib/require-user";
 import { RecurringStatus } from "@/generated/prisma/client";
-import { applyRecurringStatusChange } from "@/lib/booking";
+import { applyRecurringStatusChange, upcomingSkipsInclude } from "@/lib/booking";
 
 // Customer self-service pause/resume/cancel of their own standing
 // appointment (FEATURE_GAPS.md Gap 11). Separate route from the /admin/ one
@@ -58,12 +58,24 @@ export async function PATCH(
         respectNoticeWindow: true,
     });
 
-    // Only on an actual transition into PAUSED/CANCELLED — re-sending the
-    // current status, or resuming, doesn't email.
-    if ((status === "PAUSED" || status === "CANCELLED") && recurringAppointment.status !== status) {
+    // Only on an actual transition — re-sending the current status stays
+    // silent.
+    if ((status === "PAUSED" || status === "CANCELLED") && result.previousStatus !== status) {
         const freedIds = result.freedAppointmentIds;
         after(() => sendRecurringStatusNotice(id, status, "customer", freedIds));
     }
+    const materialization = result.materialization;
+    if (materialization) {
+        after(() => sendRecurringResumedNotice(id, materialization));
+    }
 
-    return Response.json({ data: result });
+    // Re-read rather than return result.recurringAppointment: a resume
+    // advances the watermark and may record new skips *after* the status
+    // transaction, and the UI shows both.
+    const refreshed = await prisma.recurringAppointment.findUnique({
+        where: { id },
+        include: { artist: true, service: true, ...upcomingSkipsInclude() },
+    });
+
+    return Response.json({ data: { ...result, recurringAppointment: refreshed } });
 }
