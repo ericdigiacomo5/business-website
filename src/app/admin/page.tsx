@@ -5,6 +5,7 @@ import { BookingFilters } from "@/components/admin/booking-filters"
 import { ScheduleGrid } from "@/components/admin/schedule-grid"
 import { BookingToggle } from "@/components/admin/booking-toggle"
 import { DatePicker } from "@/components/admin/admin-date-picker"
+import { MonthCalendar } from "@/components/admin/month-calendar"
 import { startOfDay, endOfDay, getWorkingWindows, getGridBounds } from "@/lib/availability"
 import { toLocalDateKey, parseLocalDate } from "@/lib/format"
 import { isBookingEnabled } from "@/lib/settings"
@@ -98,6 +99,14 @@ export default async function AdminBookingsPage({
     const workingWindows = await getWorkingWindows(artists.map((a) => a.id), date)
     const gridBounds = getGridBounds(workingWindows)
 
+    const dateKey = toLocalDateKey(date)
+    const calendarProps = {
+        selectedDateKey: dateKey,
+        todayKey: toLocalDateKey(new Date()),
+        status: statusParam,
+        artistId: artistIdParam,
+    }
+
     return (
         <div>
             <div className="mb-6">
@@ -109,14 +118,44 @@ export default async function AdminBookingsPage({
                 currentArtistId={artistIdParam}
                 currentDateString={toLocalDateKey(date)}
             />
-            <DatePicker date={date} status={statusParam} artistId={artistIdParam} />
-            <ScheduleGrid
-                initialAppointments={appointments}
-                artists={artists}
-                workingWindows={workingWindows}
-                gridBounds={gridBounds}
-                date={date}
-            />
+            {/* Month calendar beside the grid on desktop; collapsed above it
+                on mobile so it doesn't push the schedule below the fold.
+                Two instances rather than one CSS-repositioned one: the mobile
+                version needs to live inside <details>. */}
+            <div className="lg:grid lg:grid-cols-[16rem_minmax(0,1fr)] lg:items-start lg:gap-6">
+                {/* mt-4 lines the panel up with DatePicker's own top margin.
+                    Keyed on the selected day so the browsed month resets to
+                    it after any navigation (e.g. "Jump to today"). */}
+                <aside className="hidden lg:mt-4 lg:block">
+                    <MonthCalendar key={dateKey} {...calendarProps} />
+                </aside>
+
+                <div className="min-w-0">
+                    <details className="mt-4 lg:hidden">
+                        <summary className="flex h-11 cursor-pointer items-center text-sm font-medium text-foreground">
+                            Jump to a date
+                        </summary>
+                        <div className="mt-2">
+                            <MonthCalendar key={dateKey} {...calendarProps} />
+                        </div>
+                    </details>
+
+                    <DatePicker date={date} status={statusParam} artistId={artistIdParam} />
+                    {/* Keyed on the view: ScheduleGrid seeds local state from
+                        initialAppointments once, and the calendar's links are
+                        client-side navigations (unlike DatePicker's form, a
+                        full reload) — without the key, switching days would
+                        keep showing the previous day's appointments. */}
+                    <ScheduleGrid
+                        key={`${dateKey}|${statusParam}|${artistIdParam}`}
+                        initialAppointments={appointments}
+                        artists={artists}
+                        workingWindows={workingWindows}
+                        gridBounds={gridBounds}
+                        date={date}
+                    />
+                </div>
+            </div>
         </div>
     )
 }
