@@ -19,7 +19,7 @@ export default async function BookPage({
 
     // Mirrors the exact bypass rule POST /api/appointments enforces server-side
     // — an admin browsing the plain customer /book page (as opposed to
-    // /admin/book) can still book, so this page must not show a "closed"
+    // booking from the admin schedule grid) can still book, so this page must not show a "closed"
     // wall that the API itself wouldn't actually enforce for them.
     const isAdmin = session?.user?.role === "ADMIN"
 

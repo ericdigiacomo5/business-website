@@ -5,7 +5,8 @@ import type { RecurringBookingResult } from "../wizard-state"
 import { Button, buttonVariants } from "@/components/ui/button"
 
 type ConfirmedStepProps = {
-    service: Service
+    // One or more, in the order they were chosen.
+    services: Service[]
     artist: Artist
     onBookAnother: () => void
 } & (
@@ -14,7 +15,7 @@ type ConfirmedStepProps = {
 )
 
 export function ConfirmedStep(props: ConfirmedStepProps) {
-    const { service, artist, onBookAnother } = props
+    const { services, artist, onBookAnother } = props
 
     const headline = props.recurringResult ? "Standing Appointment Created" : "Booking Confirmed"
     const firstStart = props.recurringResult
@@ -26,7 +27,7 @@ export function ConfirmedStep(props: ConfirmedStepProps) {
             <CheckCircle2 className="h-12 w-12 text-success" aria-hidden />
             <h2 className="mt-4 text-xl font-semibold text-foreground">{headline}</h2>
             <p className="mt-2 text-muted-foreground">
-                {service.name} with {artist.name}
+                {services.map((service) => service.name).join(" + ")} with {artist.name}
                 <br />
                 {new Date(firstStart).toLocaleString("en-US", {
                     weekday: "long",

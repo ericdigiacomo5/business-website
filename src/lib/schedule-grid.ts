@@ -7,7 +7,44 @@
 
 export const SLOT_MINUTES = 15;
 
+// Longest a single appointment may be set to run (8 hours).
+export const MAX_APPOINTMENT_MINUTES = 480;
+
+// An appointment's own booked length. This — not its service's usual
+// durationMinutes — is the truth for one appointment: an admin can set a
+// different length for a client who takes longer (or shorter), and the
+// AppointmentSlot rows it holds always match startTime..endTime. Accepts
+// strings too, since rows that crossed a fetch() arrive as ISO strings.
+export function durationMinutesOf(appointment: { startTime: Date | string; endTime: Date | string }): number {
+  return (new Date(appointment.endTime).getTime() - new Date(appointment.startTime).getTime()) / 60_000;
+}
+
+// A whole number of 15-minute slots, between one slot and the maximum.
+export function isValidAppointmentLength(value: unknown): value is number {
+  return (
+    typeof value === "number" &&
+    Number.isInteger(value) &&
+    value >= SLOT_MINUTES &&
+    value <= MAX_APPOINTMENT_MINUTES &&
+    value % SLOT_MINUTES === 0
+  );
+}
+
+// Choices for a length picker: every slot multiple up to 4 hours, plus the
+// current value if it's longer than that.
+export function appointmentLengthOptions(current: number): number[] {
+  const options: number[] = [];
+  for (let minutes = SLOT_MINUTES; minutes <= 240; minutes += SLOT_MINUTES) options.push(minutes);
+  if (!options.includes(current)) options.push(current);
+  return options.sort((a, b) => a - b);
+}
+
 export type ArtistWorkingWindow = { artistId: string; start: string | null; end: string | null };
+
+// One blocked "HH:mm" range for one artist on the displayed day. A
+// salon-wide closure (TimeOff.artistId = null) is expanded into one of these
+// per artist, flagged so the grid can label it differently.
+export type ArtistTimeOff = { artistId: string; start: string; end: string; salonWide: boolean };
 
 // No timezone handling yet: times are interpreted in the server's local
 // timezone. Fine for local dev, but a hard blocker for the Cloudflare

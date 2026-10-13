@@ -105,7 +105,7 @@ export function DateTimeStep({
     excludeAppointmentId?: string
     heading?: string
     // Defaults to the customer booking window the server enforces. Admin
-    // callers (reschedule, /admin/book) pass a wider value — admins are
+    // callers (reschedule) pass a wider value — admins are
     // exempt from the window, and a strip capped at 14 days would quietly
     // apply it to them anyway.
     daysAhead?: number

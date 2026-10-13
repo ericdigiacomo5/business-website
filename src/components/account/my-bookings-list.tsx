@@ -4,7 +4,7 @@ import { useState } from "react"
 import { AppointmentCard, type AppointmentWithRelations } from "./appointment-card"
 
 function isCancellable(appointment: AppointmentWithRelations) {
-    const isActive = appointment.status === "UPCOMING" || appointment.status === "CONFIRMED"
+    const isActive = appointment.status === "PENDING" || appointment.status === "CONFIRMED"
     const isFuture = new Date(appointment.startTime).getTime() > Date.now()
     // The DELETE route itself doesn't block cancelling a past/inactive
     // appointment — this is a frontend-only UX guard, not a security boundary.

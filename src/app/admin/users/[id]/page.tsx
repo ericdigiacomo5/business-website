@@ -3,6 +3,7 @@ import { notFound } from "next/navigation"
 import { prisma } from "@/lib/prisma"
 import { SAFE_USER_SELECT } from "@/lib/user-select"
 import { AdminUserDetail } from "@/components/admin/users/admin-user-detail"
+import { SERVICE_LINES_INCLUDE } from "@/lib/appointment-services"
 
 export default async function AdminUserDetailPage({
     params,
@@ -19,7 +20,7 @@ export default async function AdminUserDetailPage({
         // page, which reads top-down as an upcoming-first itinerary).
         prisma.appointment.findMany({
             where: { userId: id },
-            include: { artist: true, service: true },
+            include: { artist: true, ...SERVICE_LINES_INCLUDE },
             orderBy: { startTime: "desc" },
         }),
     ])

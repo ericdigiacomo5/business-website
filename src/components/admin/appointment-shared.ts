@@ -1,4 +1,5 @@
-import type { Appointment, AppointmentStatus, Artist, PaymentMethod, Service, User } from "@/generated/prisma/client"
+import type { Appointment, AppointmentStatus, Artist, PaymentMethod, User } from "@/generated/prisma/client"
+import type { ServiceLine } from "@/lib/appointment-services"
 
 // Deliberately a Pick, not the full `User`. This type crosses a Server→Client
 // boundary, so every field named here is serialized into the browser payload —
@@ -10,12 +11,13 @@ export type AdminAppointmentUser = Pick<User, "id" | "name" | "email" | "phone">
 
 export type AdminAppointment = Appointment & {
     artist: Artist
-    service: Service
+    // One or more, in booked order — see src/lib/appointment-services.ts.
+    services: ServiceLine[]
     user: AdminAppointmentUser
 }
 
 export const STATUS_TONE: Record<AppointmentStatus, "primary" | "success" | "danger" | "muted"> = {
-    UPCOMING: "primary",
+    PENDING: "primary",
     CONFIRMED: "success",
     CANCELLED: "danger",
     COMPLETED: "muted",
@@ -28,7 +30,7 @@ export const STATUS_TONE: Record<AppointmentStatus, "primary" | "success" | "dan
 // (the underscore reads oddly wherever status renders as plain text, e.g. a
 // Badge). Every other status's label is identical to its value.
 export const STATUS_LABEL: Record<AppointmentStatus, string> = {
-    UPCOMING: "UPCOMING",
+    PENDING: "PENDING",
     CONFIRMED: "CONFIRMED",
     CANCELLED: "CANCELLED",
     COMPLETED: "COMPLETED",
@@ -57,7 +59,7 @@ export const ARTIST_COLOR_CYCLE: { header: string; block: string; blockBorder: s
 // "whose column" and "what state" stay two distinct, non-competing signals
 // rather than merging into one color system.
 export const STATUS_BAR_COLOR: Record<AppointmentStatus, string> = {
-    UPCOMING: "bg-primary",
+    PENDING: "bg-primary",
     CONFIRMED: "bg-success",
     CANCELLED: "bg-danger",
     COMPLETED: "bg-muted-foreground",

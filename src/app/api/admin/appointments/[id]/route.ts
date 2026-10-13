@@ -2,8 +2,18 @@ import { after } from "next/server";
 import { requireAdmin } from "@/lib/require-admin";
 import { sendCancellationNotice, sendReceipt, sendRescheduleNotice } from "@/lib/appointment-emails";
 import { prisma } from "@/lib/prisma";
-import { AppointmentStatus, PaymentMethod, Prisma } from "@/generated/prisma/client";
+import { AppointmentStatus, PaymentMethod, Prisma, type DiscountType } from "@/generated/prisma/client";
 import { getOpenSlots } from "@/lib/availability";
+import { durationMinutesOf, isValidAppointmentLength, MAX_APPOINTMENT_MINUTES } from "@/lib/schedule-grid";
+import { discountError } from "@/lib/discount";
+import { loadServicesToBook, type ServiceToBook } from "@/lib/booking";
+import {
+    parseServiceIds,
+    SERVICE_LINES_INCLUDE,
+    servicesDurationMinutes,
+    servicesFitOneAppointment,
+    servicesPriceCents,
+} from "@/lib/appointment-services";
 
 const SLOT_DURATION_MS = 15 * 60_000;
 
@@ -18,7 +28,7 @@ export async function PATCH(
 
     const appointment = await prisma.appointment.findUnique({
         where: { id },
-        include: { service: true },
+        include: SERVICE_LINES_INCLUDE,
     })
 
     if (!appointment) {
@@ -45,21 +55,28 @@ export async function PATCH(
         )
     }
 
-    const { status, paymentMethod, startTime } = body as Record<string, unknown>
+    const { status, paymentMethod, startTime, durationMinutes, discount, serviceIds } = body as Record<string, unknown>
 
-    // status is optional — a pure reschedule (startTime only) shouldn't have
-    // to also restate the current status. At least one of the two has to be
-    // present, or this PATCH would be a no-op.
-    if (status === undefined && startTime === undefined) {
+    // status is optional — a pure reschedule (startTime only), length
+    // change, services change, or discount change shouldn't have to also
+    // restate the current status. At least one has to be present, or this
+    // PATCH would be a no-op.
+    if (
+        status === undefined &&
+        startTime === undefined &&
+        durationMinutes === undefined &&
+        discount === undefined &&
+        serviceIds === undefined
+    ) {
         return Response.json(
-            { error: 'Provide status and/or startTime' },
+            { error: 'Provide status, startTime, durationMinutes, serviceIds and/or discount' },
             { status: 400 }
         )
     }
 
     if (status !== undefined && (typeof status !== 'string' || !(Object.values(AppointmentStatus) as string[]).includes(status))) {
         return Response.json(
-            { error: 'Status must be one of UPCOMING, CONFIRMED, CANCELLED, COMPLETED' },
+            { error: 'Status must be one of PENDING, CONFIRMED, CANCELLED, COMPLETED, NO_SHOW' },
             { status: 400 }
         )
     }
@@ -83,10 +100,100 @@ export async function PATCH(
         )
     }
 
-    // Reschedule: admin-only (this whole route already is), same artist and
-    // service — only the time moves. A different artist or service is really
-    // "cancel and rebook," not a reschedule, and is deliberately out of scope
-    // here (see FEATURE_GAPS.md Gap 4). Not folded into bookOccurrence()
+    // Services: replaces the appointment's whole list (e.g. a client adds a
+    // service at the chair). Same gate as a reschedule, since the usual
+    // length changes with the services and the slots are re-claimed below.
+    // A service that stays keeps the price and duration it was booked at;
+    // one that's added takes the service's current values.
+    let newServices: ServiceToBook[] | null = null
+    if (serviceIds !== undefined) {
+        const resultingStatus = (status as AppointmentStatus | undefined) ?? appointment.status
+        if (resultingStatus !== AppointmentStatus.PENDING && resultingStatus !== AppointmentStatus.CONFIRMED) {
+            return Response.json(
+                { error: "Only a PENDING or CONFIRMED appointment's services can be changed" },
+                { status: 400 }
+            )
+        }
+
+        const parsedIds = parseServiceIds(serviceIds)
+        if (typeof parsedIds === 'string') {
+            return Response.json(
+                { error: parsedIds },
+                { status: 400 }
+            )
+        }
+
+        const current = await loadServicesToBook(parsedIds)
+        if (!current) {
+            return Response.json(
+                { error: 'Service not found' },
+                { status: 404 }
+            )
+        }
+
+        newServices = current.map((service) => {
+            const existing = appointment.services.find((line) => line.serviceId === service.serviceId)
+            return existing
+                ? { serviceId: existing.serviceId, priceCents: existing.priceCents, durationMinutes: existing.durationMinutes }
+                : service
+        })
+
+        // Only matters when no explicit length is sent alongside — that one
+        // is validated against the same maximum below.
+        if (durationMinutes === undefined && !servicesFitOneAppointment(newServices)) {
+            return Response.json(
+                { error: 'Those services are too long for one appointment' },
+                { status: 400 }
+            )
+        }
+    }
+
+    // What the appointment costs after this request — a discount is checked
+    // against this, so "add a service and take $10 off" works in one go.
+    const priceCents = servicesPriceCents(newServices ?? appointment.services)
+
+    // Discount: same three-way convention as the other optional fields here
+    // — undefined = don't touch, null = remove it, { type, value } = set it.
+    // Judged against the appointment's *current* status, so it can ride
+    // along with the checkout request itself ("10% off, paid by card") but
+    // can't be changed once the appointment is completed (the receipt has
+    // already gone out) or was cancelled / a no-show (nothing was owed).
+    let parsedDiscount: { type: DiscountType; value: number } | null | undefined = undefined
+    if (discount !== undefined) {
+        if (appointment.status !== AppointmentStatus.PENDING && appointment.status !== AppointmentStatus.CONFIRMED) {
+            return Response.json(
+                { error: 'A discount can only be changed on a PENDING or CONFIRMED appointment' },
+                { status: 400 }
+            )
+        }
+
+        if (discount === null) {
+            parsedDiscount = null
+        } else {
+            if (typeof discount !== 'object') {
+                return Response.json(
+                    { error: 'discount must be { type, value } or null' },
+                    { status: 400 }
+                )
+            }
+
+            const { type, value } = discount as Record<string, unknown>
+            const problem = discountError({ type, value }, priceCents)
+            if (problem) {
+                return Response.json(
+                    { error: problem },
+                    { status: 400 }
+                )
+            }
+
+            parsedDiscount = { type: type as DiscountType, value: value as number }
+        }
+    }
+
+    // Reschedule: admin-only (this whole route already is), same artist —
+    // only the time moves. A different artist is really "cancel and
+    // rebook," not a reschedule, and is deliberately out of scope here (see
+    // FEATURE_GAPS.md Gap 4). Not folded into bookOccurrence()
     // (the one-off booking transaction) since this reuses the appointment's
     // existing row/id instead of creating a new one, and has to free its own
     // old slots first — a genuinely different shape, not a smaller version
@@ -100,9 +207,9 @@ export async function PATCH(
         // status and startTime can be sent together (e.g. confirm + move in
         // one request) without fighting each other.
         const resultingStatus = (status as AppointmentStatus | undefined) ?? appointment.status
-        if (resultingStatus !== AppointmentStatus.UPCOMING && resultingStatus !== AppointmentStatus.CONFIRMED) {
+        if (resultingStatus !== AppointmentStatus.PENDING && resultingStatus !== AppointmentStatus.CONFIRMED) {
             return Response.json(
-                { error: 'Only an UPCOMING or CONFIRMED appointment can be rescheduled' },
+                { error: 'Only a PENDING or CONFIRMED appointment can be rescheduled' },
                 { status: 400 }
             )
         }
@@ -132,6 +239,30 @@ export async function PATCH(
         parsedStartTime = candidate
     }
 
+    // Length override: some clients take longer (or less time) than the
+    // service's usual duration, so an admin can set this one appointment's
+    // length directly. Same gate as a reschedule — it re-claims slots, so it
+    // only makes sense while the appointment is still PENDING or CONFIRMED.
+    let parsedDuration: number | null = null
+    if (durationMinutes !== undefined) {
+        const resultingStatus = (status as AppointmentStatus | undefined) ?? appointment.status
+        if (resultingStatus !== AppointmentStatus.PENDING && resultingStatus !== AppointmentStatus.CONFIRMED) {
+            return Response.json(
+                { error: "Only a PENDING or CONFIRMED appointment's length can be changed" },
+                { status: 400 }
+            )
+        }
+
+        if (!isValidAppointmentLength(durationMinutes)) {
+            return Response.json(
+                { error: `durationMinutes must be a multiple of 15, from 15 to ${MAX_APPOINTMENT_MINUTES}` },
+                { status: 400 }
+            )
+        }
+
+        parsedDuration = durationMinutes
+    }
+
     try {
         const updated = await prisma.$transaction(async (tx) => {
             const data: Prisma.AppointmentUpdateInput = {}
@@ -145,6 +276,11 @@ export async function PATCH(
                 data.checkedOutAt = new Date()
             }
 
+            if (parsedDiscount !== undefined) {
+                data.discountType = parsedDiscount?.type ?? null
+                data.discountValue = parsedDiscount?.value ?? null
+            }
+
             if (status === AppointmentStatus.CANCELLED || status === AppointmentStatus.NO_SHOW) {
                 // Same soft-cancel contract as DELETE /api/appointments/:id
                 // — free the slots so the grid opens back up, keep the
@@ -156,26 +292,53 @@ export async function PATCH(
                 })
             }
 
-            if (parsedStartTime) {
-                const newEndTime = new Date(
-                    parsedStartTime.getTime() + appointment.service.durationMinutes * 60_000
-                )
+            if (newServices) {
+                // Replace the whole list rather than diffing it — it's at
+                // most a handful of rows, and the order may have changed.
+                await tx.appointmentService.deleteMany({ where: { appointmentId: id } })
+                await tx.appointmentService.createMany({
+                    data: newServices.map((service, position) => ({ ...service, appointmentId: id, position })),
+                })
+            }
+
+            if (parsedStartTime || parsedDuration !== null || newServices) {
+                // Start: unchanged unless sent. Length: an explicit one wins;
+                // otherwise changing the services resets it to their usual
+                // combined length (an earlier override was for the old
+                // services); otherwise it stays the appointment's own — a
+                // reschedule must not silently undo a length an admin set
+                // for this client.
+                const newStartTime = parsedStartTime ?? appointment.startTime
+                const minutes =
+                    parsedDuration ??
+                    (newServices ? servicesDurationMinutes(newServices) : durationMinutesOf(appointment))
+                const newEndTime = new Date(newStartTime.getTime() + minutes * 60_000)
 
                 const newSlots: Date[] = []
-                let current = parsedStartTime
+                let current = newStartTime
                 while (current < newEndTime) {
                     newSlots.push(current)
                     current = new Date(current.getTime() + SLOT_DURATION_MS)
                 }
 
                 // Free the old slots first — this also correctly lets a
-                // reschedule land back on (part of) its own current time
-                // without a false "not available" from its own booking.
+                // reschedule (or a longer length) land on (part of) its own
+                // current time without a false "not available" from its own
+                // booking.
                 await tx.appointmentSlot.deleteMany({
                     where: { appointmentId: id }
                 })
 
-                const openSlots = await getOpenSlots(appointment.artistId, parsedStartTime, { allowPast: true })
+                // excludeAppointmentId is what actually makes this
+                // appointment's own current slots count as open:
+                // getOpenSlots reads through the global client, not `tx`,
+                // so it can't see the uncommitted delete just above. Without
+                // it, any new time or length overlapping the current one
+                // (every length change does) is refused as "not available".
+                const openSlots = await getOpenSlots(appointment.artistId, newStartTime, {
+                    allowPast: true,
+                    excludeAppointmentId: id,
+                })
                 const openSlotTimes = new Set(openSlots.map((slot) => slot.getTime()))
                 const isFullyAvailable = newSlots.every((slot) => openSlotTimes.has(slot.getTime()))
 
@@ -191,16 +354,22 @@ export async function PATCH(
                     })),
                 })
 
-                data.startTime = parsedStartTime
+                data.startTime = newStartTime
                 data.endTime = newEndTime
-                // Any reminder already sent was for the old time — clear it
-                // so the job reminds about the new one.
-                data.reminderSentAt = null
+                if (parsedStartTime) {
+                    // Any reminder already sent was for the old time — clear
+                    // it so the job reminds about the new one. (A length-only
+                    // change leaves the start, and so the reminder, as is.)
+                    data.reminderSentAt = null
+                }
             }
 
+            // With its service lines, so the schedule grid can merge the
+            // response straight into what it's showing.
             return tx.appointment.update({
                 where: { id },
                 data,
+                include: SERVICE_LINES_INCLUDE,
             })
         })
 
@@ -225,7 +394,13 @@ export async function PATCH(
     } catch (error) {
         if (error instanceof Error && error.message === 'SLOT_UNAVAILABLE') {
             return Response.json(
-                { error: 'That time is not available' },
+                {
+                    error: parsedStartTime
+                        ? 'That time is not available'
+                        : newServices && parsedDuration === null
+                          ? "There isn't enough open time after this appointment for those services"
+                          : "There isn't enough open time after this appointment for that length",
+                },
                 { status: 400 }
             )
         }

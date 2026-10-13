@@ -4,7 +4,7 @@ import type { ChangeEvent } from "react"
 import type { Artist } from "@/generated/prisma/client"
 import { STATUS_LABEL } from "./appointment-shared"
 
-const STATUS_OPTIONS = ["UPCOMING", "CONFIRMED", "CANCELLED", "COMPLETED", "NO_SHOW"] as const
+const STATUS_OPTIONS = ["PENDING", "CONFIRMED", "CANCELLED", "COMPLETED", "NO_SHOW"] as const
 
 // Plain GET form, submitted either automatically on select change or via the
 // button — either way it just re-renders this Server Component page with

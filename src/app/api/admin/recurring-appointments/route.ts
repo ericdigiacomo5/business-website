@@ -4,6 +4,7 @@ import { requireAdmin } from "@/lib/require-admin";
 import { RecurringStatus, type Prisma } from "@/generated/prisma/client";
 import { SAFE_USER_SELECT_BASIC } from "@/lib/user-select";
 import { upcomingSkipsInclude } from "@/lib/booking";
+import { SERVICE_LINES_INCLUDE } from "@/lib/appointment-services";
 
 // No userId required — the dedicated /admin/recurring page runs this
 // unfiltered (every series, salon-wide); /admin/users/[id]'s own view calls
@@ -31,7 +32,7 @@ export async function GET(request: NextRequest) {
         where,
         include: {
             artist: true,
-            service: true,
+            ...SERVICE_LINES_INCLUDE,
             // Only actually needed by the salon-wide page (the per-customer
             // view already knows whose page it's on) — included
             // unconditionally anyway, same reasoning GET /api/admin/appointments

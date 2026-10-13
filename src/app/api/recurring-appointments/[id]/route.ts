@@ -1,12 +1,12 @@
 import { after } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { sendRecurringResumedNotice, sendRecurringStatusNotice } from "@/lib/appointment-emails";
+import { sendRecurringCancelledNotice } from "@/lib/appointment-emails";
 import { requireUser } from "@/lib/require-user";
-import { RecurringStatus } from "@/generated/prisma/client";
-import { applyRecurringStatusChange, upcomingSkipsInclude } from "@/lib/booking";
+import { cancelRecurringSeries, upcomingSkipsInclude } from "@/lib/booking";
+import { SERVICE_LINES_INCLUDE } from "@/lib/appointment-services";
 
-// Customer self-service pause/resume/cancel of their own standing
-// appointment (FEATURE_GAPS.md Gap 11). Separate route from the /admin/ one
+// Customer self-service cancel of their own standing appointment
+// (FEATURE_GAPS.md Gap 11) — the only change a series supports. Separate route from the /admin/ one
 // rather than one route branching on role — matches this project's existing
 // convention of a fully separate route per audience (GET /api/appointments/me
 // vs GET /api/admin/appointments).
@@ -25,7 +25,7 @@ export async function PATCH(
     }
 
     // requireUser() only confirms *someone* is signed in — without this, any
-    // authenticated customer could pause/cancel any other customer's series
+    // authenticated customer could cancel any other customer's series
     // by id. Same two-step shape as DELETE /api/appointments/[id].
     if (recurringAppointment.userId !== userId) {
         return Response.json({ error: "Forbidden" }, { status: 403 });
@@ -43,14 +43,14 @@ export async function PATCH(
     }
 
     const { status } = body as Record<string, unknown>;
-    if (typeof status !== "string" || !(Object.values(RecurringStatus) as string[]).includes(status)) {
+    if (status !== "CANCELLED") {
         return Response.json(
-            { error: "Status must be one of ACTIVE, PAUSED, CANCELLED" },
+            { error: "A standing appointment can only be cancelled" },
             { status: 400 }
         );
     }
 
-    const result = await applyRecurringStatusChange(id, status as RecurringStatus, {
+    const result = await cancelRecurringSeries(id, {
         // An imminent occurrence (<24h out) stays untouched — same policy as
         // cancelling it directly via DELETE /api/appointments/[id]. Without
         // this, "cancel the whole series" would be a backdoor around a
@@ -58,23 +58,16 @@ export async function PATCH(
         respectNoticeWindow: true,
     });
 
-    // Only on an actual transition — re-sending the current status stays
-    // silent.
-    if ((status === "PAUSED" || status === "CANCELLED") && result.previousStatus !== status) {
+    // Only on an actual transition — re-cancelling stays silent.
+    if (result.previousStatus !== "CANCELLED") {
         const freedIds = result.freedAppointmentIds;
-        after(() => sendRecurringStatusNotice(id, status, "customer", freedIds));
-    }
-    const materialization = result.materialization;
-    if (materialization) {
-        after(() => sendRecurringResumedNotice(id, materialization));
+        after(() => sendRecurringCancelledNotice(id, "customer", freedIds));
     }
 
-    // Re-read rather than return result.recurringAppointment: a resume
-    // advances the watermark and may record new skips *after* the status
-    // transaction, and the UI shows both.
+    // Re-read with the relations the series list renders.
     const refreshed = await prisma.recurringAppointment.findUnique({
         where: { id },
-        include: { artist: true, service: true, ...upcomingSkipsInclude() },
+        include: { artist: true, ...SERVICE_LINES_INCLUDE, ...upcomingSkipsInclude() },
     });
 
     return Response.json({ data: { ...result, recurringAppointment: refreshed } });

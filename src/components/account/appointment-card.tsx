@@ -1,12 +1,16 @@
-import type { Appointment, AppointmentStatus, Artist, Service } from "@/generated/prisma/client"
+import type { Appointment, AppointmentStatus, Artist } from "@/generated/prisma/client"
+import { servicesLabel, servicesPriceCents, type ServiceLine } from "@/lib/appointment-services"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { formatDuration, formatPrice } from "@/lib/format"
+import { Price } from "@/components/ui/price"
+import { discountOf } from "@/lib/discount"
+import { formatDuration } from "@/lib/format"
+import { durationMinutesOf } from "@/lib/schedule-grid"
 
-export type AppointmentWithRelations = Appointment & { artist: Artist; service: Service }
+export type AppointmentWithRelations = Appointment & { artist: Artist; services: ServiceLine[] }
 
 const STATUS_TONE: Record<AppointmentStatus, "primary" | "success" | "danger" | "muted"> = {
-    UPCOMING: "primary",
+    PENDING: "primary",
     CONFIRMED: "success",
     CANCELLED: "danger",
     COMPLETED: "muted",
@@ -22,7 +26,7 @@ const STATUS_TONE: Record<AppointmentStatus, "primary" | "success" | "danger" | 
 // here rather than imported since this is a customer-facing component and
 // that module lives under the admin tree.
 const STATUS_LABEL: Record<AppointmentStatus, string> = {
-    UPCOMING: "UPCOMING",
+    PENDING: "PENDING",
     CONFIRMED: "CONFIRMED",
     CANCELLED: "CANCELLED",
     COMPLETED: "COMPLETED",
@@ -50,7 +54,7 @@ export function AppointmentCard({
         >
             <div>
                 <div className="font-serif text-lg font-bold text-surface-foreground">
-                    {appointment.service.name}
+                    {servicesLabel(appointment.services)}
                 </div>
                 <p className="mt-1 text-sm text-muted-foreground">with {appointment.artist.name}</p>
                 <p className="mt-0.5 text-sm text-muted-foreground">
@@ -63,8 +67,8 @@ export function AppointmentCard({
                     })}
                 </p>
                 <p className="mt-1 text-sm text-muted-foreground">
-                    {formatDuration(appointment.service.durationMinutes)} &middot;{" "}
-                    {formatPrice(appointment.service.priceCents)}
+                    {formatDuration(durationMinutesOf(appointment))} &middot;{" "}
+                    <Price priceCents={servicesPriceCents(appointment.services)} discount={discountOf(appointment)} />
                 </p>
             </div>
             <div className="flex items-center gap-3">

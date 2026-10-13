@@ -4,9 +4,8 @@ import { useEffect, useReducer } from "react"
 import { useRouter } from "next/navigation"
 import { useSession } from "next-auth/react"
 import type { Artist, Service } from "@/generated/prisma/client"
-import { wizardReducer, initialWizardState, type SelectedUser, type WizardSelection } from "./wizard-state"
+import { wizardReducer, initialWizardState, type WizardSelection } from "./wizard-state"
 import { StepIndicator } from "./step-indicator"
-import { UserStep } from "./steps/user-step"
 import { ServiceStep } from "./steps/service-step"
 import { ArtistStep } from "./steps/artist-step"
 import { DateTimeStep } from "./steps/datetime-step"
@@ -15,7 +14,6 @@ import { ConfirmedStep } from "./steps/confirmed-step"
 import { StickyActionBar } from "@/components/ui/sticky-action-bar"
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
-import { ADMIN_DAYS_AHEAD } from "@/lib/recurring"
 
 const STORAGE_KEY = "booking-wizard"
 
@@ -24,34 +22,30 @@ export function BookingWizard({
     initialArtists,
     initialServiceId,
     initialArtistId,
-    adminMode = false,
-    initialUser = null,
 }: {
     initialServices: Service[]
     initialArtists: Artist[]
     initialServiceId: string | null
     initialArtistId: string | null
-    adminMode?: boolean
-    // Admin mode only: skip the customer-picker step for a known customer.
-    initialUser?: SelectedUser | null
 }) {
     const router = useRouter()
     const { data: session, status } = useSession()
 
     const [state, dispatch] = useReducer(
         wizardReducer,
-        { serviceId: initialServiceId, artistId: initialArtistId, date: null, startTime: null },
-        (selection) => initialWizardState(selection, adminMode, initialUser)
+        {
+            // A "Book this service" deep link preselects one; more can be
+            // added by going back to the service step.
+            serviceIds: initialServiceId ? [initialServiceId] : [],
+            artistId: initialArtistId,
+            date: null,
+            startTime: null,
+        },
+        (selection) => initialWizardState(selection)
     )
 
 
     useEffect(() => {
-        // The unauthenticated-redirect/rehydrate dance below is customer-only
-        // — an admin is always already authenticated as ADMIN by the time
-        // they reach this page (enforced by src/app/admin/layout.tsx), so
-        // there's nothing to rehydrate and no login redirect can ever fire.
-        if (adminMode) return
-
         if (status === "loading") return // don't act on a guess
 
         const raw = sessionStorage.getItem(STORAGE_KEY)
@@ -62,7 +56,7 @@ export function BookingWizard({
 
         try {
             const selection: WizardSelection = JSON.parse(raw)
-            const serviceOk = !selection.serviceId || initialServices.some((s) => s.id === selection.serviceId)
+            const serviceOk = (selection.serviceIds ?? []).every((id) => initialServices.some((s) => s.id === id))
             const artistOk = !selection.artistId || initialArtists.some((a) => a.id === selection.artistId)
             if (serviceOk && artistOk) {
                 dispatch({ type: "HYDRATE", selection })
@@ -70,11 +64,11 @@ export function BookingWizard({
         } catch {
             // Malformed storage — ignore, start fresh.
         }
-    }, [status, initialServices, initialArtists, adminMode])
+    }, [status, initialServices, initialArtists])
 
     function redirectToLogin() {
         const selection: WizardSelection = {
-            serviceId: state.serviceId,
+            serviceIds: state.serviceIds,
             artistId: state.artistId,
             date: state.date,
             startTime: state.startTime,
@@ -85,22 +79,23 @@ export function BookingWizard({
 
     // Reaching review unauthenticated (arrived here directly, or the session
     // expired while browsing steps 1-3) triggers the same persist+redirect.
-    // Admin-mode never hits this — see the effect above.
     useEffect(() => {
-        if (adminMode) return
         if (state.step === "review" && status === "unauthenticated") {
             redirectToLogin()
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [state.step, status, adminMode])
+    }, [state.step, status])
 
-    const selectedService = initialServices.find((s) => s.id === state.serviceId) ?? null
+    // In the order they were picked, which is the order they're booked in.
+    const selectedServices = state.serviceIds
+        .map((id) => initialServices.find((s) => s.id === id))
+        .filter((s): s is Service => s !== undefined)
     const selectedArtist = initialArtists.find((a) => a.id === state.artistId) ?? null
 
     if (
         state.step === "confirmed" &&
         (state.confirmedAppointment || state.confirmedRecurring) &&
-        selectedService &&
+        selectedServices.length > 0 &&
         selectedArtist
     ) {
         return (
@@ -108,14 +103,14 @@ export function BookingWizard({
                 {state.confirmedRecurring ? (
                     <ConfirmedStep
                         recurringResult={state.confirmedRecurring}
-                        service={selectedService}
+                        services={selectedServices}
                         artist={selectedArtist}
                         onBookAnother={() => dispatch({ type: "RESET" })}
                     />
                 ) : (
                     <ConfirmedStep
                         appointment={state.confirmedAppointment!}
-                        service={selectedService}
+                        services={selectedServices}
                         artist={selectedArtist}
                         onBookAnother={() => dispatch({ type: "RESET" })}
                     />
@@ -126,37 +121,30 @@ export function BookingWizard({
 
     return (
         <div className="mx-auto max-w-lg px-4 py-8">
-            {!adminMode && (
-                <div className="mb-8 text-center">
-                    <span className="font-script text-2xl text-accent">Let&apos;s get you</span>
-                    <h1 className="mt-0.5 font-serif text-3xl font-extrabold text-foreground">Booked In</h1>
-                </div>
-            )}
-            <StepIndicator current={state.step} adminMode={adminMode} />
+            <div className="mb-8 text-center">
+                <span className="font-script text-2xl text-accent">Let&apos;s get you</span>
+                <h1 className="mt-0.5 font-serif text-3xl font-extrabold text-foreground">Booked In</h1>
+            </div>
+            <StepIndicator current={state.step} />
 
             <div className="mt-8">
-                {state.step === "user" && (
-                    <UserStep onSelect={(user) => dispatch({ type: "SELECT_USER", user })} />
-                )}
-
                 {state.step === "service" && (
-                    <div className={adminMode ? "pb-28" : undefined}>
+                    <div className="pb-28">
                         <ServiceStep
                             services={initialServices}
-                            selectedId={state.serviceId}
-                            onSelect={(serviceId) => dispatch({ type: "SELECT_SERVICE", serviceId })}
+                            selectedIds={state.serviceIds}
+                            onToggle={(serviceId) => dispatch({ type: "TOGGLE_SERVICE", serviceId })}
                         />
-                        {adminMode && (
-                            <StickyActionBar>
-                                <Button
-                                    type="button"
-                                    variant="secondary"
-                                    onClick={() => dispatch({ type: "GO_BACK" })}
-                                >
-                                    Back
-                                </Button>
-                            </StickyActionBar>
-                        )}
+                        <StickyActionBar>
+                            <Button
+                                type="button"
+                                onClick={() => dispatch({ type: "CONFIRM_SERVICES" })}
+                                disabled={state.serviceIds.length === 0}
+                                className="w-full"
+                            >
+                                Continue
+                            </Button>
+                        </StickyActionBar>
                     </div>
                 )}
 
@@ -175,14 +163,13 @@ export function BookingWizard({
                     </div>
                 )}
 
-                {state.step === "datetime" && selectedArtist && selectedService && (
+                {state.step === "datetime" && selectedArtist && selectedServices.length > 0 && (
                     <div className="pb-28">
                         <DateTimeStep
                             artistId={selectedArtist.id}
                             initialDate={state.date}
-                            serviceDurationMinutes={selectedService.durationMinutes}
-                            // Admins are exempt from the customer booking window.
-                            daysAhead={adminMode ? ADMIN_DAYS_AHEAD : undefined}
+                            // Only times where every service fits back to back.
+                            serviceDurationMinutes={selectedServices.reduce((sum, s) => sum + s.durationMinutes, 0)}
                             onSelect={(date, startTime) => dispatch({ type: "SELECT_DATETIME", date, startTime })}
                         />
                         <StickyActionBar>
@@ -194,18 +181,12 @@ export function BookingWizard({
                 )}
 
                 {state.step === "review" &&
-                    ((adminMode || status === "authenticated") && selectedService && selectedArtist && state.startTime ? (
+                    (status === "authenticated" && selectedServices.length > 0 && selectedArtist && state.startTime ? (
                         <ReviewStep
-                            service={selectedService}
+                            services={selectedServices}
                             artist={selectedArtist}
                             startTime={state.startTime}
-                            userLabel={
-                                adminMode
-                                    ? (state.selectedUser?.name ?? state.selectedUser?.email ?? "")
-                                    : (session?.user?.email ?? session?.user?.name ?? "you")
-                            }
-                            adminMode={adminMode}
-                            targetUserId={state.selectedUser?.id}
+                            userLabel={session?.user?.email ?? session?.user?.name ?? "you"}
                             onBack={() => dispatch({ type: "GO_BACK" })}
                             onSuccess={(appointment) => dispatch({ type: "SUBMIT_SUCCESS", appointment })}
                             onRecurringSuccess={(result) => dispatch({ type: "SUBMIT_RECURRING_SUCCESS", result })}

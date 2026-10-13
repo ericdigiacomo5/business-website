@@ -6,9 +6,10 @@ import { ScheduleGrid } from "@/components/admin/schedule-grid"
 import { BookingToggle } from "@/components/admin/booking-toggle"
 import { DatePicker } from "@/components/admin/admin-date-picker"
 import { MonthCalendar } from "@/components/admin/month-calendar"
-import { startOfDay, endOfDay, getWorkingWindows, getGridBounds } from "@/lib/availability"
+import { startOfDay, endOfDay, getWorkingWindows, getGridBounds, getTimeOffForDay } from "@/lib/availability"
 import { toLocalDateKey, parseLocalDate } from "@/lib/format"
 import { isBookingEnabled } from "@/lib/settings"
+import { SERVICE_LINES_INCLUDE } from "@/lib/appointment-services"
 import { SAFE_USER_SELECT_BASIC } from "@/lib/user-select"
 
 export default async function AdminBookingsPage({
@@ -69,7 +70,7 @@ export default async function AdminBookingsPage({
         where.artistId = artistIdParam
     }
 
-    const [appointments, allArtists, bookingEnabled] = await Promise.all([
+    const [appointments, allArtists, services, bookingEnabled] = await Promise.all([
         prisma.appointment.findMany({
             where,
             // Explicit select on `user`, never a bare include — Prisma returns
@@ -78,7 +79,7 @@ export default async function AdminBookingsPage({
             // browser's RSC payload.
             include: {
                 artist: true,
-                service: true,
+                ...SERVICE_LINES_INCLUDE,
                 user: { select: SAFE_USER_SELECT_BASIC },
             },
             orderBy: { startTime: "asc" },
@@ -87,6 +88,8 @@ export default async function AdminBookingsPage({
         // they can be reactivated) — this dashboard, its filters, and the
         // schedule grid should never surface one.
         prisma.artist.findMany({ where: { active: true }, orderBy: { createdAt: "asc" } }),
+        // For booking straight from the grid (clicking an open time).
+        prisma.service.findMany({ where: { active: true }, orderBy: { createdAt: "asc" } }),
         isBookingEnabled(),
     ])
 
@@ -96,7 +99,11 @@ export default async function AdminBookingsPage({
     // imply the others were verified empty, when their data was simply never
     // fetched.
     const artists = artistIdParam ? allArtists.filter((a) => a.id === artistIdParam) : allArtists
-    const workingWindows = await getWorkingWindows(artists.map((a) => a.id), date)
+    const artistIds = artists.map((a) => a.id)
+    const [workingWindows, timeOff] = await Promise.all([
+        getWorkingWindows(artistIds, date),
+        getTimeOffForDay(artistIds, date),
+    ])
     const gridBounds = getGridBounds(workingWindows)
 
     const dateKey = toLocalDateKey(date)
@@ -150,7 +157,9 @@ export default async function AdminBookingsPage({
                         key={`${dateKey}|${statusParam}|${artistIdParam}`}
                         initialAppointments={appointments}
                         artists={artists}
+                        services={services}
                         workingWindows={workingWindows}
+                        timeOff={timeOff}
                         gridBounds={gridBounds}
                         date={date}
                     />

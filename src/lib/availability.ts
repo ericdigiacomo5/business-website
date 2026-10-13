@@ -1,13 +1,13 @@
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@/generated/prisma/client";
-import { SLOT_MINUTES, getGridBounds, timeStringToDate, startOfDay, endOfDay, type ArtistWorkingWindow } from "@/lib/schedule-grid";
+import { SLOT_MINUTES, getGridBounds, timeStringToDate, startOfDay, endOfDay, type ArtistTimeOff, type ArtistWorkingWindow } from "@/lib/schedule-grid";
 
 // Re-exported so server-side code can keep importing these from this file —
 // only a Client Component (the schedule grid, RecurringSeriesRow, and the
 // booking window in src/lib/recurring.ts) needs to import them from
 // @/lib/schedule-grid directly, to avoid pulling this file's Prisma/pg
 // dependency chain into a client bundle (see that file's own comment).
-export { SLOT_MINUTES, getGridBounds, timeStringToDate, startOfDay, endOfDay, type ArtistWorkingWindow };
+export { SLOT_MINUTES, getGridBounds, timeStringToDate, startOfDay, endOfDay, type ArtistTimeOff, type ArtistWorkingWindow };
 
 // "HH:mm", 24-hour, zero-padded — matches what timeStringToDate() expects to parse.
 const TIME_PATTERN = /^([01]\d|2[0-3]):([0-5]\d)$/
@@ -143,6 +143,32 @@ export async function getWorkingWindows(artistIds: string[], date: Date): Promis
 
     return { artistId, start, end };
   });
+}
+
+// Time off that applies to each requested artist on `date`, for drawing on
+// the admin schedule grid. Same matching rule getOpenSlots uses to block
+// slots — a row applies directly (artistId) or salon-wide (artistId null),
+// combined with the shared date-range overlap — so what the grid shades is
+// exactly what booking refuses. One batched query, like getWorkingWindows.
+export async function getTimeOffForDay(artistIds: string[], date: Date): Promise<ArtistTimeOff[]> {
+  const rows = await prisma.timeOff.findMany({
+    where: {
+      AND: [
+        { OR: [{ artistId: { in: artistIds } }, { artistId: null }] },
+        timeOffDateRangeOverlap(startOfDay(date), endOfDay(date)),
+      ],
+    },
+    orderBy: { startTime: "asc" },
+  });
+
+  return rows.flatMap((row) =>
+    (row.artistId === null ? artistIds : [row.artistId]).map((artistId) => ({
+      artistId,
+      start: row.startTime,
+      end: row.endTime,
+      salonWide: row.artistId === null,
+    }))
+  );
 }
 
 export function isValidTimeString(s: string) {

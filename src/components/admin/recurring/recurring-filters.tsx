@@ -3,7 +3,7 @@
 import type { ChangeEvent } from "react"
 import type { Artist } from "@/generated/prisma/client"
 
-const STATUS_OPTIONS = ["ACTIVE", "PAUSED", "CANCELLED"] as const
+const STATUS_OPTIONS = ["ACTIVE", "CANCELLED"] as const
 
 // Plain GET form, auto-submitted on change — re-renders this Server
 // Component page with the new query params. Same pattern as BookingFilters.

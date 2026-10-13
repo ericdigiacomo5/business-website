@@ -2,9 +2,10 @@ import { after } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/require-admin";
 import { SAFE_USER_SELECT_BASIC } from "@/lib/user-select";
-import { sendRecurringResumedNotice, sendRecurringStatusNotice } from "@/lib/appointment-emails";
-import { RecurringStatus, Prisma } from "@/generated/prisma/client";
-import { applyRecurringStatusChange, upcomingSkipsInclude } from "@/lib/booking";
+import { sendRecurringCancelledNotice } from "@/lib/appointment-emails";
+import { Prisma } from "@/generated/prisma/client";
+import { cancelRecurringSeries, upcomingSkipsInclude } from "@/lib/booking";
+import { SERVICE_LINES_INCLUDE } from "@/lib/appointment-services";
 
 export async function PATCH(
     request: Request,
@@ -26,45 +27,37 @@ export async function PATCH(
         return Response.json({ error: "Invalid request body" }, { status: 400 });
     }
 
+    // Cancelling is the only change a standing appointment supports — no
+    // pause, no resume, no editing. Kept as PATCH { status } rather than
+    // DELETE because it's a soft status change, not a row deletion.
     const { status } = body as Record<string, unknown>;
-    if (typeof status !== "string" || !(Object.values(RecurringStatus) as string[]).includes(status)) {
+    if (status !== "CANCELLED") {
         return Response.json(
-            { error: "Status must be one of ACTIVE, PAUSED, CANCELLED" },
+            { error: "A standing appointment can only be cancelled" },
             { status: 400 }
         );
     }
 
-    // Resuming a CANCELLED series back to ACTIVE isn't offered by either UI
-    // but isn't rejected here either — matching this project's general
-    // preference for the UI to guide behavior rather than the API to
-    // over-constrain it (see e.g. admin/appointments' PATCH allowing any
-    // status combination, trusting requireAdmin() as the actual gate).
-
     try {
-        const result = await applyRecurringStatusChange(id, status as RecurringStatus, {
+        const result = await cancelRecurringSeries(id, {
             // Admin: no notice-window restriction, same as
             // PATCH /api/admin/appointments/[id].
             respectNoticeWindow: false,
         });
 
-        // Customer emails only on an actual transition — re-sending the
-        // current status stays silent.
-        if ((status === "PAUSED" || status === "CANCELLED") && result.previousStatus !== status) {
+        // Customer email only on an actual transition — re-cancelling stays
+        // silent.
+        if (result.previousStatus !== "CANCELLED") {
             const freedIds = result.freedAppointmentIds;
-            after(() => sendRecurringStatusNotice(id, status, "salon", freedIds));
-        }
-        const materialization = result.materialization;
-        if (materialization) {
-            after(() => sendRecurringResumedNotice(id, materialization));
+            after(() => sendRecurringCancelledNotice(id, "salon", freedIds));
         }
 
-        // Re-read: a resume advances the watermark and may record new skips
-        // after the status transaction, and the UI shows both.
+        // Re-read with the relations the series lists render.
         const refreshed = await prisma.recurringAppointment.findUnique({
             where: { id },
             include: {
                 artist: true,
-                service: true,
+                ...SERVICE_LINES_INCLUDE,
                 user: { select: SAFE_USER_SELECT_BASIC },
                 ...upcomingSkipsInclude(),
             },

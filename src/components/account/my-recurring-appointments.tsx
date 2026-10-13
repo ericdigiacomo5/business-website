@@ -2,21 +2,17 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import type { RecurringStatus } from "@/generated/prisma/client"
 import {
     RecurringSeriesRow,
-    describeResume,
     type RecurringAppointmentWithRelations,
-    type SeriesConfirmation,
 } from "@/components/recurring/recurring-series-row"
 
-export function MyRecurringAppointments({ canRebook }: { canRebook: boolean }) {
+export function MyRecurringAppointments() {
     const router = useRouter()
     const [series, setSeries] = useState<RecurringAppointmentWithRelations[] | null>(null)
     const [error, setError] = useState<string | null>(null)
-    const [notice, setNotice] = useState<string | null>(null)
     const [busyId, setBusyId] = useState<string | null>(null)
-    const [confirming, setConfirming] = useState<{ id: string; action: SeriesConfirmation } | null>(null)
+    const [confirmingId, setConfirmingId] = useState<string | null>(null)
 
     useEffect(() => {
         let cancelled = false
@@ -38,22 +34,23 @@ export function MyRecurringAppointments({ canRebook }: { canRebook: boolean }) {
         }
     }, [])
 
-    async function handleStatusChange(id: string, status: RecurringStatus): Promise<boolean> {
+    // Cancelling is the only thing a standing appointment supports as a
+    // whole; single visits are cancelled from the bookings list above.
+    async function handleCancel(id: string) {
         setError(null)
-        setNotice(null)
         setBusyId(id)
 
         try {
             const res = await fetch(`/api/recurring-appointments/${id}`, {
                 method: "PATCH",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ status }),
+                body: JSON.stringify({ status: "CANCELLED" }),
             })
 
             if (!res.ok) {
                 const body = await res.json().catch(() => null)
-                setError(body?.error ?? "Couldn't update that series. Please try again.")
-                return false
+                setError(body?.error ?? "Couldn't cancel that series. Please try again.")
+                return
             }
 
             const body = await res.json()
@@ -62,32 +59,16 @@ export function MyRecurringAppointments({ canRebook }: { canRebook: boolean }) {
                     ? prev.map((s) => (s.id === id ? { ...s, ...body.data.recurringAppointment } : s))
                     : prev
             )
-            setConfirming(null)
-            if (body.data.materialization) {
-                setNotice(describeResume(body.data.materialization))
-            }
-            // Pause/cancel free upcoming weeks and resume restores them —
-            // re-render the server-side bookings list above so it reflects
-            // that without a manual reload (see the key on MyBookingsList in
+            setConfirmingId(null)
+            // Cancelling frees the series' upcoming weeks — re-render the
+            // server-side bookings list above so it reflects that without a
+            // manual reload (see the key on MyBookingsList in
             // app/appointments/page.tsx).
             router.refresh()
-            return true
         } catch {
             setError("Network error. Please try again.")
-            return false
         } finally {
             setBusyId(null)
-        }
-    }
-
-    // "Change time" is cancel + book a new standing appointment (there's no
-    // edit). Deep-links the wizard to the same service/artist so only the
-    // day/time needs choosing.
-    async function handleConfirm(s: RecurringAppointmentWithRelations) {
-        const action = confirming?.action
-        const ok = await handleStatusChange(s.id, "CANCELLED")
-        if (ok && action === "change") {
-            router.push(`/book?serviceId=${s.serviceId}&artistId=${s.artistId}`)
         }
     }
 
@@ -111,11 +92,6 @@ export function MyRecurringAppointments({ canRebook }: { canRebook: boolean }) {
                     {error}
                 </p>
             )}
-            {notice && (
-                <p role="status" className="mt-3 text-sm text-foreground">
-                    {notice}
-                </p>
-            )}
 
             <div className="mt-5 flex flex-col gap-4">
                 {series.map((s) => (
@@ -124,15 +100,10 @@ export function MyRecurringAppointments({ canRebook }: { canRebook: boolean }) {
                         series={s}
                         showCustomer={false}
                         busy={busyId === s.id}
-                        confirming={confirming?.id === s.id ? confirming.action : null}
-                        onPause={() => handleStatusChange(s.id, "PAUSED")}
-                        onResume={() => handleStatusChange(s.id, "ACTIVE")}
-                        onCancel={() => setConfirming({ id: s.id, action: "cancel" })}
-                        // Hidden while online booking is closed: the customer
-                        // would cancel their series with no way to rebook it.
-                        onChangeTime={canRebook ? () => setConfirming({ id: s.id, action: "change" }) : undefined}
-                        onConfirm={() => handleConfirm(s)}
-                        onConfirmBack={() => setConfirming(null)}
+                        confirming={confirmingId === s.id}
+                        onCancel={() => setConfirmingId(s.id)}
+                        onConfirm={() => handleCancel(s.id)}
+                        onConfirmBack={() => setConfirmingId(null)}
                     />
                 ))}
             </div>

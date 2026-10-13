@@ -1,4 +1,5 @@
 import { SLOT_MINUTES } from "@/lib/schedule-grid"
+import { servicesLabel } from "@/lib/appointment-services"
 import { ARTIST_COLOR_CYCLE, STATUS_BAR_COLOR, type AdminAppointment } from "./appointment-shared"
 
 export function ScheduleBlock({
@@ -43,7 +44,7 @@ export function ScheduleBlock({
                 aria-hidden
             />
             <span className="truncate pl-1.5 text-xs font-medium text-surface-foreground">
-                {appointment.service.name}
+                {servicesLabel(appointment.services)}
             </span>
             <span className="truncate pl-1.5 text-xs text-muted-foreground">
                 {appointment.user.name ?? appointment.user.email}

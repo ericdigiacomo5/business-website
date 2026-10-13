@@ -1,10 +1,12 @@
 import { after } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { bookOccurrence } from "@/lib/booking";
+import { bookOccurrence, loadServicesToBook } from "@/lib/booking";
+import { parseServiceIds, servicesFitOneAppointment } from "@/lib/appointment-services";
 import { sendBookingConfirmation } from "@/lib/appointment-emails";
 import { BOOKING_WINDOW_DAYS, bookingWindowEnd } from "@/lib/recurring";
 import { auth } from "@/auth";
 import { isBookingEnabled } from "@/lib/settings";
+import { isValidAppointmentLength, MAX_APPOINTMENT_MINUTES } from "@/lib/schedule-grid";
 
 export async function POST(request: Request) {
     const session = await auth()
@@ -40,7 +42,7 @@ export async function POST(request: Request) {
         )
     }
 
-    const { artistId, serviceId, startTime, userId: requestedUserId } = body as Record<string, unknown>
+    const { artistId, serviceIds: requestedServiceIds, startTime, userId: requestedUserId, durationMinutes } = body as Record<string, unknown>
 
     // Only an admin's requested target user is honored — a non-admin's
     // userId is silently ignored (not rejected) so the customer-facing
@@ -51,6 +53,20 @@ export async function POST(request: Request) {
         targetUserId = requestedUserId
     }
 
+    // Same rule for the length override: only an admin can book a length
+    // other than the services' usual one; a non-admin's durationMinutes is
+    // ignored, never honored.
+    let lengthOverride: number | null = null
+    if (isAdmin && durationMinutes !== undefined && durationMinutes !== null) {
+        if (!isValidAppointmentLength(durationMinutes)) {
+            return Response.json(
+                { error: `durationMinutes must be a multiple of 15, from 15 to ${MAX_APPOINTMENT_MINUTES}` },
+                { status: 400 }
+            )
+        }
+        lengthOverride = durationMinutes
+    }
+
     if (typeof artistId !== 'string' || !artistId) {
         return Response.json(
             { error: 'Artist is required' },
@@ -58,9 +74,11 @@ export async function POST(request: Request) {
         )
     }
 
-    if (typeof serviceId !== 'string' || !serviceId) {
+    // One or more services, in the order they'll appear on the appointment.
+    const serviceIds = parseServiceIds(requestedServiceIds)
+    if (typeof serviceIds === 'string') {
         return Response.json(
-            { error: 'Service is required' },
+            { error: serviceIds },
             { status: 400 }
         )
     }
@@ -86,10 +104,8 @@ export async function POST(request: Request) {
     }
 
     // The booking window is enforced here, not just by the UI's 14-day day
-    // strip — without this, any direct API call could book past a standing
-    // appointment's materialized horizon and take that customer's week
-    // before the series claims it. Admins are exempt (same latitude as
-    // past-time booking above).
+    // strip, so a direct API call can't book further ahead than the wizard
+    // allows. Admins are exempt (same latitude as past-time booking above).
     if (!isAdmin && parsedStartTime.getTime() >= bookingWindowEnd().getTime()) {
         return Response.json(
             { error: `You can book up to ${BOOKING_WINDOW_DAYS} days in advance` },
@@ -97,9 +113,9 @@ export async function POST(request: Request) {
         )
     }
 
-    const [artist, service, user] = await Promise.all([
+    const [artist, services, user] = await Promise.all([
         prisma.artist.findUnique({ where: { id: artistId } }),
-        prisma.service.findUnique({ where: { id: serviceId } }),
+        loadServicesToBook(serviceIds),
         prisma.user.findUnique({ where: { id: targetUserId } }),
     ])
 
@@ -122,9 +138,18 @@ export async function POST(request: Request) {
         )
     }
 
-    if (!service) {
+    if (!services) {
         return Response.json(
             { error: 'Service not found' },
+            { status: 400 }
+        )
+    }
+
+    // Only matters without an admin length override, which is validated
+    // against the same maximum above.
+    if (lengthOverride === null && !servicesFitOneAppointment(services)) {
+        return Response.json(
+            { error: 'Those services are too long for one appointment' },
             { status: 400 }
         )
     }
@@ -139,8 +164,8 @@ export async function POST(request: Request) {
     const result = await bookOccurrence({
         userId: targetUserId,
         artistId,
-        serviceId,
-        serviceDurationMinutes: service.durationMinutes,
+        services,
+        durationMinutes: lengthOverride ?? undefined,
         startTime: parsedStartTime,
         allowPast: isAdmin,
     })

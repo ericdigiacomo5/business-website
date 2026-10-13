@@ -1,12 +1,14 @@
 'use client'
 
 import { useState } from "react"
-import type { Artist, AppointmentStatus, PaymentMethod } from "@/generated/prisma/client"
-import { SLOT_MINUTES, type ArtistWorkingWindow } from "@/lib/schedule-grid"
+import type { Artist, AppointmentStatus, PaymentMethod, Service } from "@/generated/prisma/client"
+import { SLOT_MINUTES, type ArtistTimeOff, type ArtistWorkingWindow } from "@/lib/schedule-grid"
 import { toLocalDateKey } from "@/lib/format"
+import type { Discount } from "@/lib/discount"
 import { ScheduleTimeAxis } from "./schedule-time-axis"
 import { ScheduleArtistColumn } from "./schedule-artist-column"
 import { ScheduleDetailSheet } from "./schedule-detail-sheet"
+import { ScheduleBookSheet } from "./schedule-book-sheet"
 import type { AdminAppointment } from "./appointment-shared"
 
 const ROW_HEIGHT_PX = 24
@@ -14,13 +16,20 @@ const ROW_HEIGHT_PX = 24
 export function ScheduleGrid({
     initialAppointments,
     artists,
+    services,
     workingWindows,
+    timeOff,
     gridBounds,
     date,
 }: {
     initialAppointments: AdminAppointment[]
     artists: Artist[]
+    // Active services, for booking from an empty cell.
+    services: Service[]
     workingWindows: ArtistWorkingWindow[]
+    // Blocked ranges for the displayed day, per artist (salon-wide closures
+    // already expanded to every artist).
+    timeOff: ArtistTimeOff[]
     gridBounds: { start: string; end: string }
     date: Date
 }) {
@@ -28,6 +37,10 @@ export function ScheduleGrid({
     const [busyId, setBusyId] = useState<string | null>(null)
     const [error, setError] = useState<string | null>(null)
     const [selectedId, setSelectedId] = useState<string | null>(null)
+    // The empty cell being booked, if any — clicking the grid is how an
+    // admin creates an appointment (there is no separate booking page).
+    const [bookingSlot, setBookingSlot] = useState<{ artistId: string; startTime: Date } | null>(null)
+    const [notice, setNotice] = useState<string | null>(null)
 
     const displayedDateKey = toLocalDateKey(date)
 
@@ -47,6 +60,16 @@ export function ScheduleGrid({
         )
     }
 
+    // Same no-live-refresh reasoning as applyUpdate: a new booking is merged
+    // into local state rather than refetched. A standing appointment returns
+    // every week it booked; only the one on the displayed day belongs here.
+    function handleBooked(created: AdminAppointment[], bookedNotice: string | null) {
+        const onDisplayedDay = created.filter((a) => toLocalDateKey(new Date(a.startTime)) === displayedDateKey)
+        setAppointments((prev) => [...prev, ...onDisplayedDay])
+        setNotice(bookedNotice)
+        setBookingSlot(null)
+    }
+
     async function updateStatus(id: string, status: AppointmentStatus, paymentMethod?: PaymentMethod) {
         setError(null)
         setBusyId(id)
@@ -61,6 +84,84 @@ export function ScheduleGrid({
             if (!res.ok) {
                 const body = await res.json().catch(() => null)
                 setError(body?.error ?? "Couldn't update that booking. Please try again.")
+                return
+            }
+
+            const body = await res.json()
+            applyUpdate(id, body.data)
+        } catch {
+            setError("Network error. Please try again.")
+        } finally {
+            setBusyId(null)
+        }
+    }
+
+    async function updateDiscount(id: string, discount: Discount | null) {
+        setError(null)
+        setBusyId(id)
+
+        try {
+            const res = await fetch(`/api/admin/appointments/${id}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ discount }),
+            })
+
+            if (!res.ok) {
+                const body = await res.json().catch(() => null)
+                setError(body?.error ?? "Couldn't update that discount. Please try again.")
+                return
+            }
+
+            const body = await res.json()
+            applyUpdate(id, body.data)
+        } catch {
+            setError("Network error. Please try again.")
+        } finally {
+            setBusyId(null)
+        }
+    }
+
+    async function updateServices(id: string, serviceIds: string[]) {
+        setError(null)
+        setBusyId(id)
+
+        try {
+            const res = await fetch(`/api/admin/appointments/${id}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ serviceIds }),
+            })
+
+            if (!res.ok) {
+                const body = await res.json().catch(() => null)
+                setError(body?.error ?? "Couldn't change that appointment's services. Please try again.")
+                return
+            }
+
+            const body = await res.json()
+            applyUpdate(id, body.data)
+        } catch {
+            setError("Network error. Please try again.")
+        } finally {
+            setBusyId(null)
+        }
+    }
+
+    async function updateLength(id: string, durationMinutes: number) {
+        setError(null)
+        setBusyId(id)
+
+        try {
+            const res = await fetch(`/api/admin/appointments/${id}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ durationMinutes }),
+            })
+
+            if (!res.ok) {
+                const body = await res.json().catch(() => null)
+                setError(body?.error ?? "Couldn't change that appointment's length. Please try again.")
                 return
             }
 
@@ -113,6 +214,7 @@ export function ScheduleGrid({
     const totalRows = (gridEndMinutes - gridStartMinutes) / SLOT_MINUTES
 
     const selectedAppointment = appointments.find((a) => a.id === selectedId) ?? null
+    const bookingArtist = bookingSlot ? (artists.find((a) => a.id === bookingSlot.artistId) ?? null) : null
 
     return (
         <div className="mt-6">
@@ -122,11 +224,20 @@ export function ScheduleGrid({
                 </p>
             )}
 
-            {error && (
+            {/* While the detail sheet is open it shows the error itself — up
+                here it would sit behind the sheet's overlay. */}
+            {error && !selectedAppointment && (
                 <p role="alert" className="mb-3 text-sm text-danger">
                     {error}
                 </p>
             )}
+            {notice && (
+                <p role="status" className="mb-3 text-sm text-foreground">
+                    {notice}
+                </p>
+            )}
+
+            <p className="mb-3 text-sm text-muted-foreground">Click an open time to book an appointment.</p>
 
             <div className="-mx-4 overflow-x-auto px-4">
                 <div
@@ -156,10 +267,19 @@ export function ScheduleGrid({
                                 artist={artist}
                                 columnIndex={index}
                                 workingWindow={workingWindow}
+                                timeOff={timeOff.filter((t) => t.artistId === artist.id)}
                                 appointments={artistAppointments}
                                 gridStartMinutes={gridStartMinutes}
                                 totalRows={totalRows}
-                                onSelect={setSelectedId}
+                                date={date}
+                                onSelect={(id) => {
+                                    setError(null)
+                                    setSelectedId(id)
+                                }}
+                                onBookSlot={(artistId, startTime) => {
+                                    setNotice(null)
+                                    setBookingSlot({ artistId, startTime })
+                                }}
                             />
                         )
                     })}
@@ -170,13 +290,33 @@ export function ScheduleGrid({
                 key={selectedId}
                 appointment={selectedAppointment}
                 busy={busyId === selectedId}
+                error={error}
                 onConfirm={() => selectedId && updateStatus(selectedId, "CONFIRMED")}
                 onCheckout={(paymentMethod) => selectedId && updateStatus(selectedId, "COMPLETED", paymentMethod)}
                 onCancel={() => selectedId && updateStatus(selectedId, "CANCELLED")}
                 onNoShow={() => selectedId && updateStatus(selectedId, "NO_SHOW")}
                 onReschedule={(startTime) => selectedId && rescheduleAppointment(selectedId, startTime)}
-                onClose={() => setSelectedId(null)}
+                onDiscount={(discount) => selectedId && updateDiscount(selectedId, discount)}
+                onChangeLength={(minutes) => selectedId && updateLength(selectedId, minutes)}
+                services={services}
+                onChangeServices={(serviceIds) => selectedId && updateServices(selectedId, serviceIds)}
+                onClose={() => {
+                    setError(null)
+                    setSelectedId(null)
+                }}
             />
+
+            {bookingSlot && bookingArtist && (
+                <ScheduleBookSheet
+                    // Keyed so picking a different cell starts a fresh booking.
+                    key={`${bookingSlot.artistId}|${bookingSlot.startTime.getTime()}`}
+                    artist={bookingArtist}
+                    startTime={bookingSlot.startTime}
+                    services={services}
+                    onBooked={handleBooked}
+                    onClose={() => setBookingSlot(null)}
+                />
+            )}
         </div>
     )
 }

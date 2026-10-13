@@ -4,6 +4,7 @@ import { RecurringFilters } from "@/components/admin/recurring/recurring-filters
 import { AdminRecurringList } from "@/components/admin/recurring/admin-recurring-list"
 import { SAFE_USER_SELECT_BASIC } from "@/lib/user-select"
 import { upcomingSkipsInclude } from "@/lib/booking"
+import { SERVICE_LINES_INCLUDE } from "@/lib/appointment-services"
 
 export default async function AdminRecurringPage({
     searchParams,
@@ -29,7 +30,7 @@ export default async function AdminRecurringPage({
             where,
             include: {
                 artist: true,
-                service: true,
+                ...SERVICE_LINES_INCLUDE,
                 user: { select: SAFE_USER_SELECT_BASIC },
                 ...upcomingSkipsInclude(),
             },

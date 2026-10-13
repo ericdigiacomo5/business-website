@@ -3,8 +3,9 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { sendRecurringConfirmation } from "@/lib/appointment-emails";
 import { isGridAligned, isValidTimeString, timeStringToDate } from "@/lib/availability";
-import { addDays, BOOKING_WINDOW_DAYS, bookingWindowEnd, materializationHorizon } from "@/lib/recurring";
-import { materializeSeries } from "@/lib/booking";
+import { BOOKING_WINDOW_DAYS, bookingWindowEnd, MAX_SERIES_WEEKS, maxSeriesEnd } from "@/lib/recurring";
+import { loadServicesToBook, materializeSeries } from "@/lib/booking";
+import { parseServiceIds, SERVICE_LINES_INCLUDE, servicesFitOneAppointment } from "@/lib/appointment-services";
 import { parseLocalDate } from "@/lib/format";
 import { isBookingEnabled } from "@/lib/settings";
 
@@ -41,7 +42,7 @@ export async function POST(request: Request) {
         )
     }
 
-    const { artistId, serviceId, dayOfWeek, startTime, intervalWeeks, seriesStart, seriesEnd, userId: requestedUserId } = body as Record<string, unknown>
+    const { artistId, serviceIds: requestedServiceIds, dayOfWeek, startTime, intervalWeeks, seriesStart, seriesEnd, userId: requestedUserId } = body as Record<string, unknown>
 
     // Same admin-override rule as the one-off booking route: a non-admin's
     // userId is silently ignored, not rejected, so the customer contract is
@@ -58,9 +59,11 @@ export async function POST(request: Request) {
         )
     }
 
-    if (!serviceId || typeof serviceId !== "string") {
+    // One or more services — every visit of the series gets all of them.
+    const serviceIds = parseServiceIds(requestedServiceIds)
+    if (typeof serviceIds === "string") {
         return Response.json(
-            { error: "Service is required" },
+            { error: serviceIds },
             { status: 400 }
         )
     }
@@ -108,29 +111,35 @@ export async function POST(request: Request) {
         )
     }
 
-    let parsedSeriesEnd: Date | null = null
-    if (seriesEnd !== undefined && seriesEnd !== null) {
-        if (typeof seriesEnd !== "string") {
-            return Response.json(
-                { error: "Series end date is invalid" },
-                { status: 400 }
-            )
-        }
+    // Mandatory for everyone, admins included: the whole series is booked
+    // below, in this request, so it has to know where to stop.
+    if (typeof seriesEnd !== "string" || !seriesEnd) {
+        return Response.json(
+            { error: "Series end date is required" },
+            { status: 400 }
+        )
+    }
 
-        parsedSeriesEnd = parseLocalDate(seriesEnd)
-        if (!parsedSeriesEnd) {
-            return Response.json(
-                { error: "Series end date is invalid" },
-                { status: 400 }
-            )
-        }
+    const parsedSeriesEnd = parseLocalDate(seriesEnd)
+    if (!parsedSeriesEnd) {
+        return Response.json(
+            { error: "Series end date is invalid" },
+            { status: 400 }
+        )
+    }
 
-        if (parsedSeriesEnd.getTime() < parsedSeriesStart.getTime()) {
-            return Response.json(
-                { error: "Series end date must be on or after the series start date" },
-                { status: 400 }
-            )
-        }
+    if (parsedSeriesEnd.getTime() < parsedSeriesStart.getTime()) {
+        return Response.json(
+            { error: "Series end date must be on or after the series start date" },
+            { status: 400 }
+        )
+    }
+
+    if (parsedSeriesEnd.getTime() > maxSeriesEnd(parsedSeriesStart).getTime()) {
+        return Response.json(
+            { error: `A standing appointment can run for at most ${MAX_SERIES_WEEKS} weeks` },
+            { status: 400 }
+        )
     }
 
     // Same admin exemption as the one-off booking route (see FEATURE_GAPS.md
@@ -147,7 +156,8 @@ export async function POST(request: Request) {
 
     // Same booking window as the one-off route, applied to the first
     // occurrence only — the series itself is what's allowed to reach past
-    // the window (that's the point of a standing appointment).
+    // the window, up to its end date (that's the point of a standing
+    // appointment).
     if (!isAdmin && firstOccurrenceStart.getTime() >= bookingWindowEnd().getTime()) {
         return Response.json(
             { error: `A standing appointment must start within the next ${BOOKING_WINDOW_DAYS} days` },
@@ -155,9 +165,9 @@ export async function POST(request: Request) {
         )
     }
 
-    const [artist, service, targetUser] = await Promise.all([
+    const [artist, services, targetUser] = await Promise.all([
         prisma.artist.findUnique({ where: { id: artistId } }),
-        prisma.service.findUnique({ where: { id: serviceId } }),
+        loadServicesToBook(serviceIds),
         prisma.user.findUnique({ where: { id: targetUserId } }),
     ])
 
@@ -177,10 +187,17 @@ export async function POST(request: Request) {
         )
     }
 
-    if (!service) {
+    if (!services) {
         return Response.json(
             { error: "Service not found" },
             { status: 404 }
+        )
+    }
+
+    if (!servicesFitOneAppointment(services)) {
+        return Response.json(
+            { error: "Those services are too long for one appointment" },
+            { status: 400 }
         )
     }
 
@@ -195,33 +212,26 @@ export async function POST(request: Request) {
         data: {
             userId: targetUserId,
             artistId,
-            serviceId,
             dayOfWeek,
             startTime,
             intervalWeeks,
             seriesStart: parsedSeriesStart,
             seriesEnd: parsedSeriesEnd,
+            services: {
+                create: serviceIds.map((serviceId, position) => ({ serviceId, position })),
+            },
         },
     })
 
-    // Same shared materializer the daily job and Resume use, so all three
-    // agree on occurrence identity and skip handling. Creation-time skips
-    // are persisted too, so they stay visible on the series afterward.
-    // allowPast: an admin backdating a series (Gap 3) can still record
-    // weeks that already happened; the job and Resume never can.
-    const now = new Date()
-    const materialization = await materializeSeries(recurringAppointment.id, {
-        fromDateExclusive: addDays(parsedSeriesStart, -1),
-        now,
-        allowPast: isAdmin,
-    })
-    const updatedSeries = await prisma.recurringAppointment.update({
-        where: { id: recurringAppointment.id },
-        data: { materializedThrough: materializationHorizon(now) },
-    })
+    // Books every week through seriesEnd now — nothing extends or re-books
+    // a series later. Skips are persisted, so they stay visible on the
+    // series afterward. allowPast: an admin backdating a series (Gap 3) can
+    // still record weeks that already happened.
+    const materialization = await materializeSeries(recurringAppointment.id, { allowPast: isAdmin })
 
     const created = await prisma.appointment.findMany({
         where: { id: { in: materialization.created.map((c) => c.appointmentId) } },
+        include: SERVICE_LINES_INCLUDE,
         orderBy: { startTime: "asc" },
     })
     // Same { date, reason } shape this route has always returned, so the
@@ -234,7 +244,7 @@ export async function POST(request: Request) {
     after(() => sendRecurringConfirmation(recurringAppointment.id, createdIds, skippedStartTimes))
 
     return Response.json(
-        { data: { recurringAppointment: updatedSeries, created, skipped } },
+        { data: { recurringAppointment, created, skipped } },
         { status: 201 }
     )
 }

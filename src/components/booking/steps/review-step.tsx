@@ -1,12 +1,13 @@
 'use client'
 
-import { useEffect, useState } from "react"
-import type { Appointment, Artist, Service } from "@/generated/prisma/client"
+import { useState } from "react"
+import type { Artist, Service } from "@/generated/prisma/client"
 import { Button } from "@/components/ui/button"
 import { StickyActionBar } from "@/components/ui/sticky-action-bar"
 import { formatDuration, formatPrice, toLocalDateKey, toLocalTimeKey } from "@/lib/format"
-import { MATERIALIZE_WEEKS } from "@/lib/recurring"
-import type { RecurringBookingResult } from "../wizard-state"
+import { MAX_SERIES_WEEKS, maxSeriesEnd } from "@/lib/recurring"
+import { appointmentLengthOptions } from "@/lib/schedule-grid"
+import type { BookedAppointment, RecurringBookingResult } from "../wizard-state"
 
 const INTERVAL_OPTIONS = [
     { weeks: 1, label: "Weekly" },
@@ -15,79 +16,48 @@ const INTERVAL_OPTIONS = [
     { weeks: 4, label: "Every 4 weeks" },
 ]
 
-type StandingConflict = { recurringAppointmentId: string; customerName: string | null; customerEmail: string }
-
-// Admin-only, advisory: booking far ahead can take a week another customer's
-// standing appointment will claim but hasn't booked yet (past its 8-week
-// horizon). The booking would succeed and that customer's week would later
-// be skipped — so warn, but never block. State is only ever set inside the
-// fetch callback (not synchronously in the effect body), and the review step
-// remounts this whenever the selection changes.
-function StandingConflictWarning({
-    artistId,
-    serviceId,
-    startTime,
-}: {
-    artistId: string
-    serviceId: string
-    startTime: string
-}) {
-    const [conflicts, setConflicts] = useState<StandingConflict[]>([])
-
-    useEffect(() => {
-        let cancelled = false
-        const params = new URLSearchParams({ artistId, serviceId, startTime })
-
-        fetch(`/api/admin/recurring-appointments/conflicts?${params.toString()}`)
-            .then(async (res) => (res.ok ? ((await res.json()) as { data: StandingConflict[] }) : { data: [] }))
-            .then((body) => {
-                if (!cancelled) setConflicts(body.data)
-            })
-            // Advisory only — a failed check just means no warning.
-            .catch(() => {})
-
-        return () => {
-            cancelled = true
-        }
-    }, [artistId, serviceId, startTime])
-
-    if (conflicts.length === 0) return null
-
-    const names = conflicts.map((c) => c.customerName ?? c.customerEmail).join(", ")
-    return (
-        <p role="alert" className="mt-4 rounded-sm border border-danger p-3 text-sm text-danger">
-            This is {names}&apos;s standing appointment time. Booking it will skip their week on this date.
-        </p>
-    )
-}
-
 export function ReviewStep({
-    service,
+    services,
     artist,
     startTime,
     userLabel,
     adminMode = false,
     targetUserId,
+    inline = false,
+    slotUnavailableMessage = "That time was just taken — please pick another.",
     onBack,
     onSuccess,
     onRecurringSuccess,
     onSlotUnavailable,
     onUnauthenticated,
 }: {
-    service: Service
+    // One or more, in the order they were picked.
+    services: Service[]
     artist: Artist
     startTime: string
     userLabel: string
+    // Set together by the admin schedule grid: book on behalf of
+    // targetUserId instead of the signed-in user. The server only honors
+    // userId for an ADMIN session, so this is a convenience, not the gate.
     adminMode?: boolean
     targetUserId?: string
+    // Render the actions in normal flow instead of the viewport-fixed bar —
+    // for use inside a modal, where a fixed bar would sit behind the overlay.
+    inline?: boolean
+    slotUnavailableMessage?: string
     onBack: () => void
-    onSuccess: (appointment: Appointment) => void
+    onSuccess: (appointment: BookedAppointment) => void
     onRecurringSuccess: (result: RecurringBookingResult) => void
     onSlotUnavailable: () => void
     onUnauthenticated: () => void
 }) {
     const [error, setError] = useState<string | null>(null)
     const [pending, setPending] = useState(false)
+    const ActionBar = inline ? "div" : StickyActionBar
+
+    const serviceIds = services.map((service) => service.id)
+    const usualMinutes = services.reduce((sum, service) => sum + service.durationMinutes, 0)
+    const priceCents = services.reduce((sum, service) => sum + service.priceCents, 0)
 
     // Kept as local state rather than wizard-reducer state: it doesn't need
     // to survive the unauthenticated-mid-review -> login -> rehydrate round
@@ -97,11 +67,24 @@ export function ReviewStep({
     // expires in the narrow window between toggling this and clicking
     // Confirm, which just means re-toggling after signing back in.
     const [isRecurring, setIsRecurring] = useState(false)
+    // Admin only, one-off only: this client's appointment can be booked
+    // longer or shorter than its services usually take. A standing
+    // appointment books every visit at the usual length; a single visit's
+    // length can be changed afterward from the schedule.
+    const [lengthMinutes, setLengthMinutes] = useState(usualMinutes)
+    const canSetLength = adminMode && !isRecurring
+    const bookedMinutes = canSetLength ? lengthMinutes : usualMinutes
     const [intervalWeeks, setIntervalWeeks] = useState(1)
     const [seriesEnd, setSeriesEnd] = useState("")
 
     async function handleConfirm() {
         setError(null)
+
+        if (isRecurring && !seriesEnd) {
+            setError("Choose an end date for the standing appointment.")
+            return
+        }
+
         setPending(true)
 
         try {
@@ -111,12 +94,12 @@ export function ReviewStep({
                       headers: { "Content-Type": "application/json" },
                       body: JSON.stringify({
                           artistId: artist.id,
-                          serviceId: service.id,
+                          serviceIds,
                           dayOfWeek: new Date(startTime).getDay(),
                           startTime: toLocalTimeKey(new Date(startTime)),
                           intervalWeeks,
                           seriesStart: toLocalDateKey(new Date(startTime)),
-                          seriesEnd: seriesEnd || undefined,
+                          seriesEnd,
                           ...(adminMode && targetUserId ? { userId: targetUserId } : {}),
                       }),
                   })
@@ -125,9 +108,10 @@ export function ReviewStep({
                       headers: { "Content-Type": "application/json" },
                       body: JSON.stringify({
                           artistId: artist.id,
-                          serviceId: service.id,
+                          serviceIds,
                           startTime,
                           ...(adminMode && targetUserId ? { userId: targetUserId } : {}),
+                          ...(bookedMinutes !== usualMinutes ? { durationMinutes: bookedMinutes } : {}),
                       }),
                   })
 
@@ -136,7 +120,7 @@ export function ReviewStep({
                 if (isRecurring) {
                     onRecurringSuccess(body.data as RecurringBookingResult)
                 } else {
-                    onSuccess(body.data as Appointment)
+                    onSuccess(body.data as BookedAppointment)
                 }
                 return
             }
@@ -151,7 +135,7 @@ export function ReviewStep({
 
             if (message === "That time is not available" || res.status === 409) {
                 onSlotUnavailable()
-                setError("That time was just taken — please pick another.")
+                setError(slotUnavailableMessage)
                 return
             }
 
@@ -164,13 +148,25 @@ export function ReviewStep({
     }
 
     return (
-        <div className="pb-28">
+        <div className={inline ? undefined : "pb-28"}>
             <h2 className="text-lg font-semibold text-foreground">Review &amp; Confirm</h2>
 
             <dl className="mt-4 divide-y divide-border rounded-sm border border-border bg-surface">
-                <div className="flex justify-between px-4 py-3">
-                    <dt className="text-sm text-muted-foreground">Service</dt>
-                    <dd className="text-sm font-medium text-surface-foreground">{service.name}</dd>
+                <div className="flex justify-between gap-4 px-4 py-3">
+                    <dt className="text-sm text-muted-foreground">{services.length === 1 ? "Service" : "Services"}</dt>
+                    <dd className="text-right text-sm font-medium text-surface-foreground">
+                        {services.map((service) => (
+                            <span key={service.id} className="block">
+                                {service.name}
+                                {services.length > 1 && (
+                                    <span className="font-normal text-muted-foreground">
+                                        {" "}
+                                        &middot; {formatPrice(service.priceCents)}
+                                    </span>
+                                )}
+                            </span>
+                        ))}
+                    </dd>
                 </div>
                 <div className="flex justify-between px-4 py-3">
                     <dt className="text-sm text-muted-foreground">Artist</dt>
@@ -191,13 +187,29 @@ export function ReviewStep({
                 <div className="flex justify-between px-4 py-3">
                     <dt className="text-sm text-muted-foreground">Duration</dt>
                     <dd className="text-sm font-medium text-surface-foreground">
-                        {formatDuration(service.durationMinutes)}
+                        {canSetLength ? (
+                            <select
+                                aria-label="Appointment length"
+                                value={lengthMinutes}
+                                onChange={(e) => setLengthMinutes(Number(e.target.value))}
+                                className="h-11 rounded-sm border border-border bg-background px-2 text-sm text-foreground"
+                            >
+                                {appointmentLengthOptions(usualMinutes).map((minutes) => (
+                                    <option key={minutes} value={minutes}>
+                                        {formatDuration(minutes)}
+                                        {minutes === usualMinutes ? " (usual)" : ""}
+                                    </option>
+                                ))}
+                            </select>
+                        ) : (
+                            formatDuration(usualMinutes)
+                        )}
                     </dd>
                 </div>
                 <div className="flex justify-between px-4 py-3">
-                    <dt className="text-sm text-muted-foreground">Price</dt>
+                    <dt className="text-sm text-muted-foreground">{services.length === 1 ? "Price" : "Total"}</dt>
                     <dd className="text-sm font-medium text-surface-foreground">
-                        {formatPrice(service.priceCents)}
+                        {formatPrice(priceCents)}
                     </dd>
                 </div>
                 <div className="flex justify-between px-4 py-3">
@@ -205,10 +217,6 @@ export function ReviewStep({
                     <dd className="text-sm font-medium text-surface-foreground">{userLabel}</dd>
                 </div>
             </dl>
-
-            {adminMode && (
-                <StandingConflictWarning artistId={artist.id} serviceId={service.id} startTime={startTime} />
-            )}
 
             <div className="mt-4 rounded-sm border border-border bg-surface p-4">
                 <label className="flex items-center gap-3">
@@ -245,24 +253,26 @@ export function ReviewStep({
 
                         <div>
                             <label htmlFor="series-end" className="block text-xs font-medium text-muted-foreground">
-                                End date (optional)
+                                End date
                             </label>
                             <input
                                 id="series-end"
                                 type="date"
                                 value={seriesEnd}
+                                required
                                 min={toLocalDateKey(new Date(startTime))}
+                                max={toLocalDateKey(maxSeriesEnd(new Date(startTime)))}
                                 onChange={(e) => setSeriesEnd(e.target.value)}
                                 className="mt-1 h-11 w-full rounded-sm border border-border bg-background px-3 text-sm text-foreground"
                             />
                             <p className="mt-1 text-xs text-muted-foreground">
-                                Leave blank to repeat with no set end.
+                                Required — up to {MAX_SERIES_WEEKS} weeks out.
                             </p>
                         </div>
 
                         <p className="text-xs text-muted-foreground">
-                            We&apos;ll keep your next {MATERIALIZE_WEEKS} weeks booked automatically, and let you
-                            know if a week can&apos;t be booked.
+                            We&apos;ll book every visit through your end date now, and let you know if any
+                            date can&apos;t be booked.
                         </p>
                     </div>
                 )}
@@ -274,7 +284,7 @@ export function ReviewStep({
                 </p>
             )}
 
-            <StickyActionBar className="flex items-center gap-3">
+            <ActionBar className={inline ? "mt-4 flex items-center gap-3" : "flex items-center gap-3"}>
                 <Button type="button" variant="secondary" onClick={onBack} disabled={pending}>
                     Back
                 </Button>
@@ -286,7 +296,7 @@ export function ReviewStep({
                 >
                     {pending ? "Booking..." : "Confirm Booking"}
                 </Button>
-            </StickyActionBar>
+            </ActionBar>
         </div>
     )
 }

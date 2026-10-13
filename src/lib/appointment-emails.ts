@@ -7,14 +7,13 @@ import {
     bookingConfirmationEmail,
     receiptEmail,
     recurringConfirmationEmail,
-    recurringResumedEmail,
-    recurringSkippedWeeksEmail,
-    recurringStatusChangedEmail,
+    recurringCancelledEmail,
     type AppointmentEmailDetails,
 } from "@/lib/email-templates"
 import { PAYMENT_METHOD_LABEL } from "@/components/admin/appointment-shared"
-import type { MaterializeResult } from "@/lib/booking"
-import { isCustomerNotifiableSkip } from "@/lib/recurring"
+import { discountOf } from "@/lib/discount"
+import { durationMinutesOf } from "@/lib/schedule-grid"
+import { SERVICE_LINES_INCLUDE, servicesLabel, servicesPriceCents } from "@/lib/appointment-services"
 
 // Server-only (imports prisma) — never import this from a Client Component or
 // from any module one imports; see PROJECT_STATUS.md's RSC-boundary notes.
@@ -37,7 +36,7 @@ const CUSTOMER_SELECT = {
 const APPOINTMENT_INCLUDE = {
     user: { select: CUSTOMER_SELECT },
     artist: { select: { name: true } },
-    service: { select: { name: true, durationMinutes: true, priceCents: true } },
+    ...SERVICE_LINES_INCLUDE,
 } as const
 
 type CustomerRow = {
@@ -69,11 +68,16 @@ type LoadedAppointment = NonNullable<Awaited<ReturnType<typeof loadAppointment>>
 function toDetails(appointment: LoadedAppointment): AppointmentEmailDetails {
     return {
         customerName: appointment.user.name,
-        serviceName: appointment.service.name,
+        // "Manicure + Pedicure" when there's more than one.
+        serviceName: servicesLabel(appointment.services),
         artistName: appointment.artist.name,
         startTime: appointment.startTime,
-        durationMinutes: appointment.service.durationMinutes,
-        priceCents: appointment.service.priceCents,
+        // The appointment's own length — an admin may have set it to
+        // something other than the services' usual duration.
+        durationMinutes: durationMinutesOf(appointment),
+        // What the services were booked at, not their current prices.
+        priceCents: servicesPriceCents(appointment.services),
+        discount: discountOf(appointment),
         ...customerLinks(appointment.user),
     }
 }
@@ -163,8 +167,8 @@ export function sendReceipt(appointmentId: string) {
 }
 
 // One summary email per standing-appointment signup, not one per materialized
-// occurrence — the recurring route books up to MATERIALIZE_WEEKS of them in a
-// loop, and 8 near-identical confirmations in a row would read as spam.
+// occurrence — the recurring route books the whole series in a loop, and
+// dozens of near-identical confirmations in a row would read as spam.
 export function sendRecurringConfirmation(
     recurringAppointmentId: string,
     createdAppointmentIds: string[],
@@ -201,13 +205,12 @@ export function sendRecurringConfirmation(
     })
 }
 
-export function sendRecurringStatusNotice(
+export function sendRecurringCancelledNotice(
     recurringAppointmentId: string,
-    status: "PAUSED" | "CANCELLED",
     changedBy: "customer" | "salon",
     cancelledAppointmentIds: string[],
 ) {
-    return safely("recurring status notice", async () => {
+    return safely("recurring cancelled notice", async () => {
         const [series, cancelled] = await Promise.all([
             loadSeries(recurringAppointmentId),
             prisma.appointment.findMany({
@@ -220,71 +223,10 @@ export function sendRecurringStatusNotice(
 
         await sendEmail({
             to: series.user.email,
-            ...recurringStatusChangedEmail({
+            ...recurringCancelledEmail({
                 ...seriesDetails(series),
-                status,
                 changedBy,
                 cancelledOccurrences: cancelled.map((a) => a.startTime),
-            }),
-        })
-    })
-}
-
-// Sent on a real resume (non-ACTIVE -> ACTIVE). Lists what's actually on
-// the books afterward — not just what this resume restored — so the
-// customer sees one complete picture, plus any weeks it couldn't restore.
-export function sendRecurringResumedNotice(recurringAppointmentId: string, materialization: MaterializeResult) {
-    return safely("recurring resumed notice", async () => {
-        const [series, upcoming] = await Promise.all([
-            loadSeries(recurringAppointmentId),
-            prisma.appointment.findMany({
-                where: {
-                    recurringAppointmentId,
-                    status: { in: ["UPCOMING", "CONFIRMED"] },
-                    startTime: { gt: new Date() },
-                },
-                select: { id: true, startTime: true },
-                orderBy: { startTime: "asc" },
-            }),
-        ])
-        if (!series) return
-
-        const { ok } = await sendEmail({
-            to: series.user.email,
-            ...recurringResumedEmail({
-                ...seriesDetails(series),
-                upcoming: upcoming.map((a) => a.startTime),
-                couldNotRestore: materialization.skipped
-                    .filter((s) => isCustomerNotifiableSkip(s.reason))
-                    .map((s) => s.startTime),
-            }),
-        })
-        if (ok) {
-            for (const a of upcoming) await markReminderCoveredIfImminent(a.id, a.startTime)
-        }
-    })
-}
-
-// Sent by the daily materialization job for weeks newly found to be
-// unbookable. Only customer-actionable reasons — see
-// isCustomerNotifiableSkip() for why an inactive artist or an
-// already-passed date isn't emailed.
-export function sendSkippedWeeksNotice(
-    recurringAppointmentId: string,
-    skipped: { startTime: Date; reason: string }[],
-) {
-    return safely("skipped weeks notice", async () => {
-        const notifiable = skipped.filter((s) => isCustomerNotifiableSkip(s.reason))
-        if (notifiable.length === 0) return
-
-        const series = await loadSeries(recurringAppointmentId)
-        if (!series) return
-
-        await sendEmail({
-            to: series.user.email,
-            ...recurringSkippedWeeksEmail({
-                ...seriesDetails(series),
-                skippedDates: notifiable.map((s) => s.startTime),
             }),
         })
     })
@@ -296,7 +238,7 @@ async function loadSeries(recurringAppointmentId: string) {
         include: {
             user: { select: CUSTOMER_SELECT },
             artist: { select: { name: true } },
-            service: { select: { name: true } },
+            ...SERVICE_LINES_INCLUDE,
         },
     })
 }
@@ -304,7 +246,7 @@ async function loadSeries(recurringAppointmentId: string) {
 function seriesDetails(series: NonNullable<Awaited<ReturnType<typeof loadSeries>>>) {
     return {
         customerName: series.user.name,
-        serviceName: series.service.name,
+        serviceName: servicesLabel(series.services),
         artistName: series.artist.name,
         intervalWeeks: series.intervalWeeks,
         manageUrl: customerLinks(series.user).manageUrl,
@@ -329,7 +271,7 @@ export async function sendDueReminders(): Promise<ReminderRunResult> {
     // still exists and would otherwise still match on time alone.
     const due = await prisma.appointment.findMany({
         where: {
-            status: { in: ["UPCOMING", "CONFIRMED"] },
+            status: { in: ["PENDING", "CONFIRMED"] },
             reminderSentAt: null,
             startTime: { gt: now, lte: windowEnd },
         },

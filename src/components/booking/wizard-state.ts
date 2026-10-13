@@ -1,13 +1,19 @@
 import type { Appointment, RecurringAppointment } from "@/generated/prisma/client"
+import type { ServiceLine } from "@/lib/appointment-services"
 
-export type WizardStep = "user" | "service" | "artist" | "datetime" | "review" | "confirmed"
+export type WizardStep = "service" | "artist" | "datetime" | "review" | "confirmed"
+
+// What the booking routes return: the appointment plus its service lines.
+export type BookedAppointment = Appointment & { services: ServiceLine[] }
 
 export type RecurringBookingResult = {
     recurringAppointment: RecurringAppointment
-    created: Appointment[]
+    created: BookedAppointment[]
     skipped: { date: string; reason: string }[]
 }
 
+// The customer an admin is booking for (see the admin schedule grid's
+// ScheduleBookSheet) — not part of this wizard's own state.
 export type SelectedUser = {
     id: string
     name: string | null
@@ -16,26 +22,25 @@ export type SelectedUser = {
 }
 
 export type WizardState = {
-    adminMode: boolean
     step: WizardStep
-    selectedUser: SelectedUser | null
-    serviceId: string | null
+    // One or more, in the order they were picked.
+    serviceIds: string[]
     artistId: string | null
     date: string | null // 'YYYY-MM-DD'
     startTime: string | null // full ISO string
-    confirmedAppointment: Appointment | null
+    confirmedAppointment: BookedAppointment | null
     confirmedRecurring: RecurringBookingResult | null
 }
 
-export type WizardSelection = Pick<WizardState, "serviceId" | "artistId" | "date" | "startTime">
+export type WizardSelection = Pick<WizardState, "serviceIds" | "artistId" | "date" | "startTime">
 
 export type WizardAction =
-    | { type: "SELECT_USER"; user: SelectedUser }
-    | { type: "SELECT_SERVICE"; serviceId: string }
+    | { type: "TOGGLE_SERVICE"; serviceId: string }
+    | { type: "CONFIRM_SERVICES" }
     | { type: "SELECT_ARTIST"; artistId: string }
     | { type: "SELECT_DATETIME"; date: string; startTime: string }
     | { type: "GO_BACK" }
-    | { type: "SUBMIT_SUCCESS"; appointment: Appointment }
+    | { type: "SUBMIT_SUCCESS"; appointment: BookedAppointment }
     | { type: "SUBMIT_RECURRING_SUCCESS"; result: RecurringBookingResult }
     | { type: "SLOT_UNAVAILABLE" }
     | { type: "HYDRATE"; selection: WizardSelection }
@@ -43,41 +48,25 @@ export type WizardAction =
 
 // The same "what's the furthest step this partial selection supports" logic
 // answers both "the user arrived via ?serviceId=/?artistId= query params" and
-// "we're rehydrating from sessionStorage after a login redirect." In admin
-// mode the customer has to be chosen first — unless one was preselected
-// (e.g. "Change Time" on a standing appointment links here with the
-// customer, service, and artist already known).
-export function computeInitialStep(
-    selection: Partial<WizardSelection>,
-    adminMode: boolean,
-    hasSelectedUser: boolean = false
-): WizardStep {
-    if (adminMode && !hasSelectedUser) {
-        return "user"
-    }
-    if (selection.serviceId && selection.artistId && selection.date && selection.startTime) {
+// "we're rehydrating from sessionStorage after a login redirect."
+export function computeInitialStep(selection: Partial<WizardSelection>): WizardStep {
+    const hasServices = (selection.serviceIds?.length ?? 0) > 0
+    if (hasServices && selection.artistId && selection.date && selection.startTime) {
         return "review"
     }
-    if (selection.serviceId && selection.artistId) {
+    if (hasServices && selection.artistId) {
         return "datetime"
     }
-    if (selection.serviceId) {
+    if (hasServices) {
         return "artist"
     }
     return "service"
 }
 
-export function initialWizardState(
-    selection: Partial<WizardSelection>,
-    adminMode: boolean = false,
-    initialUser: SelectedUser | null = null
-): WizardState {
-    const selectedUser = adminMode ? initialUser : null
+export function initialWizardState(selection: Partial<WizardSelection>): WizardState {
     return {
-        adminMode,
-        step: computeInitialStep(selection, adminMode, selectedUser !== null),
-        selectedUser,
-        serviceId: selection.serviceId ?? null,
+        step: computeInitialStep(selection),
+        serviceIds: selection.serviceIds ?? [],
         artistId: selection.artistId ?? null,
         date: selection.date ?? null,
         startTime: selection.startTime ?? null,
@@ -86,30 +75,32 @@ export function initialWizardState(
     }
 }
 
-function stepOrder(adminMode: boolean): WizardStep[] {
-    return adminMode
-        ? ["user", "service", "artist", "datetime", "review"]
-        : ["service", "artist", "datetime", "review"]
-}
+const STEP_ORDER: WizardStep[] = ["service", "artist", "datetime", "review"]
 
-function previousStep(step: WizardStep, adminMode: boolean): WizardStep {
-    const order = stepOrder(adminMode)
-    const index = order.indexOf(step)
-    return index > 0 ? order[index - 1] : step
+function previousStep(step: WizardStep): WizardStep {
+    const index = STEP_ORDER.indexOf(step)
+    return index > 0 ? STEP_ORDER[index - 1] : step
 }
 
 export function wizardReducer(state: WizardState, action: WizardAction): WizardState {
     switch (action.type) {
-        case "SELECT_USER":
-            return { ...state, selectedUser: action.user, step: "service" }
-        case "SELECT_SERVICE":
-            return { ...state, serviceId: action.serviceId, step: "artist" }
+        case "TOGGLE_SERVICE": {
+            // Picking a service no longer advances on its own — there may be
+            // more to add. Changing the services changes how long the
+            // appointment is, so a time picked for the old set is dropped.
+            const serviceIds = state.serviceIds.includes(action.serviceId)
+                ? state.serviceIds.filter((id) => id !== action.serviceId)
+                : [...state.serviceIds, action.serviceId]
+            return { ...state, serviceIds, date: null, startTime: null }
+        }
+        case "CONFIRM_SERVICES":
+            return state.serviceIds.length > 0 ? { ...state, step: "artist" } : state
         case "SELECT_ARTIST":
             return { ...state, artistId: action.artistId, step: "datetime" }
         case "SELECT_DATETIME":
             return { ...state, date: action.date, startTime: action.startTime, step: "review" }
         case "GO_BACK":
-            return { ...state, step: previousStep(state.step, state.adminMode) }
+            return { ...state, step: previousStep(state.step) }
         case "SUBMIT_SUCCESS":
             return { ...state, step: "confirmed", confirmedAppointment: action.appointment, confirmedRecurring: null }
         case "SUBMIT_RECURRING_SUCCESS":
@@ -120,10 +111,13 @@ export function wizardReducer(state: WizardState, action: WizardAction): WizardS
             return {
                 ...state,
                 ...action.selection,
-                step: computeInitialStep(action.selection, state.adminMode),
+                // A selection saved before multi-service booking has no
+                // serviceIds; treat it as empty rather than crash.
+                serviceIds: action.selection.serviceIds ?? [],
+                step: computeInitialStep(action.selection),
             }
         case "RESET":
-            return initialWizardState({}, state.adminMode)
+            return initialWizardState({})
         default:
             return state
     }

@@ -1,17 +1,14 @@
 import type { WizardStep } from "./wizard-state"
 
-function getSteps(adminMode: boolean): { key: WizardStep; label: string }[] {
-    return [
-        ...(adminMode ? [{ key: "user" as const, label: "Customer" }] : []),
-        { key: "service" as const, label: "Service" },
-        { key: "artist" as const, label: "Artist" },
-        { key: "datetime" as const, label: "Time" },
-        { key: "review" as const, label: "Confirm" },
-    ]
-}
+const STEPS: { key: WizardStep; label: string }[] = [
+    { key: "service", label: "Service" },
+    { key: "artist", label: "Artist" },
+    { key: "datetime", label: "Time" },
+    { key: "review", label: "Confirm" },
+]
 
-export function StepIndicator({ current, adminMode = false }: { current: WizardStep; adminMode?: boolean }) {
-    const steps = getSteps(adminMode)
+export function StepIndicator({ current }: { current: WizardStep }) {
+    const steps = STEPS
     const currentIndex = steps.findIndex((s) => s.key === current)
 
     return (
