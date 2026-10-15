@@ -5,6 +5,8 @@
 // browser bundler can't resolve). availability.ts re-exports these so
 // server-side code doesn't need two import paths.
 
+import type { Artist } from "@/generated/prisma/client";
+
 export const SLOT_MINUTES = 15;
 
 // Longest a single appointment may be set to run (8 hours).
@@ -46,6 +48,29 @@ export type ArtistWorkingWindow = { artistId: string; start: string | null; end:
 // per artist, flagged so the grid can label it differently.
 export type ArtistTimeOff = { artistId: string; start: string; end: string; salonWide: boolean };
 
+// The admin schedule's two layouts: every artist on one day, or one artist
+// across one week (Sunday–Saturday). Carried in the URL as ?view=week; day
+// is the default.
+export type ScheduleView = "day" | "week";
+
+export function parseScheduleView(value: string | undefined): ScheduleView {
+  return value === "week" ? "week" : "day";
+}
+
+// One column of the admin schedule grid: one artist on one day. The day
+// view has one per artist; the week view has one per day, for one artist.
+export type ScheduleColumn = {
+  artist: Artist;
+  date: Date;
+  heading: string;
+  // Only set in the week view — in the day view every column is the same day.
+  isToday: boolean;
+  // Index into the header color cycle; stays the artist's own in week view.
+  colorIndex: number;
+  workingWindow: ArtistWorkingWindow;
+  timeOff: ArtistTimeOff[];
+};
+
 // No timezone handling yet: times are interpreted in the server's local
 // timezone. Fine for local dev, but a hard blocker for the Cloudflare
 // Workers deploy (Workers always run in UTC — see PROJECT_STATUS.md's
@@ -54,6 +79,14 @@ export type ArtistTimeOff = { artistId: string; start: string; end: string; salo
 export function startOfDay(date: Date): Date {
   const result = new Date(date);
   result.setHours(0, 0, 0, 0);
+  return result;
+}
+
+// Sunday of the week containing `date`, at midnight — weeks run Sunday to
+// Saturday, matching the admin month calendar's columns.
+export function startOfWeek(date: Date): Date {
+  const result = startOfDay(date);
+  result.setDate(result.getDate() - result.getDay());
   return result;
 }
 

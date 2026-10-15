@@ -1,5 +1,4 @@
-import type { Artist } from "@/generated/prisma/client"
-import { SLOT_MINUTES, timeStringToDate, type ArtistTimeOff, type ArtistWorkingWindow } from "@/lib/schedule-grid"
+import { SLOT_MINUTES, timeStringToDate, type ScheduleColumn } from "@/lib/schedule-grid"
 import { Badge } from "@/components/ui/badge"
 import { ScheduleBlock } from "./schedule-block"
 import { ARTIST_COLOR_CYCLE, type AdminAppointment } from "./appointment-shared"
@@ -13,34 +12,33 @@ function toTimeString(minutes: number): string {
     return `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`
 }
 
+// One artist on one day — a column of the day view (one per artist) or of
+// the week view (one per day, for one artist).
 export function ScheduleArtistColumn({
-    artist,
+    scheduleColumn,
     columnIndex,
-    workingWindow,
-    timeOff,
     appointments,
     gridStartMinutes,
     totalRows,
-    date,
     onSelect,
     onBookSlot,
 }: {
-    artist: Artist
+    scheduleColumn: ScheduleColumn
     columnIndex: number
-    workingWindow: ArtistWorkingWindow
-    timeOff: ArtistTimeOff[]
+    // Already scoped to this column's artist and day.
     appointments: AdminAppointment[]
     gridStartMinutes: number
     totalRows: number
-    date: Date
     onSelect: (id: string) => void
     // Clicking an empty cell inside the artist's working hours starts a
     // booking for that artist at that time.
     onBookSlot: (artistId: string, startTime: Date) => void
 }) {
-    const color = ARTIST_COLOR_CYCLE[columnIndex % ARTIST_COLOR_CYCLE.length]
-    const isOffToday = workingWindow.start === null || workingWindow.end === null
+    const { artist, date, heading, isToday, colorIndex, workingWindow, timeOff } = scheduleColumn
+    const color = ARTIST_COLOR_CYCLE[colorIndex % ARTIST_COLOR_CYCLE.length]
+    const isOff = workingWindow.start === null || workingWindow.end === null
     const column = columnIndex + 2 // offset by 1 for the time-axis column (grid columns are 1-indexed)
+    const dayLabel = date.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })
 
     const windowStart = workingWindow.start ? toMinutes(workingWindow.start) : null
     const windowEnd = workingWindow.end ? toMinutes(workingWindow.end) : null
@@ -72,12 +70,13 @@ export function ScheduleArtistColumn({
         <>
             <div
                 style={{ gridColumn: column, gridRow: 1 }}
-                className={`sticky top-0 z-10 flex flex-col items-center justify-center gap-1 border-b border-border px-2 py-2 ${
-                    isOffToday ? "bg-muted" : color.header
+                className={`sticky top-0 z-10 flex flex-col items-center justify-center gap-1 border-b border-l border-border px-2 py-2 ${
+                    isOff ? "bg-muted" : color.header
                 }`}
             >
-                <span className="truncate text-sm font-medium">{artist.name}</span>
-                {isOffToday && <Badge tone="muted">Off today</Badge>}
+                <span className="truncate text-sm font-medium">{heading}</span>
+                {isToday && <Badge tone="primary">Today</Badge>}
+                {isOff && <Badge tone="muted">Off</Badge>}
             </div>
 
             {Array.from({ length: totalRows }, (_, i) => {
@@ -92,13 +91,13 @@ export function ScheduleArtistColumn({
                     windowStart !== null && windowEnd !== null && minutes >= windowStart && minutes < windowEnd
 
                 if (!inWorkingHours) {
-                    return <div key={i} style={style} className="border-b border-border bg-muted/40" />
+                    return <div key={i} style={style} className="border-b border-l border-border bg-muted/40" />
                 }
                 // Booking would be refused here (getOpenSlots blocks the same
                 // ranges), so don't offer it; the time-off block drawn below
                 // covers these cells and says why.
                 if (occupied.has(minutes) || isTimeOff(minutes)) {
-                    return <div key={i} style={style} className="border-b border-border" />
+                    return <div key={i} style={style} className="border-b border-l border-border" />
                 }
 
                 const startTime = timeStringToDate(date, toTimeString(minutes))
@@ -108,11 +107,13 @@ export function ScheduleArtistColumn({
                         type="button"
                         style={style}
                         onClick={() => onBookSlot(artist.id, startTime)}
-                        aria-label={`Book ${artist.name} at ${startTime.toLocaleTimeString("en-US", {
+                        // Names the day too: in the week view, "10:00 AM"
+                        // alone repeats in every column.
+                        aria-label={`Book ${artist.name} on ${dayLabel} at ${startTime.toLocaleTimeString("en-US", {
                             hour: "numeric",
                             minute: "2-digit",
                         })}`}
-                        className="cursor-pointer border-b border-border hover:bg-accent/15 focus-visible:bg-accent/15 focus-visible:outline-none"
+                        className="cursor-pointer border-b border-l border-border hover:bg-accent/15 focus-visible:bg-accent/15 focus-visible:outline-none"
                     />
                 )
             })}
@@ -129,7 +130,7 @@ export function ScheduleArtistColumn({
                         backgroundImage:
                             "repeating-linear-gradient(135deg, transparent 0 6px, color-mix(in srgb, currentColor 14%, transparent) 6px 7px)",
                     }}
-                    className="overflow-hidden border-b border-border bg-muted px-2 py-1 text-muted-foreground"
+                    className="overflow-hidden border-b border-l border-border bg-muted px-2 py-1 text-muted-foreground"
                 >
                     <span className="block truncate text-xs font-medium">
                         {entry.salonWide ? "Salon closed" : "Time off"}
@@ -142,7 +143,6 @@ export function ScheduleArtistColumn({
                     key={appointment.id}
                     appointment={appointment}
                     gridStartMinutes={gridStartMinutes}
-                    colorIndex={columnIndex}
                     column={column}
                     onSelect={onSelect}
                 />

@@ -1,17 +1,20 @@
 import { SLOT_MINUTES } from "@/lib/schedule-grid"
 import { servicesLabel } from "@/lib/appointment-services"
-import { ARTIST_COLOR_CYCLE, STATUS_BAR_COLOR, type AdminAppointment } from "./appointment-shared"
+import {
+    appointmentCategory,
+    CATEGORY_BLOCK_COLOR,
+    STATUS_BAR_COLOR,
+    type AdminAppointment,
+} from "./appointment-shared"
 
 export function ScheduleBlock({
     appointment,
     gridStartMinutes,
-    colorIndex,
     column,
     onSelect,
 }: {
     appointment: AdminAppointment
     gridStartMinutes: number
-    colorIndex: number
     column: number
     onSelect: (id: string) => void
 }) {
@@ -27,7 +30,7 @@ export function ScheduleBlock({
     const startRow = 2 + (startMinutes - gridStartMinutes) / SLOT_MINUTES
     const rowSpan = durationMinutes / SLOT_MINUTES
 
-    const color = ARTIST_COLOR_CYCLE[colorIndex % ARTIST_COLOR_CYCLE.length]
+    const color = CATEGORY_BLOCK_COLOR[appointmentCategory(appointment)]
 
     return (
         <button

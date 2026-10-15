@@ -1,9 +1,9 @@
-import { prisma } from "@/lib/prisma";
-import { requireAdmin } from "@/lib/require-admin";
-import { AppointmentStatus, Prisma } from "@/generated/prisma/client";
-import { NextRequest } from "next/server";
-import { endOfDay } from "@/lib/availability";
-import { parseLocalDate } from "@/lib/format";
+import { prisma } from "@/lib/prisma"
+import { requireAdmin } from "@/lib/require-admin"
+import { AppointmentStatus, Prisma } from "@/generated/prisma/client"
+import { NextRequest } from "next/server"
+import { endOfDay } from "@/lib/availability"
+import { parseLocalDate } from "@/lib/format"
 
 export async function GET(request: NextRequest) {
     const forbidden = await requireAdmin()
@@ -20,10 +20,7 @@ export async function GET(request: NextRequest) {
         const artist = await prisma.artist.findUnique({ where: { id: artistId } })
 
         if (!artist) {
-            return Response.json(
-                { error: "Artist not found" },
-                { status: 404 }
-            )
+            return Response.json({ error: "Artist not found" }, { status: 404 })
         }
 
         where.artistId = artistId
@@ -31,10 +28,7 @@ export async function GET(request: NextRequest) {
 
     if (status) {
         if (!(Object.values(AppointmentStatus) as string[]).includes(status)) {
-            return Response.json(
-                { error: "Status is invalid" },
-                { status: 400 }
-            )
+            return Response.json({ error: "Status is invalid" }, { status: 400 })
         }
 
         where.status = status as AppointmentStatus
@@ -45,10 +39,7 @@ export async function GET(request: NextRequest) {
         const parsed = parseLocalDate(startDate)
 
         if (!parsed) {
-            return Response.json(
-                { error: "Start date is invalid" },
-                { status: 400 }
-            )
+            return Response.json({ error: "Start date is invalid" }, { status: 400 })
         }
 
         startBound = parsed
@@ -59,20 +50,14 @@ export async function GET(request: NextRequest) {
         const parsed = parseLocalDate(endDate)
 
         if (!parsed) {
-            return Response.json(
-                { error: "End date is invalid" },
-                { status: 400 }
-            )
+            return Response.json({ error: "End date is invalid" }, { status: 400 })
         }
 
         endBound = endOfDay(parsed)
     }
 
     if (startBound && endBound && startBound > endBound) {
-        return Response.json(
-            { error: "Start date must be before end date" },
-            { status: 400 }
-        )
+        return Response.json({ error: "Start date must be before end date" }, { status: 400 })
     }
 
     if (startBound || endBound) {
@@ -84,7 +69,7 @@ export async function GET(request: NextRequest) {
 
     const appointments = await prisma.appointment.findMany({
         where,
-        orderBy: { startTime: 'asc' }
+        orderBy: { startTime: "asc" },
     })
 
     return Response.json(appointments)

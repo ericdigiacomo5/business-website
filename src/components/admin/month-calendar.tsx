@@ -4,6 +4,7 @@ import { useState } from "react"
 import Link from "next/link"
 import { ChevronLeft, ChevronRight } from "lucide-react"
 import { parseLocalDate, toLocalDateKey } from "@/lib/format"
+import type { ScheduleView } from "@/lib/schedule-grid"
 
 const WEEKDAYS = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"]
 
@@ -21,6 +22,7 @@ export function MonthCalendar({
     todayKey,
     status,
     artistId,
+    scheduleView,
 }: {
     selectedDateKey: string
     // Passed from the server so server and client render the same "today"
@@ -29,6 +31,8 @@ export function MonthCalendar({
     todayKey: string
     status: string
     artistId: string
+    // Day or week — carried so picking a date doesn't switch layouts.
+    scheduleView: ScheduleView
 }) {
     const selected = parseLocalDate(selectedDateKey) ?? new Date()
     const [view, setView] = useState({ year: selected.getFullYear(), month: selected.getMonth() })
@@ -53,6 +57,7 @@ export function MonthCalendar({
         const params = new URLSearchParams({ dateString: dateKey })
         if (status) params.set("status", status)
         if (artistId) params.set("artistId", artistId)
+        if (scheduleView === "week") params.set("view", "week")
         return `/admin?${params.toString()}`
     }
 

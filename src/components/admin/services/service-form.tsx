@@ -1,9 +1,12 @@
 import { useState, type FormEvent } from "react"
+import type { ServiceType } from "@/generated/prisma/client"
 import { Button } from "@/components/ui/button"
+import { SERVICE_CATEGORIES, SERVICE_CATEGORY_LABEL } from "@/lib/service-category"
 
 export type ServiceFormValues = {
     name: string
     description: string
+    category: ServiceType
     durationMinutes: number
     priceCents: number
 }
@@ -11,6 +14,7 @@ export type ServiceFormValues = {
 const emptyValues: ServiceFormValues = {
     name: "",
     description: "",
+    category: "HANDS",
     durationMinutes: 45,
     priceCents: 0,
 }
@@ -28,6 +32,7 @@ export function ServiceForm({
 }) {
     const [name, setName] = useState(initial?.name ?? emptyValues.name)
     const [description, setDescription] = useState(initial?.description ?? emptyValues.description)
+    const [category, setCategory] = useState<ServiceType>(initial?.category ?? emptyValues.category)
     const [durationMinutes, setDurationMinutes] = useState(
         String(initial?.durationMinutes ?? emptyValues.durationMinutes)
     )
@@ -40,6 +45,7 @@ export function ServiceForm({
         onSubmit({
             name,
             description,
+            category,
             durationMinutes: Number(durationMinutes),
             priceCents: Math.round(Number(priceDollars) * 100),
         })
@@ -71,6 +77,24 @@ export function ServiceForm({
                     rows={2}
                     className="mt-1 w-full rounded-sm border border-border bg-background px-3 py-2 text-sm text-foreground"
                 />
+            </div>
+
+            <div>
+                <label htmlFor="service-category" className="block text-xs font-medium text-muted-foreground">
+                    Category
+                </label>
+                <select
+                    id="service-category"
+                    value={category}
+                    onChange={(e) => setCategory(e.target.value as ServiceType)}
+                    className="mt-1 h-11 w-full rounded-sm border border-border bg-background px-3 text-sm text-foreground"
+                >
+                    {SERVICE_CATEGORIES.map((value) => (
+                        <option key={value} value={value}>
+                            {SERVICE_CATEGORY_LABEL[value]}
+                        </option>
+                    ))}
+                </select>
             </div>
 
             <div className="flex gap-4">

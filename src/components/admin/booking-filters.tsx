@@ -2,6 +2,7 @@
 
 import type { ChangeEvent } from "react"
 import type { Artist } from "@/generated/prisma/client"
+import type { ScheduleView } from "@/lib/schedule-grid"
 import { STATUS_LABEL } from "./appointment-shared"
 
 const STATUS_OPTIONS = ["PENDING", "CONFIRMED", "CANCELLED", "COMPLETED", "NO_SHOW"] as const
@@ -14,11 +15,14 @@ export function BookingFilters({
     currentStatus,
     currentArtistId,
     currentDateString,
+    view,
 }: {
     artists: Artist[]
     currentStatus: string
     currentArtistId: string
     currentDateString: string
+    // The week view is one artist at a time, so "All" isn't offered there.
+    view: ScheduleView
 }) {
     function autoSubmit(e: ChangeEvent<HTMLSelectElement>) {
         e.currentTarget.form?.requestSubmit()
@@ -31,6 +35,7 @@ export function BookingFilters({
                 fields, so without this, changing a filter would silently
                 reset DatePicker back to today. */}
             <input type="hidden" name="dateString" value={currentDateString} />
+            {view === "week" && <input type="hidden" name="view" value="week" />}
             <div>
                 <label htmlFor="status" className="block text-xs font-medium text-muted-foreground">
                     Status
@@ -62,7 +67,7 @@ export function BookingFilters({
                     onChange={autoSubmit}
                     className="mt-1 h-11 rounded-sm border border-border bg-background px-3 text-sm text-foreground"
                 >
-                    <option value="">All</option>
+                    {view === "day" && <option value="">All</option>}
                     {artists.map((artist) => (
                         <option key={artist.id} value={artist.id}>
                             {artist.name}

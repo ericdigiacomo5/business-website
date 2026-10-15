@@ -298,6 +298,146 @@ function LengthForm({
     )
 }
 
+// What a rebooking will book: the same client, artist and services, at a
+// time picked here.
+export type Rebooking = {
+    startTime: string
+    serviceIds: string[]
+    // Only set when this appointment had a custom length, so the next visit
+    // keeps it; otherwise the services' usual length applies.
+    durationMinutes: number | null
+}
+
+// Books the client's next visit straight from a completed appointment — the
+// usual moment is at checkout, while they're still at the desk. Pick a time,
+// confirm, done; anything different (another artist, other services) goes
+// through a normal booking from the grid instead.
+function RebookForm({
+    appointment,
+    activeServices,
+    lengthMinutes,
+    usualMinutes,
+    busy,
+    onBook,
+    onBack,
+}: {
+    appointment: AdminAppointment
+    // Active services only — the booking route doesn't check whether a
+    // service is retired, so one that has been is left off here.
+    activeServices: Service[]
+    lengthMinutes: number
+    usualMinutes: number
+    busy: boolean
+    onBook: (rebooking: Rebooking) => void
+    onBack: () => void
+}) {
+    const [startTime, setStartTime] = useState<string | null>(null)
+    // Kept when going back from the confirm step (e.g. after the time was
+    // taken), so the picker reopens on the same day instead of today.
+    const [date, setDate] = useState<string | null>(null)
+
+    const lines = appointment.services.filter((line) =>
+        activeServices.some((service) => service.id === line.serviceId)
+    )
+    const dropped = appointment.services.filter((line) => !lines.includes(line))
+
+    if (lines.length === 0) {
+        return (
+            <div className="flex flex-col gap-2">
+                <p className="text-sm text-muted-foreground">
+                    The services on this appointment are no longer offered, so it can&apos;t be booked again as-is. Book
+                    the next visit from the schedule instead.
+                </p>
+                <Button variant="ghost" size="md" onClick={onBack}>
+                    Back
+                </Button>
+            </div>
+        )
+    }
+
+    // A custom length only carries over when every service does — with one
+    // dropped, the old length no longer describes the visit.
+    const durationMinutes = dropped.length === 0 && lengthMinutes !== usualMinutes ? lengthMinutes : null
+    const visitMinutes =
+        durationMinutes ??
+        lines.reduce(
+            (sum, line) => sum + (activeServices.find((s) => s.id === line.serviceId)?.durationMinutes ?? 0),
+            0
+        )
+
+    if (startTime) {
+        const when = new Date(startTime).toLocaleString("en-US", {
+            weekday: "short",
+            month: "short",
+            day: "numeric",
+            hour: "numeric",
+            minute: "2-digit",
+        })
+        return (
+            <div className="flex flex-col gap-3">
+                <p className="text-sm font-medium text-foreground">Book the next visit?</p>
+                <dl className="flex flex-col gap-1 text-sm">
+                    <div className="flex justify-between gap-4">
+                        <dt className="text-muted-foreground">When</dt>
+                        <dd className="font-medium text-foreground">{when}</dd>
+                    </div>
+                    <div className="flex justify-between gap-4">
+                        <dt className="text-muted-foreground">Services</dt>
+                        <dd className="text-right font-medium text-foreground">
+                            {servicesLabel(lines)} ({formatDuration(visitMinutes)})
+                        </dd>
+                    </div>
+                    <div className="flex justify-between gap-4">
+                        <dt className="text-muted-foreground">With</dt>
+                        <dd className="font-medium text-foreground">{appointment.artist.name}</dd>
+                    </div>
+                </dl>
+                <p className="text-xs text-muted-foreground">
+                    Booked at today&apos;s prices. The client gets a confirmation email.
+                </p>
+                <Button
+                    size="md"
+                    onClick={() =>
+                        onBook({ startTime, serviceIds: lines.map((line) => line.serviceId), durationMinutes })
+                    }
+                    disabled={busy}
+                >
+                    Book Next Visit
+                </Button>
+                <Button variant="ghost" size="md" onClick={() => setStartTime(null)} disabled={busy}>
+                    Choose another time
+                </Button>
+            </div>
+        )
+    }
+
+    return (
+        <div className="flex flex-col gap-2">
+            {dropped.length > 0 && (
+                <p className="text-xs text-muted-foreground">
+                    {/* One string, not text around {…}: split across lines,
+                        the compiler dropped the space after "is". */}
+                    {`${servicesLabel(dropped)} ${dropped.length === 1 ? "is" : "are"} no longer offered and won't be rebooked.`}
+                </p>
+            )}
+            <DateTimeStep
+                artistId={appointment.artistId}
+                initialDate={date}
+                serviceDurationMinutes={visitMinutes}
+                heading="Book the Next Visit"
+                daysAhead={ADMIN_DAYS_AHEAD}
+                onSelect={(pickedDate, picked) => {
+                    setDate(pickedDate)
+                    setStartTime(picked)
+                }}
+            />
+            <Button variant="ghost" size="md" onClick={onBack}>
+                Back
+            </Button>
+        </div>
+    )
+}
+
 // Centered modal, not a bottom sheet — a floating popover anchored to the
 // schedule block was ruled out (nowhere good to render next to a ~24px-tall
 // block near a 375px viewport edge), and an edge-to-edge bottom sheet was
@@ -317,6 +457,7 @@ export function ScheduleDetailSheet({
     onChangeLength,
     services,
     onChangeServices,
+    onRebook,
     onClose,
 }: {
     appointment: AdminAppointment | null
@@ -336,6 +477,8 @@ export function ScheduleDetailSheet({
     services: Service[]
     // The appointment's full new list, in order.
     onChangeServices: (serviceIds: string[]) => void
+    // Books a new appointment for this client; offered once it's completed.
+    onRebook: (rebooking: Rebooking) => void
     onClose: () => void
 }) {
     const [checkingOut, setCheckingOut] = useState(false)
@@ -343,6 +486,7 @@ export function ScheduleDetailSheet({
     const [discounting, setDiscounting] = useState(false)
     const [changingLength, setChangingLength] = useState(false)
     const [editingServices, setEditingServices] = useState(false)
+    const [rebooking, setRebooking] = useState(false)
 
     if (!appointment) return null
 
@@ -636,6 +780,29 @@ export function ScheduleDetailSheet({
                                     Cancel
                                 </Button>
                             </div>
+                        )}
+                    </div>
+                )}
+
+                {/* Checking out leaves this sheet open on the now-completed
+                    appointment, so this is what the admin sees right after
+                    picking the payment method. */}
+                {appointment.status === "COMPLETED" && (
+                    <div className="mt-4">
+                        {rebooking ? (
+                            <RebookForm
+                                appointment={appointment}
+                                activeServices={services}
+                                lengthMinutes={lengthMinutes}
+                                usualMinutes={usualMinutes}
+                                busy={busy}
+                                onBook={onRebook}
+                                onBack={() => setRebooking(false)}
+                            />
+                        ) : (
+                            <Button size="md" onClick={() => setRebooking(true)} disabled={busy} className="w-full">
+                                Book Next Visit
+                            </Button>
                         )}
                     </div>
                 )}

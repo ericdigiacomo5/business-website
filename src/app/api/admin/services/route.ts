@@ -1,5 +1,6 @@
-import { prisma } from "@/lib/prisma";
-import { requireAdmin } from "@/lib/require-admin";
+import { prisma } from "@/lib/prisma"
+import { requireAdmin } from "@/lib/require-admin"
+import { isServiceCategory } from "@/lib/service-category"
 
 export async function POST(request: Request) {
     const notAuthorized = await requireAdmin()
@@ -7,64 +8,53 @@ export async function POST(request: Request) {
         return notAuthorized
     }
 
-    let body: unknown;
+    let body: unknown
     try {
         body = await request.json()
     } catch {
-        return Response.json(
-            { error: "Invalid JSON body" },
-            { status: 400 }
-        )
+        return Response.json({ error: "Invalid JSON body" }, { status: 400 })
     }
 
-    if (typeof body !== 'object' || body === null) {
-        return Response.json(
-            { error: 'Invalid request body' },
-            { status: 400 }
-        )
+    if (typeof body !== "object" || body === null) {
+        return Response.json({ error: "Invalid request body" }, { status: 400 })
     }
 
-    const { name, description, durationMinutes, priceCents } = body as Record<string, unknown>
+    const { name, description, category, durationMinutes, priceCents } = body as Record<
+        string,
+        unknown
+    >
 
-    if (!name || typeof name !== 'string') {
-        return Response.json(
-            { error: 'Name is required' },
-            { status: 400 }
-        )
+    if (!name || typeof name !== "string") {
+        return Response.json({ error: "Name is required" }, { status: 400 })
     }
 
-    if (description !== undefined && description !== null && typeof description !== 'string') {
-        return Response.json(
-            { error: 'Description is invalid' },
-            { status: 400 }
-        )
+    if (description !== undefined && description !== null && typeof description !== "string") {
+        return Response.json({ error: "Description is invalid" }, { status: 400 })
     }
 
-    if (!durationMinutes || typeof durationMinutes !== 'number') {
-        return Response.json(
-            { error: "Duration is required" },
-            { status: 400 }
-        )
+    if (!isServiceCategory(category)) {
+        return Response.json({ error: "Category is required" }, { status: 400 })
+    }
+
+    if (!durationMinutes || typeof durationMinutes !== "number") {
+        return Response.json({ error: "Duration is required" }, { status: 400 })
     }
 
     if (!Number.isInteger(durationMinutes) || durationMinutes <= 0 || durationMinutes % 15 !== 0) {
         return Response.json(
             { error: "Duration must be a positive multiple of 15 minutes" },
-            { status: 400 }
+            { status: 400 },
         )
     }
 
-    if (!priceCents || typeof priceCents !== 'number') {
-        return Response.json(
-            { error: "Price is required" },
-            { status: 400 }
-        )
+    if (!priceCents || typeof priceCents !== "number") {
+        return Response.json({ error: "Price is required" }, { status: 400 })
     }
 
     if (!Number.isInteger(priceCents) || priceCents < 0) {
         return Response.json(
             { error: "Price must be a non-negative whole number of cents" },
-            { status: 400 }
+            { status: 400 },
         )
     }
 
@@ -72,13 +62,11 @@ export async function POST(request: Request) {
         data: {
             name: name,
             description: description,
+            category: category,
             durationMinutes: durationMinutes,
-            priceCents: priceCents
-        }
+            priceCents: priceCents,
+        },
     })
 
-    return Response.json(
-        { data: service },
-        { status: 201 }
-    )
+    return Response.json({ data: service }, { status: 201 })
 }

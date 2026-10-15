@@ -1,4 +1,11 @@
-import type { Appointment, AppointmentStatus, Artist, PaymentMethod, User } from "@/generated/prisma/client"
+import type {
+    Appointment,
+    AppointmentStatus,
+    Artist,
+    PaymentMethod,
+    ServiceType,
+    User,
+} from "@/generated/prisma/client"
 import type { ServiceLine } from "@/lib/appointment-services"
 
 // Deliberately a Pick, not the full `User`. This type crosses a Server→Client
@@ -37,27 +44,42 @@ export const STATUS_LABEL: Record<AppointmentStatus, string> = {
     NO_SHOW: "NO-SHOW",
 }
 
-// Indexed by an artist's position in the existing createdAt-ascending order
-// (same order the artists query already uses), so column coloring is stable
-// across reloads rather than reshuffled. Built only from this project's
-// existing design tokens (same bg-*/opacity pattern Badge's tone map uses) —
-// a skim aid for telling columns apart at a glance, not a unique identifier,
-// so the cycle repeating past 4 artists is an acceptable trade-off (blocks
-// are still labeled with text regardless of color).
-// `block` uses opaque bg-schedule-tint-* tokens (see globals.css), not
-// bg-*/opacity utilities — a translucent fill lets the grid lines underneath
-// show through the block, which is exactly what these are meant to hide.
-export const ARTIST_COLOR_CYCLE: { header: string; block: string; blockBorder: string }[] = [
-    { header: "bg-primary/10 text-primary", block: "bg-schedule-tint-primary", blockBorder: "border-primary/40" },
-    { header: "bg-accent/20 text-accent-foreground", block: "bg-schedule-tint-accent", blockBorder: "border-accent/50" },
-    { header: "bg-success/10 text-success", block: "bg-schedule-tint-success", blockBorder: "border-success/40" },
-    { header: "bg-muted text-muted-foreground", block: "bg-schedule-tint-muted", blockBorder: "border-border" },
+// Column-header tint, indexed by an artist's position in the existing
+// createdAt-ascending order (same order the artists query already uses), so
+// column coloring is stable across reloads rather than reshuffled — a skim
+// aid for telling columns apart, not a unique identifier, so the cycle
+// repeating past 4 artists is an acceptable trade-off. Blocks used to share
+// this tint; they're colored by service category now (CATEGORY_BLOCK_COLOR),
+// since the column already says whose appointment it is.
+export const ARTIST_COLOR_CYCLE: { header: string }[] = [
+    { header: "bg-primary/10 text-primary" },
+    { header: "bg-accent/20 text-accent-foreground" },
+    { header: "bg-success/10 text-success" },
+    { header: "bg-muted text-muted-foreground" },
 ]
 
-// Small left-edge bar color per status, layered on top of the artist's
-// background fill on each block — kept separate from ARTIST_COLOR_CYCLE so
-// "whose column" and "what state" stay two distinct, non-competing signals
-// rather than merging into one color system.
+// Block fill per service category. `block` uses opaque bg-schedule-tint-*
+// tokens (see globals.css), not bg-*/opacity utilities — a translucent fill
+// lets the grid lines underneath show through the block, which is exactly
+// what these are meant to hide. Muted is left unused so it can't be mistaken
+// for a completed/inactive block.
+export const CATEGORY_BLOCK_COLOR: Record<ServiceType, { block: string; blockBorder: string }> = {
+    HANDS: { block: "bg-schedule-tint-primary", blockBorder: "border-primary/40" },
+    FEET: { block: "bg-schedule-tint-accent", blockBorder: "border-accent/50" },
+    WAX: { block: "bg-schedule-tint-success", blockBorder: "border-success/40" },
+}
+
+// An appointment can hold services from several categories; it's colored by
+// the first one (services are in booked order), and the block's label still
+// names every service.
+export function appointmentCategory(appointment: AdminAppointment): ServiceType {
+    return appointment.services[0].service.category
+}
+
+// Small left-edge bar color per status, layered on top of the category's
+// background fill on each block — kept separate from CATEGORY_BLOCK_COLOR so
+// "what kind of service" and "what state" stay two distinct, non-competing
+// signals rather than merging into one color system.
 export const STATUS_BAR_COLOR: Record<AppointmentStatus, string> = {
     PENDING: "bg-primary",
     CONFIRMED: "bg-success",

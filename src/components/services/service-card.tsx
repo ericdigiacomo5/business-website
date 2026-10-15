@@ -14,16 +14,22 @@ export function ServiceCard({ service }: { service: Service }) {
             {service.description && (
                 <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{service.description}</p>
             )}
-            <div className="mt-4 text-sm text-muted-foreground">{formatDuration(service.durationMinutes)}</div>
-            <Link
-                href={`/book?serviceId=${service.id}`}
-                className={buttonVariants({
-                    variant: "secondary",
-                    className: "mt-5 w-full bg-[#f0e2cf]! hover:bg-[#e6cead]!",
-                })}
-            >
-                Book This Service
-            </Link>
+            {/* mt-auto pushes duration + button to the bottom of the card, so
+                they line up across a grid row even when one card has no (or a
+                shorter) description. Cards stretch to the row's height as grid
+                items, and the card is already flex-col. */}
+            <div className="mt-auto pt-4">
+                <div className="text-sm text-muted-foreground">{formatDuration(service.durationMinutes)}</div>
+                <Link
+                    href={`/book?serviceId=${service.id}`}
+                    className={buttonVariants({
+                        variant: "secondary",
+                        className: "mt-5 w-full bg-[#f0e2cf]! hover:bg-[#e6cead]!",
+                    })}
+                >
+                    Book This Service
+                </Link>
+            </div>
         </Card>
     )
 }

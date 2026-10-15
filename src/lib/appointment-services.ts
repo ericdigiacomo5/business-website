@@ -3,18 +3,20 @@
 // "what is this appointment, what does it cost, how long is it usually" has
 // one definition.
 
+import type { ServiceType } from "@/generated/prisma/client"
 import { MAX_APPOINTMENT_MINUTES } from "@/lib/schedule-grid"
 
 // Most services one appointment (or standing appointment) can hold.
 export const MAX_SERVICES_PER_APPOINTMENT = 8
 
 // One service on an appointment, as every read returns it: the price and
-// duration it was booked at, plus the service itself for its name.
+// duration it was booked at, plus the service itself for its name and
+// category (the schedule grid colors a block by its first line's category).
 export type ServiceLine = {
     serviceId: string
     priceCents: number
     durationMinutes: number
-    service: { id: string; name: string }
+    service: { id: string; name: string; category: ServiceType }
 }
 
 // Prisma include for an Appointment's services, in booked order. A plain

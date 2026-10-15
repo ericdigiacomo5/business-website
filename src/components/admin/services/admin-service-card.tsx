@@ -2,6 +2,7 @@ import type { Service } from "@/generated/prisma/client"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { formatDuration, formatPrice } from "@/lib/format"
+import { SERVICE_CATEGORY_LABEL } from "@/lib/service-category"
 import { ServiceForm, type ServiceFormValues } from "./service-form"
 
 export function AdminServiceCard({
@@ -26,6 +27,7 @@ export function AdminServiceCard({
                 initial={{
                     name: service.name,
                     description: service.description ?? "",
+                    category: service.category,
                     durationMinutes: service.durationMinutes,
                     priceCents: service.priceCents,
                 }}
@@ -48,6 +50,7 @@ export function AdminServiceCard({
                     <p className="mt-1 text-sm text-muted-foreground">{service.description}</p>
                 )}
                 <p className="mt-1 text-sm text-muted-foreground">
+                    {SERVICE_CATEGORY_LABEL[service.category]} &middot;{" "}
                     {formatDuration(service.durationMinutes)} &middot; {formatPrice(service.priceCents)}
                 </p>
             </div>

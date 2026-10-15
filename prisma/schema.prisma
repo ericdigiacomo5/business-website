@@ -17,10 +17,17 @@ enum Role {
   ADMIN
 }
 
+enum ServiceType {
+  HANDS
+  FEET
+  WAX
+}
+
 model Service {
   id              String   @id @default(cuid())
   name            String
   description     String?
+  category        ServiceType
   durationMinutes Int
   priceCents      Int
   active          Boolean  @default(true)

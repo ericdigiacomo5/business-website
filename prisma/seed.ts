@@ -23,6 +23,7 @@ async function main() {
             id: "seed-service-mani",
             name: "Manicure",
             description: "Gel manicure with color.",
+            category: "HANDS",
             durationMinutes: 45,
             priceCents: 4500,
         }

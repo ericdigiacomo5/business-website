@@ -6,7 +6,10 @@ import { ScheduleGrid } from "@/components/admin/schedule-grid"
 import { BookingToggle } from "@/components/admin/booking-toggle"
 import { DatePicker } from "@/components/admin/admin-date-picker"
 import { MonthCalendar } from "@/components/admin/month-calendar"
+import { ScheduleViewToggle } from "@/components/admin/schedule-view-toggle"
 import { startOfDay, endOfDay, getWorkingWindows, getGridBounds, getTimeOffForDay } from "@/lib/availability"
+import { parseScheduleView, startOfWeek, type ScheduleColumn } from "@/lib/schedule-grid"
+import { addDays } from "@/lib/recurring"
 import { toLocalDateKey, parseLocalDate } from "@/lib/format"
 import { isBookingEnabled } from "@/lib/settings"
 import { SERVICE_LINES_INCLUDE } from "@/lib/appointment-services"
@@ -15,14 +18,32 @@ import { SAFE_USER_SELECT_BASIC } from "@/lib/user-select"
 export default async function AdminBookingsPage({
     searchParams,
 }: {
-    searchParams: Promise<{ status?: string; artistId?: string, dateString?: string, dateDown?: string, dateUp?: string }>
+    searchParams: Promise<{
+        status?: string
+        artistId?: string
+        dateString?: string
+        dateDown?: string
+        dateUp?: string
+        view?: string
+    }>
 }) {
     const params = await searchParams
     const statusParam = params.status ?? ""
-    const artistIdParam = params.artistId ?? ""
+    const view = parseScheduleView(params.view)
 
     const parsedDate = params.dateString ? parseLocalDate(params.dateString) : null
     const date = parsedDate ?? new Date()
+
+    // Inactive artists are hidden everywhere except admin/artists (where
+    // they can be reactivated) — this dashboard, its filters, and the
+    // schedule grid should never surface one. Read before the redirect
+    // below, since the week view needs an artist to fall back to.
+    const allArtists = await prisma.artist.findMany({ where: { active: true }, orderBy: { createdAt: "asc" } })
+
+    // The week view is one artist at a time: with none (or an unknown one)
+    // chosen, it shows the first.
+    const weekNeedsArtist = view === "week" && !allArtists.some((a) => a.id === params.artistId)
+    const artistIdParam = weekNeedsArtist ? (allArtists[0]?.id ?? "") : (params.artistId ?? "")
 
     // The picker submits a delta (dateDown/dateUp), not a computed date —
     // the server does the arithmetic and redirects to a canonical
@@ -31,24 +52,26 @@ export default async function AdminBookingsPage({
     // dateString yet" and "malformed dateString" by falling back to today,
     // so the URL — not a transient delta — is always the source of truth
     // for which day is being viewed (survives a reload or a shared link).
-    const delta = params.dateDown ? -1 : params.dateUp ? 1 : 0
-    if (delta !== 0 || !parsedDate) {
-        const newDate = new Date(date)
-        newDate.setDate(newDate.getDate() + delta)
-
+    // In the week view a step is 7 days, keeping the same weekday selected.
+    const delta = (params.dateDown ? -1 : params.dateUp ? 1 : 0) * (view === "week" ? 7 : 1)
+    if (delta !== 0 || !parsedDate || (weekNeedsArtist && artistIdParam)) {
         const query = new URLSearchParams()
-        query.set("dateString", toLocalDateKey(newDate))
+        query.set("dateString", toLocalDateKey(addDays(date, delta)))
         if (statusParam) query.set("status", statusParam)
         if (artistIdParam) query.set("artistId", artistIdParam)
+        if (view === "week") query.set("view", "week")
 
         redirect(`/admin?${query.toString()}`)
     }
 
+    // Day view: the selected day. Week view: Sunday–Saturday around it.
+    const days = view === "week" ? Array.from({ length: 7 }, (_, i) => addDays(startOfWeek(date), i)) : [date]
+
     const where: Prisma.AppointmentWhereInput = {
         startTime: {
-            gte: startOfDay(date),
-            lte: endOfDay(date)
-        }
+            gte: startOfDay(days[0]),
+            lte: endOfDay(days[days.length - 1]),
+        },
     }
 
     if (statusParam && (Object.values(AppointmentStatus) as string[]).includes(statusParam)) {
@@ -70,7 +93,7 @@ export default async function AdminBookingsPage({
         where.artistId = artistIdParam
     }
 
-    const [appointments, allArtists, services, bookingEnabled] = await Promise.all([
+    const [appointments, services, bookingEnabled] = await Promise.all([
         prisma.appointment.findMany({
             where,
             // Explicit select on `user`, never a bare include — Prisma returns
@@ -84,10 +107,6 @@ export default async function AdminBookingsPage({
             },
             orderBy: { startTime: "asc" },
         }),
-        // Inactive artists are hidden everywhere except admin/artists (where
-        // they can be reactivated) — this dashboard, its filters, and the
-        // schedule grid should never surface one.
-        prisma.artist.findMany({ where: { active: true }, orderBy: { createdAt: "asc" } }),
         // For booking straight from the grid (clicking an open time).
         prisma.service.findMany({ where: { active: true }, orderBy: { createdAt: "asc" } }),
         isBookingEnabled(),
@@ -100,18 +119,42 @@ export default async function AdminBookingsPage({
     // fetched.
     const artists = artistIdParam ? allArtists.filter((a) => a.id === artistIdParam) : allArtists
     const artistIds = artists.map((a) => a.id)
-    const [workingWindows, timeOff] = await Promise.all([
-        getWorkingWindows(artistIds, date),
-        getTimeOffForDay(artistIds, date),
+    // One batched query per day (two in the day view, fourteen in the week
+    // view — every artist's rows for a day come back in one query).
+    const [workingWindowsByDay, timeOffByDay] = await Promise.all([
+        Promise.all(days.map((day) => getWorkingWindows(artistIds, day))),
+        Promise.all(days.map((day) => getTimeOffForDay(artistIds, day))),
     ])
-    const gridBounds = getGridBounds(workingWindows)
+    const gridBounds = getGridBounds(workingWindowsByDay.flat())
+
+    const todayKey = toLocalDateKey(new Date())
+    const colorIndexOf = (artistId: string) => allArtists.findIndex((a) => a.id === artistId)
+    const columns: ScheduleColumn[] = days.flatMap((day, dayIndex) =>
+        artists.map((artist) => ({
+            artist,
+            date: day,
+            heading:
+                view === "week"
+                    ? day.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })
+                    : artist.name,
+            isToday: view === "week" && toLocalDateKey(day) === todayKey,
+            colorIndex: colorIndexOf(artist.id),
+            workingWindow: workingWindowsByDay[dayIndex].find((w) => w.artistId === artist.id) ?? {
+                artistId: artist.id,
+                start: null,
+                end: null,
+            },
+            timeOff: timeOffByDay[dayIndex].filter((t) => t.artistId === artist.id),
+        }))
+    )
 
     const dateKey = toLocalDateKey(date)
     const calendarProps = {
         selectedDateKey: dateKey,
-        todayKey: toLocalDateKey(new Date()),
+        todayKey,
         status: statusParam,
         artistId: artistIdParam,
+        scheduleView: view,
     }
 
     return (
@@ -124,6 +167,7 @@ export default async function AdminBookingsPage({
                 currentStatus={statusParam}
                 currentArtistId={artistIdParam}
                 currentDateString={toLocalDateKey(date)}
+                view={view}
             />
             {/* Month calendar beside the grid on desktop; collapsed above it
                 on mobile so it doesn't push the schedule below the fold.
@@ -147,21 +191,26 @@ export default async function AdminBookingsPage({
                         </div>
                     </details>
 
-                    <DatePicker date={date} status={statusParam} artistId={artistIdParam} />
+                    <ScheduleViewToggle
+                        view={view}
+                        dateString={dateKey}
+                        status={statusParam}
+                        artistId={artistIdParam}
+                        defaultArtistId={allArtists[0]?.id ?? null}
+                    />
+                    <DatePicker date={date} status={statusParam} artistId={artistIdParam} view={view} />
                     {/* Keyed on the view: ScheduleGrid seeds local state from
                         initialAppointments once, and the calendar's links are
                         client-side navigations (unlike DatePicker's form, a
                         full reload) — without the key, switching days would
                         keep showing the previous day's appointments. */}
                     <ScheduleGrid
-                        key={`${dateKey}|${statusParam}|${artistIdParam}`}
+                        key={`${view}|${dateKey}|${statusParam}|${artistIdParam}`}
                         initialAppointments={appointments}
-                        artists={artists}
+                        view={view}
+                        columns={columns}
                         services={services}
-                        workingWindows={workingWindows}
-                        timeOff={timeOff}
                         gridBounds={gridBounds}
-                        date={date}
                     />
                 </div>
             </div>
