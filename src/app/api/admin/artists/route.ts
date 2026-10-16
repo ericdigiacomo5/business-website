@@ -1,5 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/require-admin";
+import { isCloudinaryUrl, optionalText, requiredText, TEXT_LIMITS } from "@/lib/validation";
+import { readJsonObject } from "@/lib/request";
 
 export async function POST(request: Request) {
     const notAuthorized = await requireAdmin()
@@ -7,51 +9,41 @@ export async function POST(request: Request) {
         return notAuthorized
     }
 
-    let body: unknown;
-    try {
-        body = await request.json()
-    } catch {
-        return Response.json(
-            { error: "Invalid JSON body" },
-            { status: 400 }
-        )
-    }
+    const body = await readJsonObject(request)
+    if (body instanceof Response) return body
 
-    if (typeof body !== 'object' || body === null) {
-        return Response.json(
-            { error: 'Invalid request body' },
-            { status: 400 }
-        )
-    }
-
-    const { name, bio, photoUrl } = body as Record<string, unknown>
-
-    if (!name || typeof name !== 'string') {
+    const name = requiredText(body.name, TEXT_LIMITS.artistName)
+    if (name === null) {
         return Response.json(
             { error: 'Name is required' },
             { status: 400 }
         )
     }
 
-    if (bio !== undefined && bio !== null && typeof bio !== 'string') {
+    const bio = optionalText(body.bio, TEXT_LIMITS.bio)
+    if (!bio.ok) {
         return Response.json(
-            { error: 'Bio is invalid' },
+            { error: `Bio must be text of at most ${TEXT_LIMITS.bio} characters` },
             { status: 400 }
         )
     }
 
-    if (photoUrl !== undefined && photoUrl !== null && typeof photoUrl !== 'string') {
+    // Photos only ever come from the signed Cloudinary upload. "" or null
+    // means "no photo".
+    const { photoUrl } = body
+    if (photoUrl !== undefined && photoUrl !== null && photoUrl !== '' &&
+        !isCloudinaryUrl(photoUrl, process.env.CLOUDINARY_CLOUD_NAME)) {
         return Response.json(
-            { error: 'Photo URL is invalid' },
+            { error: 'Photo must be an uploaded image' },
             { status: 400 }
         )
     }
 
     const artist = await prisma.artist.create({
         data: {
-            name: name,
-            bio: bio,
-            photoUrl: photoUrl
+            name,
+            bio: bio.value ?? null,
+            photoUrl: photoUrl ? (photoUrl as string) : null,
         }
     })
 

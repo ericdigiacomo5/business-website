@@ -1,5 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/require-admin";
+import { isCloudinaryUrl, optionalText, TEXT_LIMITS } from "@/lib/validation";
+import { readJsonObject } from "@/lib/request";
 
 export async function POST(
     request: Request,
@@ -21,35 +23,22 @@ export async function POST(
         )
     }
 
-    let body: unknown;
-    try {
-        body = await request.json()
-    } catch {
+    const body = await readJsonObject(request)
+    if (body instanceof Response) return body
+
+    // Portfolio images only ever come from the signed Cloudinary upload.
+    const { imageUrl } = body
+    if (!isCloudinaryUrl(imageUrl, process.env.CLOUDINARY_CLOUD_NAME)) {
         return Response.json(
-            { error: "Invalid JSON body" },
+            { error: 'Image must be an uploaded image' },
             { status: 400 }
         )
     }
 
-    if (typeof body !== 'object' || body === null) {
+    const caption = optionalText(body.caption, TEXT_LIMITS.caption)
+    if (!caption.ok) {
         return Response.json(
-            { error: 'Invalid request body' },
-            { status: 400 }
-        )
-    }
-
-    const { imageUrl, caption } = body as Record<string, unknown>
-
-    if (!imageUrl || typeof imageUrl !== 'string') {
-        return Response.json(
-            { error: 'Image URL is required' },
-            { status: 400 }
-        )
-    }
-
-    if (caption !== undefined && caption !== null && typeof caption !== 'string') {
-        return Response.json(
-            { error: 'Caption is invalid' },
+            { error: `Caption must be text of at most ${TEXT_LIMITS.caption} characters` },
             { status: 400 }
         )
     }
@@ -58,7 +47,7 @@ export async function POST(
         data: {
             artistId,
             imageUrl,
-            caption
+            caption: caption.value ?? null,
         }
     })
 

@@ -4,14 +4,17 @@ import Google from "next-auth/providers/google"
 import { PrismaAdapter } from "@auth/prisma-adapter"
 import { prisma } from "@/lib/prisma"
 import bcrypt from "bcryptjs"
+import { BCRYPT_COST } from "@/lib/password"
+import { normalizeEmail, UNKNOWN_PHONE } from "@/lib/validation"
 
 // Precomputed once so authorize() always runs a bcrypt.compare of roughly the
 // same cost, whether or not the account exists — without this, a nonexistent
 // email returns near-instantly (no compare at all) while a real email with a
 // wrong password takes bcrypt's deliberately-slow compare time, letting an
-// attacker enumerate valid emails purely by timing. Cost factor (10) should
-// match whatever the registration route ends up hashing new passwords with.
-const DUMMY_PASSWORD_HASH = bcrypt.hashSync("no-such-user-timing-safety", 10)
+// attacker enumerate valid emails purely by timing. Uses the same BCRYPT_COST
+// that register/reset-password hash real passwords with, so the two can't
+// drift apart.
+const DUMMY_PASSWORD_HASH = bcrypt.hashSync("no-such-user-timing-safety", BCRYPT_COST)
 
 const prismaAdapter = PrismaAdapter(prisma)
 
@@ -26,10 +29,16 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     // only ever gets name/email/image/emailVerified from the provider
     // profile. Same placeholder sentinel as the migration's backfill for
     // pre-existing rows, so it's recognizable everywhere as "needs a real
-    // value," not a coincidentally-blank field. A future profile-edit
-    // feature can prompt the user to replace it; not built yet.
+    // value," not a coincidentally-blank field — the session's
+    // profileIncomplete flag (below) prompts the user to replace it. The
+    // email is stored in the same normalized (lowercase) form as
+    // Credentials accounts.
     createUser: (data) =>
-      prismaAdapter.createUser!({ ...data, phone: "UNKNOWN" } as typeof data & { phone: string }),
+      prismaAdapter.createUser!({
+        ...data,
+        email: data.email.trim().toLowerCase(),
+        phone: UNKNOWN_PHONE,
+      } as typeof data & { phone: string }),
   },
 
   // JWT, not database, despite having an adapter configured. Originally tried
@@ -57,7 +66,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         password: {},
       },
       async authorize(credentials) {
-        if (!credentials.email || typeof credentials.email !== "string") {
+        // Same canonical form registration stores, so "Jane@x.com" signs in
+        // to the account registered as "jane@x.com".
+        const email = normalizeEmail(credentials.email)
+        if (!email) {
           return null
         }
 
@@ -66,7 +78,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         }
 
         const user = await prisma.user.findUnique({
-          where: { email: credentials.email }
+          where: { email }
         })
 
         // Always compare, even when there's no user/passwordHash to check
@@ -124,16 +136,18 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     // Prisma work these routes already do — and is what buys revocability
     // back after the strategy switch documented above.
     async jwt({ token, user }) {
+      // At sign-in, record who this is, then fall through to the same fresh
+      // read every later request does — so profileIncomplete is correct
+      // from the first page load, not just from the second.
       if (user?.id) {
         token.id = user.id
         token.role = user.role
-        return token
       }
 
       if (token.id) {
         const fresh = await prisma.user.findUnique({
           where: { id: token.id },
-          select: { name: true, email: true, role: true, passwordChangedAt: true },
+          select: { name: true, email: true, phone: true, role: true, passwordChangedAt: true },
         })
 
         // Returning null tells Auth.js to clear the session cookie, so a
@@ -156,6 +170,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         token.name = fresh.name
         token.email = fresh.email
         token.role = fresh.role
+        // Missing name (older self-registered accounts) or the placeholder
+        // phone (Google sign-ups). Drives the "complete your profile" banner
+        // and blocks customer self-booking until fixed. Re-evaluated on every
+        // request, so it clears the moment the profile is saved.
+        token.profileIncomplete = !fresh.name || fresh.phone === UNKNOWN_PHONE
       }
 
       return token
@@ -168,6 +187,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       session.user.role = token.role
       if (token.name) session.user.name = token.name
       if (token.email) session.user.email = token.email
+      session.user.profileIncomplete = token.profileIncomplete ?? false
       return session
     },
   },

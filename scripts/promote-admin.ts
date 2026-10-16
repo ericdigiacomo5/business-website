@@ -11,7 +11,8 @@ const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
 const prisma = new PrismaClient({ adapter });
 
 async function main() {
-    const email = process.argv[2];
+    // Emails are stored lowercased (see normalizeEmail in src/lib/validation.ts).
+    const email = process.argv[2]?.trim().toLowerCase();
 
     if (!email) {
         console.error("Usage: npm run promote-admin -- <email>");

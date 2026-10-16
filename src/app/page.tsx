@@ -38,7 +38,7 @@ export default async function Home() {
                             <br />
                             Glamorous Nails
                         </h1>
-                        <p className="mt-5 max-w-md text-[17px] leading-relaxed text-[#d8e2ea]">
+                        <p className="mt-5 max-w-md text-[17px] leading-relaxed text-on-dark">
                             Hand &amp; gel nail care with old-Hollywood polish. Walk out feeling like the pin-up on
                             our sign — book in a minute, glow for weeks.
                         </p>

@@ -2,6 +2,8 @@ import { prisma } from "@/lib/prisma"
 import { Prisma } from "@/generated/prisma/client"
 import { requireAdmin } from "@/lib/require-admin"
 import { isServiceCategory } from "@/lib/service-category"
+import { optionalText, requiredText, TEXT_LIMITS } from "@/lib/validation"
+import { readJsonObject } from "@/lib/request"
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
     const forbidden = await requireAdmin()
@@ -9,28 +11,27 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
     const { id } = await params
 
-    let body: unknown
-    try {
-        body = await request.json()
-    } catch {
-        return Response.json({ error: "Invalid JSON body" }, { status: 400 })
+    const body = await readJsonObject(request)
+    if (body instanceof Response) return body
+
+    const { category, durationMinutes, priceCents, active } = body
+
+    let name: string | undefined
+    if (body.name !== undefined) {
+        const parsed = requiredText(body.name, TEXT_LIMITS.serviceName)
+        if (parsed === null) {
+            return Response.json({ error: "Name is invalid" }, { status: 400 })
+        }
+        name = parsed
     }
 
-    if (typeof body !== "object" || body === null) {
-        return Response.json({ error: "Invalid request body" }, { status: 400 })
-    }
-
-    const { name, description, category, durationMinutes, priceCents, active } = body as Record<
-        string,
-        unknown
-    >
-
-    if (name !== undefined && (typeof name !== "string" || !name)) {
-        return Response.json({ error: "Name is invalid" }, { status: 400 })
-    }
-
-    if (description !== undefined && description !== null && typeof description !== "string") {
-        return Response.json({ error: "Description is invalid" }, { status: 400 })
+    // undefined = don't touch, null or "" = clear it.
+    const description = optionalText(body.description, TEXT_LIMITS.description)
+    if (!description.ok) {
+        return Response.json(
+            { error: `Description must be text of at most ${TEXT_LIMITS.description} characters` },
+            { status: 400 },
+        )
     }
 
     // No null case, unlike description: category is a required column, so
@@ -79,7 +80,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
     const data: Record<string, unknown> = {}
     if (name !== undefined) data.name = name
-    if (description !== undefined) data.description = description
+    if (description.value !== undefined) data.description = description.value
     if (category !== undefined) data.category = category
     if (durationMinutes !== undefined) data.durationMinutes = durationMinutes
     if (priceCents !== undefined) data.priceCents = priceCents

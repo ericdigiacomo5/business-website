@@ -17,12 +17,14 @@ export function ScheduleBookSheet({
     artist,
     startTime,
     services,
+    maxSeriesWeeks,
     onBooked,
     onClose,
 }: {
     artist: Artist
     startTime: Date
     services: Service[]
+    maxSeriesWeeks: number
     // `appointments` are the new rows in the grid's own shape (relations
     // attached); `notice` is set when there's more to say than the new block
     // shows on its own (a standing appointment's other weeks).
@@ -136,6 +138,7 @@ export function ScheduleBookSheet({
                             userLabel={user.name ?? user.email}
                             adminMode
                             targetUserId={user.id}
+                            maxSeriesWeeks={maxSeriesWeeks}
                             // There's no time picker to fall back to here —
                             // the time came from the cell that was clicked.
                             slotUnavailableMessage="That time isn't open for the full length of these services. Close this and pick another time on the schedule."

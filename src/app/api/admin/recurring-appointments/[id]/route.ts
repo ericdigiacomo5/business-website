@@ -1,6 +1,7 @@
 import { after } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/require-admin";
+import { readJsonObject } from "@/lib/request";
 import { SAFE_USER_SELECT_BASIC } from "@/lib/user-select";
 import { sendRecurringCancelledNotice } from "@/lib/appointment-emails";
 import { Prisma } from "@/generated/prisma/client";
@@ -16,21 +17,13 @@ export async function PATCH(
 
     const { id } = await params;
 
-    let body: unknown;
-    try {
-        body = await request.json();
-    } catch {
-        return Response.json({ error: "Invalid JSON body" }, { status: 400 });
-    }
-
-    if (typeof body !== "object" || body === null) {
-        return Response.json({ error: "Invalid request body" }, { status: 400 });
-    }
+    const body = await readJsonObject(request);
+    if (body instanceof Response) return body;
 
     // Cancelling is the only change a standing appointment supports — no
     // pause, no resume, no editing. Kept as PATCH { status } rather than
     // DELETE because it's a soft status change, not a row deletion.
-    const { status } = body as Record<string, unknown>;
+    const { status } = body;
     if (status !== "CANCELLED") {
         return Response.json(
             { error: "A standing appointment can only be cancelled" },
@@ -42,7 +35,7 @@ export async function PATCH(
         const result = await cancelRecurringSeries(id, {
             // Admin: no notice-window restriction, same as
             // PATCH /api/admin/appointments/[id].
-            respectNoticeWindow: false,
+            noticeHours: 0,
         });
 
         // Customer email only on an actual transition — re-cancelling stays

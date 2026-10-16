@@ -32,6 +32,23 @@
   --success: #2e7d5b;
   --success-foreground: #ffffff;
 
+  /* Long-form body copy (About page) — warmer and softer than --foreground. */
+  --body: #4a3230;
+
+  /* Text on the dark navy hero and footer bands, brightest to dimmest. */
+  --on-dark: #d8e2ea;
+  --on-dark-muted: #a9b8c4;
+  --on-dark-subtle: #6b7d8c;
+
+  /* Cream button on the service cards, and its hover. */
+  --cream: #f0e2cf;
+  --cream-hover: #e6cead;
+
+  /* Schedule grid row height. Compact for a mouse; 44px (the project's
+     minimum tap target) on touch screens, where each empty cell is a
+     tap-to-book button. Read by the grid via var(--schedule-row-height). */
+  --schedule-row-height: 24px;
+
   /* Opaque tints for schedule-grid appointment blocks (see
      appointment-shared.ts's ARTIST_COLOR_CYCLE) — solid colors, not
      translucent bg-color-with-opacity utilities, so grid lines never show
@@ -45,6 +62,12 @@
   --schedule-tint-accent: #b9d9ec;
   --schedule-tint-success: #b7dcc9;
   --schedule-tint-muted: #d7d9dd;
+}
+
+@media (pointer: coarse) {
+  :root {
+    --schedule-row-height: 44px;
+  }
 }
 
 @theme inline {
@@ -63,6 +86,12 @@
   --color-danger-foreground: var(--danger-foreground);
   --color-success: var(--success);
   --color-success-foreground: var(--success-foreground);
+  --color-body: var(--body);
+  --color-on-dark: var(--on-dark);
+  --color-on-dark-muted: var(--on-dark-muted);
+  --color-on-dark-subtle: var(--on-dark-subtle);
+  --color-cream: var(--cream);
+  --color-cream-hover: var(--cream-hover);
   --color-schedule-tint-primary: var(--schedule-tint-primary);
   --color-schedule-tint-accent: var(--schedule-tint-accent);
   --color-schedule-tint-success: var(--schedule-tint-success);

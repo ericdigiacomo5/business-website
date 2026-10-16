@@ -1,6 +1,8 @@
 import { prisma } from "@/lib/prisma"
 import { requireAdmin } from "@/lib/require-admin"
 import { isServiceCategory } from "@/lib/service-category"
+import { optionalText, requiredText, TEXT_LIMITS } from "@/lib/validation"
+import { readJsonObject } from "@/lib/request"
 
 export async function POST(request: Request) {
     const notAuthorized = await requireAdmin()
@@ -8,50 +10,51 @@ export async function POST(request: Request) {
         return notAuthorized
     }
 
-    let body: unknown
-    try {
-        body = await request.json()
-    } catch {
-        return Response.json({ error: "Invalid JSON body" }, { status: 400 })
-    }
+    const body = await readJsonObject(request)
+    if (body instanceof Response) return body
 
-    if (typeof body !== "object" || body === null) {
-        return Response.json({ error: "Invalid request body" }, { status: 400 })
-    }
+    const { category, durationMinutes, priceCents } = body
 
-    const { name, description, category, durationMinutes, priceCents } = body as Record<
-        string,
-        unknown
-    >
-
-    if (!name || typeof name !== "string") {
+    const name = requiredText(body.name, TEXT_LIMITS.serviceName)
+    if (name === null) {
         return Response.json({ error: "Name is required" }, { status: 400 })
     }
 
-    if (description !== undefined && description !== null && typeof description !== "string") {
-        return Response.json({ error: "Description is invalid" }, { status: 400 })
+    const description = optionalText(body.description, TEXT_LIMITS.description)
+    if (!description.ok) {
+        return Response.json(
+            { error: `Description must be text of at most ${TEXT_LIMITS.description} characters` },
+            { status: 400 },
+        )
     }
 
     if (!isServiceCategory(category)) {
         return Response.json({ error: "Category is required" }, { status: 400 })
     }
 
-    if (!durationMinutes || typeof durationMinutes !== "number") {
+    if (durationMinutes === undefined || durationMinutes === null) {
         return Response.json({ error: "Duration is required" }, { status: 400 })
     }
 
-    if (!Number.isInteger(durationMinutes) || durationMinutes <= 0 || durationMinutes % 15 !== 0) {
+    if (
+        typeof durationMinutes !== "number" ||
+        !Number.isInteger(durationMinutes) ||
+        durationMinutes <= 0 ||
+        durationMinutes % 15 !== 0
+    ) {
         return Response.json(
             { error: "Duration must be a positive multiple of 15 minutes" },
             { status: 400 },
         )
     }
 
-    if (!priceCents || typeof priceCents !== "number") {
+    // `=== undefined`, not `!priceCents` — a $0 service (e.g. a free
+    // consultation) is valid, and `!0` is true.
+    if (priceCents === undefined || priceCents === null) {
         return Response.json({ error: "Price is required" }, { status: 400 })
     }
 
-    if (!Number.isInteger(priceCents) || priceCents < 0) {
+    if (typeof priceCents !== "number" || !Number.isInteger(priceCents) || priceCents < 0) {
         return Response.json(
             { error: "Price must be a non-negative whole number of cents" },
             { status: 400 },
@@ -60,11 +63,11 @@ export async function POST(request: Request) {
 
     const service = await prisma.service.create({
         data: {
-            name: name,
-            description: description,
-            category: category,
-            durationMinutes: durationMinutes,
-            priceCents: priceCents,
+            name,
+            description: description.value ?? null,
+            category,
+            durationMinutes,
+            priceCents,
         },
     })
 

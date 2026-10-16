@@ -5,7 +5,8 @@ import type { Artist, Service } from "@/generated/prisma/client"
 import { Button } from "@/components/ui/button"
 import { StickyActionBar } from "@/components/ui/sticky-action-bar"
 import { formatDuration, formatPrice, toLocalDateKey, toLocalTimeKey } from "@/lib/format"
-import { MAX_SERIES_WEEKS, maxSeriesEnd } from "@/lib/recurring"
+import { maxSeriesEnd } from "@/lib/recurring"
+import { PROFILE_INCOMPLETE_MESSAGE } from "@/lib/validation"
 import { appointmentLengthOptions } from "@/lib/schedule-grid"
 import type { BookedAppointment, RecurringBookingResult } from "../wizard-state"
 
@@ -25,6 +26,9 @@ export function ReviewStep({
     targetUserId,
     inline = false,
     slotUnavailableMessage = "That time was just taken — please pick another.",
+    maxSeriesWeeks,
+    profileIncomplete = false,
+    onCompleteProfile,
     onBack,
     onSuccess,
     onRecurringSuccess,
@@ -45,6 +49,14 @@ export function ReviewStep({
     // for use inside a modal, where a fixed bar would sit behind the overlay.
     inline?: boolean
     slotUnavailableMessage?: string
+    // The salon's current standing-appointment cap (AppSettings), from the
+    // server page — sets the end date picker's max.
+    maxSeriesWeeks: number
+    // Customer only: the signed-in user has no name or phone on file. The
+    // server refuses their booking until fixed, so offer the fix instead of
+    // a Confirm button that can only fail.
+    profileIncomplete?: boolean
+    onCompleteProfile?: () => void
     onBack: () => void
     onSuccess: (appointment: BookedAppointment) => void
     onRecurringSuccess: (result: RecurringBookingResult) => void
@@ -54,6 +66,8 @@ export function ReviewStep({
     const [error, setError] = useState<string | null>(null)
     const [pending, setPending] = useState(false)
     const ActionBar = inline ? "div" : StickyActionBar
+    // Admins booking for someone else are never blocked by their own profile.
+    const mustCompleteProfile = !adminMode && profileIncomplete && onCompleteProfile !== undefined
 
     const serviceIds = services.map((service) => service.id)
     const usualMinutes = services.reduce((sum, service) => sum + service.durationMinutes, 0)
@@ -261,12 +275,12 @@ export function ReviewStep({
                                 value={seriesEnd}
                                 required
                                 min={toLocalDateKey(new Date(startTime))}
-                                max={toLocalDateKey(maxSeriesEnd(new Date(startTime)))}
+                                max={toLocalDateKey(maxSeriesEnd(new Date(startTime), maxSeriesWeeks))}
                                 onChange={(e) => setSeriesEnd(e.target.value)}
                                 className="mt-1 h-11 w-full rounded-sm border border-border bg-background px-3 text-sm text-foreground"
                             />
                             <p className="mt-1 text-xs text-muted-foreground">
-                                Required — up to {MAX_SERIES_WEEKS} weeks out.
+                                Required — up to {maxSeriesWeeks} weeks out.
                             </p>
                         </div>
 
@@ -284,18 +298,30 @@ export function ReviewStep({
                 </p>
             )}
 
+            {mustCompleteProfile && (
+                <p role="status" className="mt-4 rounded-sm border border-accent bg-surface p-4 text-sm text-surface-foreground">
+                    {PROFILE_INCOMPLETE_MESSAGE} Your selections will be kept.
+                </p>
+            )}
+
             <ActionBar className={inline ? "mt-4 flex items-center gap-3" : "flex items-center gap-3"}>
                 <Button type="button" variant="secondary" onClick={onBack} disabled={pending}>
                     Back
                 </Button>
-                <Button
-                    type="button"
-                    onClick={handleConfirm}
-                    disabled={pending}
-                    className="flex-1"
-                >
-                    {pending ? "Booking..." : "Confirm Booking"}
-                </Button>
+                {mustCompleteProfile ? (
+                    <Button type="button" onClick={onCompleteProfile} className="flex-1">
+                        Complete Profile
+                    </Button>
+                ) : (
+                    <Button
+                        type="button"
+                        onClick={handleConfirm}
+                        disabled={pending}
+                        className="flex-1"
+                    >
+                        {pending ? "Booking..." : "Confirm Booking"}
+                    </Button>
+                )}
             </ActionBar>
         </div>
     )

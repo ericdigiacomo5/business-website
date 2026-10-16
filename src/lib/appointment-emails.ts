@@ -14,6 +14,7 @@ import { PAYMENT_METHOD_LABEL } from "@/components/admin/appointment-shared"
 import { discountOf } from "@/lib/discount"
 import { durationMinutesOf } from "@/lib/schedule-grid"
 import { SERVICE_LINES_INCLUDE, servicesLabel, servicesPriceCents } from "@/lib/appointment-services"
+import { getPolicySettings } from "@/lib/settings"
 
 // Server-only (imports prisma) — never import this from a Client Component or
 // from any module one imports; see PROJECT_STATUS.md's RSC-boundary notes.
@@ -63,10 +64,17 @@ async function loadAppointment(appointmentId: string) {
     })
 }
 
+async function noticeHours(): Promise<number> {
+    return (await getPolicySettings()).cancellationNoticeHours
+}
+
 type LoadedAppointment = NonNullable<Awaited<ReturnType<typeof loadAppointment>>>
 
-function toDetails(appointment: LoadedAppointment): AppointmentEmailDetails {
+// cancellationNoticeHours: the salon's current setting, so the footer states
+// the real online change window. Pass getPolicySettings()'s value.
+function toDetails(appointment: LoadedAppointment, cancellationNoticeHours: number): AppointmentEmailDetails {
     return {
+        cancellationNoticeHours,
         customerName: appointment.user.name,
         // "Manicure + Pedicure" when there's more than one.
         serviceName: servicesLabel(appointment.services),
@@ -118,7 +126,7 @@ export function sendBookingConfirmation(appointmentId: string) {
         // ago" would only confuse the customer.
         if (!appointment || isInPast(appointment.startTime)) return
 
-        const { ok } = await sendEmail({ to: appointment.user.email, ...bookingConfirmationEmail(toDetails(appointment)) })
+        const { ok } = await sendEmail({ to: appointment.user.email, ...bookingConfirmationEmail(toDetails(appointment, await noticeHours())) })
         if (ok) await markReminderCoveredIfImminent(appointment.id, appointment.startTime)
     })
 }
@@ -130,7 +138,7 @@ export function sendRescheduleNotice(appointmentId: string, previousStartTime: D
 
         const { ok } = await sendEmail({
             to: appointment.user.email,
-            ...appointmentRescheduledEmail({ ...toDetails(appointment), previousStartTime }),
+            ...appointmentRescheduledEmail({ ...toDetails(appointment, await noticeHours()), previousStartTime }),
         })
         if (ok) await markReminderCoveredIfImminent(appointment.id, appointment.startTime)
     })
@@ -145,7 +153,7 @@ export function sendCancellationNotice(appointmentId: string, cancelledBy: "cust
 
         await sendEmail({
             to: appointment.user.email,
-            ...appointmentCancelledEmail({ ...toDetails(appointment), cancelledBy }),
+            ...appointmentCancelledEmail({ ...toDetails(appointment, await noticeHours()), cancelledBy }),
         })
     })
 }
@@ -158,7 +166,7 @@ export function sendReceipt(appointmentId: string) {
         await sendEmail({
             to: appointment.user.email,
             ...receiptEmail({
-                ...toDetails(appointment),
+                ...toDetails(appointment, await noticeHours()),
                 paymentMethodLabel: PAYMENT_METHOD_LABEL[appointment.paymentMethod],
                 checkedOutAt: appointment.checkedOutAt,
             }),
@@ -281,6 +289,7 @@ export async function sendDueReminders(): Promise<ReminderRunResult> {
 
     let sent = 0
     let failed = 0
+    const cancellationNoticeHours = await noticeHours()
 
     for (const appointment of due) {
         const claimed = await prisma.appointment.updateMany({
@@ -291,7 +300,7 @@ export async function sendDueReminders(): Promise<ReminderRunResult> {
 
         const { ok } = await sendEmail({
             to: appointment.user.email,
-            ...appointmentReminderEmail(toDetails(appointment)),
+            ...appointmentReminderEmail(toDetails(appointment, cancellationNoticeHours)),
         })
 
         if (ok) {

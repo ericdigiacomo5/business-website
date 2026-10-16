@@ -1,4 +1,5 @@
 import { requireAdmin } from "@/lib/require-admin";
+import { readJsonObject } from "@/lib/request";
 import { prisma } from "@/lib/prisma"
 import { isGridAligned, isValidTimeString, startOfDay, endOfDay, timeOffDateRangeOverlap } from "@/lib/availability";
 import { parseLocalDate } from "@/lib/format";
@@ -24,24 +25,10 @@ export async function PATCH(
         )
     }
 
-    let body: unknown;
-    try {
-        body = await request.json()
-    } catch {
-        return Response.json(
-            { error: "Invalid JSON body" },
-            { status: 400 }
-        )
-    }
+    const body = await readJsonObject(request)
+    if (body instanceof Response) return body
 
-    if (typeof body !== 'object' || body === null) {
-        return Response.json(
-            { error: 'Invalid request body' },
-            { status: 400 }
-        )
-    }
-
-    const { artistId, date, endDate, startTime, endTime } = body as Record<string, unknown>
+    const { artistId, date, endDate, startTime, endTime } = body
 
     // Three-way, same convention admin/services's PATCH established for
     // Service.description: undefined = don't touch, null = clear it (make

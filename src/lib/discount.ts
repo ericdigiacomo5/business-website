@@ -18,9 +18,10 @@ export function discountOf(appointment: {
     return { type: appointment.discountType, value: appointment.discountValue }
 }
 
-// Cents taken off. Capped at the price: an appointment doesn't snapshot its
-// service's price, so a dollar discount set earlier could otherwise exceed a
-// price that was lowered afterward and produce a negative total.
+// Cents taken off. Capped at the price so a total can never go negative —
+// e.g. a dollar discount set before an admin removed a service from the
+// appointment (each line's price is snapshotted at booking, so a later
+// change to the Service's own price doesn't affect this).
 export function discountCents(priceCents: number, discount: Discount | null): number {
     if (!discount) return 0
     const off = discount.type === "PERCENT" ? Math.round((priceCents * discount.value) / 100) : discount.value

@@ -22,11 +22,13 @@ export function BookingWizard({
     initialArtists,
     initialServiceId,
     initialArtistId,
+    maxSeriesWeeks,
 }: {
     initialServices: Service[]
     initialArtists: Artist[]
     initialServiceId: string | null
     initialArtistId: string | null
+    maxSeriesWeeks: number
 }) {
     const router = useRouter()
     const { data: session, status } = useSession()
@@ -67,14 +69,29 @@ export function BookingWizard({
     }, [status, initialServices, initialArtists])
 
     function redirectToLogin() {
+        saveSelectionAndGo("/login?callbackUrl=/book")
+    }
+
+    // A signed-in customer with no name/phone on file fixes it on My Profile,
+    // which sends them back here; the rehydrate effect above restores picks.
+    function redirectToProfile() {
+        saveSelectionAndGo("/account?callbackUrl=/book")
+    }
+
+    function saveSelectionAndGo(url: string) {
         const selection: WizardSelection = {
             serviceIds: state.serviceIds,
             artistId: state.artistId,
             date: state.date,
             startTime: state.startTime,
         }
-        sessionStorage.setItem(STORAGE_KEY, JSON.stringify(selection))
-        router.push("/login?callbackUrl=/book")
+        try {
+            sessionStorage.setItem(STORAGE_KEY, JSON.stringify(selection))
+        } catch {
+            // Storage unavailable (e.g. some private-browsing modes) — the
+            // redirect still works, the picks just aren't restored after it.
+        }
+        router.push(url)
     }
 
     // Reaching review unauthenticated (arrived here directly, or the session
@@ -187,6 +204,9 @@ export function BookingWizard({
                             artist={selectedArtist}
                             startTime={state.startTime}
                             userLabel={session?.user?.email ?? session?.user?.name ?? "you"}
+                            maxSeriesWeeks={maxSeriesWeeks}
+                            profileIncomplete={session?.user?.profileIncomplete ?? false}
+                            onCompleteProfile={redirectToProfile}
                             onBack={() => dispatch({ type: "GO_BACK" })}
                             onSuccess={(appointment) => dispatch({ type: "SUBMIT_SUCCESS", appointment })}
                             onRecurringSuccess={(result) => dispatch({ type: "SUBMIT_RECURRING_SUCCESS", result })}

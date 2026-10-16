@@ -24,7 +24,7 @@ export function ServiceCard({ service }: { service: Service }) {
                     href={`/book?serviceId=${service.id}`}
                     className={buttonVariants({
                         variant: "secondary",
-                        className: "mt-5 w-full bg-[#f0e2cf]! hover:bg-[#e6cead]!",
+                        className: "mt-5 w-full bg-cream! hover:bg-cream-hover!",
                     })}
                 >
                     Book This Service

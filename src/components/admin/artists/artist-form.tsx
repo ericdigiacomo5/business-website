@@ -1,6 +1,8 @@
 import { useState, type FormEvent } from "react"
 import { Button } from "@/components/ui/button"
 import { PhotoUploadField } from "@/components/admin/photo-upload-field"
+import { CloudinaryImage } from "@/components/ui/cloudinary-image"
+import { TEXT_LIMITS } from "@/lib/validation"
 
 export type ArtistFormValues = {
     name: string
@@ -43,6 +45,7 @@ export function ArtistForm({
                 <input
                     id="artist-name"
                     required
+                    maxLength={TEXT_LIMITS.artistName}
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                     className="mt-1 h-11 w-full rounded-sm border border-border bg-background px-3 text-sm text-foreground"
@@ -55,6 +58,7 @@ export function ArtistForm({
                 </label>
                 <textarea
                     id="artist-bio"
+                    maxLength={TEXT_LIMITS.bio}
                     value={bio}
                     onChange={(e) => setBio(e.target.value)}
                     rows={3}
@@ -66,37 +70,37 @@ export function ArtistForm({
                 <span className="block text-xs font-medium text-muted-foreground">Photo</span>
 
                 {photoUrl && (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
+                    <CloudinaryImage
                         src={photoUrl}
-                        alt="Current"
-                        className="mt-2 h-20 w-20 rounded-full border-2 border-accent object-cover"
+                        alt="Current photo"
+                        sizes="80px"
+                        className="mt-2 h-20 w-20 rounded-full border-2 border-accent"
+                        fallback={
+                            <p className="mt-2 text-xs text-muted-foreground">
+                                The current photo isn&apos;t an uploaded image and can&apos;t be shown — upload a
+                                replacement.
+                            </p>
+                        }
                     />
                 )}
 
-                <div className="mt-2">
+                {/* Uploads only (no pasted URLs): every photo is stored on
+                    the salon's Cloudinary account, which is what lets the
+                    CSP and next/image allow exactly one image host. */}
+                <div className="mt-2 flex flex-wrap gap-2">
                     <PhotoUploadField
                         label={photoUrl ? "Replace Photo" : "Upload Photo"}
                         onUploaded={(url) => setPhotoUrl(url)}
                     />
+                    {photoUrl && (
+                        <Button type="button" variant="ghost" onClick={() => setPhotoUrl("")}>
+                            Remove Photo
+                        </Button>
+                    )}
                 </div>
-
-                <div className="mt-3">
-                    <label htmlFor="artist-photo-url" className="block text-xs font-medium text-muted-foreground">
-                        Or paste an image URL
-                    </label>
-                    <input
-                        id="artist-photo-url"
-                        type="url"
-                        value={photoUrl}
-                        onChange={(e) => setPhotoUrl(e.target.value)}
-                        placeholder="https://..."
-                        className="mt-1 h-11 w-full rounded-sm border border-border bg-background px-3 text-sm text-foreground"
-                    />
-                    <p className="mt-1 text-xs text-muted-foreground">
-                        Leave blank to show initials instead.
-                    </p>
-                </div>
+                {!photoUrl && (
+                    <p className="mt-1 text-xs text-muted-foreground">No photo — initials are shown instead.</p>
+                )}
             </div>
 
             <div className="flex gap-2">

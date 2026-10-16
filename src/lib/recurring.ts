@@ -11,11 +11,23 @@
 
 import { startOfDay } from "@/lib/schedule-grid";
 
-// Longest a standing appointment may run, start to end. Every standing
-// appointment has a mandatory end date and all of its weeks are booked as
-// real Appointment rows when it's created, so this is also what bounds how
-// many rows (and how much of an artist's calendar) one request can claim.
-export const MAX_SERIES_WEEKS = 52;
+// The two salon policies an admin can change on the dashboard (stored in
+// AppSettings; read server-side via getPolicySettings() in settings.ts).
+// These are the defaults — the migration's column defaults match — and the
+// bounds the admin settings route accepts.
+//
+// cancellationNoticeHours: how close to an appointment a customer can still
+// cancel or reschedule it online. maxSeriesWeeks: longest a standing
+// appointment may run. Every standing appointment has a mandatory end date
+// and all of its weeks are booked as real Appointment rows when it's
+// created, so this also bounds how many rows (and how much of an artist's
+// calendar) one request can claim.
+export const DEFAULT_POLICY = { cancellationNoticeHours: 24, maxSeriesWeeks: 52 } as const;
+export const POLICY_LIMITS = {
+    cancellationNoticeHours: { min: 0, max: 168 }, // up to one week
+    maxSeriesWeeks: { min: 1, max: 104 }, // up to two years
+} as const;
+export type PolicySettings = { cancellationNoticeHours: number; maxSeriesWeeks: number };
 
 // How far ahead a customer may book a one-off, or start a standing
 // appointment (server-enforced in both booking routes; admins are exempt).
@@ -48,9 +60,24 @@ export function bookingWindowEnd(now: Date = new Date()): Date {
     return addDays(startOfDay(now), BOOKING_WINDOW_DAYS);
 }
 
-// Latest end date allowed for a series starting on seriesStart (inclusive).
-export function maxSeriesEnd(seriesStart: Date): Date {
-    return addDays(startOfDay(seriesStart), MAX_SERIES_WEEKS * 7);
+// Latest end date allowed for a series starting on seriesStart (inclusive),
+// given the salon's current maxSeriesWeeks setting.
+export function maxSeriesEnd(seriesStart: Date, maxSeriesWeeks: number): Date {
+    return addDays(startOfDay(seriesStart), maxSeriesWeeks * 7);
+}
+
+// The latest moment an appointment starting at `startTime` can still be
+// cancelled or rescheduled by the customer online — the server check and
+// the My Bookings buttons both use this, so they always agree.
+export function customerChangeDeadline(startTime: Date | string, cancellationNoticeHours: number): Date {
+    return new Date(new Date(startTime).getTime() - cancellationNoticeHours * 60 * 60 * 1000);
+}
+
+// "24 hours" / "1 hour" / "2 days" — how the notice window is described to
+// customers (About page, My Bookings, error messages).
+export function describeNoticeWindow(hours: number): string {
+    if (hours >= 48 && hours % 24 === 0) return `${hours / 24} days`;
+    return hours === 1 ? "1 hour" : `${hours} hours`;
 }
 
 // Calendar dates (midnight local time, no time-of-day) on which a recurring

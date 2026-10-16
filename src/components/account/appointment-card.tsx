@@ -1,7 +1,6 @@
 import type { Appointment, AppointmentStatus, Artist } from "@/generated/prisma/client"
 import { servicesLabel, servicesPriceCents, type ServiceLine } from "@/lib/appointment-services"
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
 import { Price } from "@/components/ui/price"
 import { discountOf } from "@/lib/discount"
 import { formatDuration } from "@/lib/format"
@@ -35,23 +34,27 @@ const STATUS_LABEL: Record<AppointmentStatus, string> = {
 
 export function AppointmentCard({
     appointment,
-    cancellable,
-    onCancel,
-    cancelling,
+    upcoming,
+    actions,
+    footer,
 }: {
     appointment: AppointmentWithRelations
-    cancellable: boolean
-    onCancel: () => void
-    cancelling: boolean
+    // Upcoming bookings get the highlighted border; past/cancelled are muted.
+    upcoming: boolean
+    // Buttons beside the status badge (Reschedule / Cancel).
+    actions?: React.ReactNode
+    // Full-width content under the card body (a note, or the reschedule picker).
+    footer?: React.ReactNode
 }) {
     return (
         <div
             className={
-                cancellable
-                    ? "flex flex-col gap-3 rounded-sm border-2 border-accent bg-background p-5 sm:flex-row sm:items-center sm:justify-between"
-                    : "flex flex-col gap-3 rounded-sm border border-foreground bg-surface p-5 opacity-85 sm:flex-row sm:items-center sm:justify-between"
+                upcoming
+                    ? "rounded-sm border-2 border-accent bg-background p-5"
+                    : "rounded-sm border border-foreground bg-surface p-5 opacity-85"
             }
         >
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
                 <div className="font-serif text-lg font-bold text-surface-foreground">
                     {servicesLabel(appointment.services)}
@@ -71,20 +74,12 @@ export function AppointmentCard({
                     <Price priceCents={servicesPriceCents(appointment.services)} discount={discountOf(appointment)} />
                 </p>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-3">
                 <Badge tone={STATUS_TONE[appointment.status]}>{STATUS_LABEL[appointment.status]}</Badge>
-                {cancellable && (
-                    <Button
-                        variant="danger"
-                        size="md"
-                        onClick={onCancel}
-                        disabled={cancelling}
-                        className="sm:shrink-0"
-                    >
-                        {cancelling ? "Cancelling..." : "Cancel"}
-                    </Button>
-                )}
+                {actions}
             </div>
+        </div>
+        {footer}
         </div>
     )
 }

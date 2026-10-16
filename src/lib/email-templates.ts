@@ -1,6 +1,7 @@
 import { SITE_NAME } from "@/lib/site"
 import { formatDuration, formatPrice } from "@/lib/format"
 import { describeDiscount, discountCents, totalCents, type Discount } from "@/lib/discount"
+import { describeNoticeWindow } from "@/lib/recurring"
 
 type RenderedEmail = {
     subject: string
@@ -122,6 +123,9 @@ export type AppointmentEmailDetails = {
     discount: Discount | null
     manageUrl: string | null
     bookUrl: string | null
+    // The salon's online cancel/reschedule window (AppSettings), for the
+    // "need to change something?" footer.
+    cancellationNoticeHours: number
 }
 
 function greeting(name: string | null): string {
@@ -140,7 +144,9 @@ function manageButton(manageUrl: string | null): LayoutArgs["button"] {
     return manageUrl ? { label: "View My Bookings", url: manageUrl } : undefined
 }
 
-const CHANGE_FOOTER = "Need to change something? Contact the salon, or manage your booking online at least 24 hours in advance."
+function changeFooter(a: AppointmentEmailDetails): string {
+    return `Need to change something? Contact the salon, or reschedule or cancel online at least ${describeNoticeWindow(a.cancellationNoticeHours)} in advance.`
+}
 const CONTACT_FOOTER = "Questions? Contact the salon directly."
 
 export function bookingConfirmationEmail(a: AppointmentEmailDetails): RenderedEmail {
@@ -151,7 +157,7 @@ export function bookingConfirmationEmail(a: AppointmentEmailDetails): RenderedEm
         paragraphs: [greeting(a.customerName), `Thanks for booking with ${SITE_NAME} — here are your details:`],
         details: [...appointmentDetails(a), ["Price", formatPrice(a.priceCents)]],
         button: manageButton(a.manageUrl),
-        footer: CHANGE_FOOTER,
+        footer: changeFooter(a),
     })
 }
 
@@ -176,7 +182,7 @@ export function appointmentRescheduledEmail(
         ],
         details: appointmentDetails(a),
         button: manageButton(a.manageUrl),
-        footer: CHANGE_FOOTER,
+        footer: changeFooter(a),
     })
 }
 

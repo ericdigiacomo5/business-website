@@ -19,6 +19,8 @@ export function DayStrip({
                         key={key}
                         type="button"
                         onClick={() => onSelect(key)}
+                        aria-pressed={selected}
+                        aria-label={day.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
                         className={
                             "flex h-16 w-14 shrink-0 cursor-pointer flex-col items-center justify-center rounded-sm border text-sm transition-colors " +
                             (selected

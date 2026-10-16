@@ -15,19 +15,12 @@ export async function GET(
     // matches the "inactive = hidden from customers" rule GET /api/services
     // already applies via `where: { active: true }`. No listing to filter
     // here (this is a single-id lookup), so the check happens post-fetch.
-    if (artist && !artist.active) {
+    if (!artist || !artist.active) {
         return Response.json(
             { error: 'Artist not found' },
             { status: 404 }
         )
     }
 
-    if (!artist) {
-        return Response.json(
-            { error: 'Artist not found' },
-            { status: 404 }
-        )
-    }
-
-    return Response.json(artist)
+    return Response.json({ data: artist })
 }

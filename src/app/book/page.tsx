@@ -1,7 +1,7 @@
 import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
 import { BookingWizard } from "@/components/booking/booking-wizard"
-import { isBookingEnabled } from "@/lib/settings"
+import { getPolicySettings, isBookingEnabled } from "@/lib/settings"
 
 export default async function BookPage({
     searchParams,
@@ -10,9 +10,10 @@ export default async function BookPage({
 }) {
     const params = await searchParams
 
-    const [session, bookingEnabled, services, artists] = await Promise.all([
+    const [session, bookingEnabled, policy, services, artists] = await Promise.all([
         auth(),
         isBookingEnabled(),
+        getPolicySettings(),
         prisma.service.findMany({ where: { active: true }, orderBy: { createdAt: "asc" } }),
         prisma.artist.findMany({ where: { active: true }, orderBy: { createdAt: "asc" } }),
     ])
@@ -46,6 +47,7 @@ export default async function BookPage({
             initialArtists={artists}
             initialServiceId={initialServiceId}
             initialArtistId={initialArtistId}
+            maxSeriesWeeks={policy.maxSeriesWeeks}
         />
     )
 }

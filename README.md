@@ -1,36 +1,62 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Nail Image Inc. — Salon Booking Platform
 
-## Getting Started
+A mobile-first booking platform for a nail salon: customers book online (one-off or standing appointments), and staff run the day from an admin schedule. The scheduling engine is built in-house; double-booking is prevented by a database constraint, not application logic.
 
-First, run the development server:
+**Stack:** Next.js 16 (App Router, Turbopack) · TypeScript · Tailwind CSS v4 · Prisma 7 · PostgreSQL (Neon) · Auth.js v5 (email/password + Google) · Resend (email) · Cloudinary (images). Deploy target: Cloudflare Workers (not yet deployed).
+
+## Features
+
+- **Customers:** browse services and artists, book one or more services with a chosen artist and time, set up standing appointments, manage bookings (online cancellation up to 24h ahead), reset a forgotten password, edit their profile.
+- **Admins:** a day/week schedule grid; click an open time to book (including new walk-ins and backdated visits); confirm, check out (payment method + discount), cancel, mark no-show, reschedule, change length or services, and book the next visit. Also manage services, artists (with photo/portfolio uploads), working hours, time off and salon-wide closures, standing appointments, customers, and a global online-booking switch.
+- **Email:** booking confirmations, reminders, cancellation/reschedule notices, receipts, password reset.
+
+Payments are deliberately out of scope — the salon charges on its own POS terminal, and checkout here only records how a visit was paid.
+
+## Getting started
+
+Requirements: Node.js 20+ and a PostgreSQL database (the project uses Neon).
 
 ```bash
+npm install
+cp .env.example .env       # then fill in the values — see comments in the file
+npx prisma migrate deploy  # apply migrations
+npx prisma generate        # generate the client into src/generated/prisma
+npx prisma db seed         # sample artist/service/hours + a dev admin login
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open http://localhost:3000. With no `RESEND_API_KEY` set, emails are printed to the console instead of being sent. The seed's dev admin is `admin@example.com` / `admin12345` unless `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` are set (the seed refuses the defaults when `NODE_ENV=production`).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+To make a real account an admin: register it through the site, then run `npm run promote-admin -- <email>`.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Scripts
 
-## Learn More
+| Command | What it does |
+|---|---|
+| `npm run dev` | Development server |
+| `npm run build` / `npm start` | Production build / serve |
+| `npm run lint` | ESLint |
+| `npx tsc --noEmit` | Typecheck |
+| `npm run promote-admin -- <email>` | Give an existing account the ADMIN role |
 
-To learn more about Next.js, take a look at the following resources:
+There is no automated test suite yet.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Project docs
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- [`PROJECT_STATUS.md`](PROJECT_STATUS.md) — current state, architecture decisions, conventions, roadmap. Start here.
+- [`FEATURE_GAPS.md`](FEATURE_GAPS.md) — feature gap analysis and what's still open.
+- [`AUDIT_2026-10-16.md`](AUDIT_2026-10-16.md) — latest repo review: improvements made and open questions.
+- [`docs/PROJECT_HISTORY.md`](docs/PROJECT_HISTORY.md) — archived long-form build log.
+- [`AGENTS.md`](AGENTS.md) — note for AI assistants: this Next.js version has breaking changes; read `node_modules/next/dist/docs/` first.
 
-## Deploy on Vercel
+## Project layout
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```
+prisma/              schema, migrations, idempotent seed
+src/app/             pages (customer site, /admin) and API routes (src/app/api)
+src/components/      UI, grouped by area (booking, admin, account, ui, …)
+src/lib/             shared logic — availability engine, booking transactions,
+                     emails, validation, date helpers
+src/auth.ts          Auth.js configuration
+scripts/             one-off admin scripts
+```

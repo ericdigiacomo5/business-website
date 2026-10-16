@@ -1,12 +1,12 @@
 import { after } from "next/server";
 import { requireAdmin } from "@/lib/require-admin";
+import { readJsonObject } from "@/lib/request";
 import { sendCancellationNotice, sendReceipt, sendRescheduleNotice } from "@/lib/appointment-emails";
 import { prisma } from "@/lib/prisma";
 import { AppointmentStatus, PaymentMethod, Prisma, type DiscountType } from "@/generated/prisma/client";
-import { getOpenSlots } from "@/lib/availability";
 import { durationMinutesOf, isValidAppointmentLength, MAX_APPOINTMENT_MINUTES } from "@/lib/schedule-grid";
 import { discountError } from "@/lib/discount";
-import { loadServicesToBook, type ServiceToBook } from "@/lib/booking";
+import { loadServicesToBook, reclaimSlots, SlotUnavailableError, type ServiceToBook } from "@/lib/booking";
 import {
     parseServiceIds,
     SERVICE_LINES_INCLUDE,
@@ -14,8 +14,6 @@ import {
     servicesFitOneAppointment,
     servicesPriceCents,
 } from "@/lib/appointment-services";
-
-const SLOT_DURATION_MS = 15 * 60_000;
 
 export async function PATCH(
     request: Request,
@@ -38,24 +36,10 @@ export async function PATCH(
         )
     }
 
-    let body: unknown;
-    try {
-        body = await request.json()
-    } catch {
-        return Response.json(
-            { error: "Invalid JSON body" },
-            { status: 400 }
-        )
-    }
+    const body = await readJsonObject(request)
+    if (body instanceof Response) return body
 
-    if (typeof body !== 'object' || body === null) {
-        return Response.json(
-            { error: 'Invalid request body' },
-            { status: 400 }
-        )
-    }
-
-    const { status, paymentMethod, startTime, durationMinutes, discount, serviceIds } = body as Record<string, unknown>
+    const { status, paymentMethod, startTime, durationMinutes, discount, serviceIds } = body
 
     // status is optional — a pure reschedule (startTime only), length
     // change, services change, or discount change shouldn't have to also
@@ -77,6 +61,22 @@ export async function PATCH(
     if (status !== undefined && (typeof status !== 'string' || !(Object.values(AppointmentStatus) as string[]).includes(status))) {
         return Response.json(
             { error: 'Status must be one of PENDING, CONFIRMED, CANCELLED, COMPLETED, NO_SHOW' },
+            { status: 400 }
+        )
+    }
+
+    // CANCELLED and NO_SHOW free the appointment's AppointmentSlot rows (see
+    // the transaction below), and nothing re-claims them. Moving one back to
+    // PENDING/CONFIRMED would leave a live booking that holds no slots, so the
+    // same time could be booked again on top of it — the double-booking the
+    // slot table exists to prevent. The schedule UI never offers this; a
+    // reinstated booking is a new booking.
+    if (
+        (status === AppointmentStatus.PENDING || status === AppointmentStatus.CONFIRMED) &&
+        (appointment.status === AppointmentStatus.CANCELLED || appointment.status === AppointmentStatus.NO_SHOW)
+    ) {
+        return Response.json(
+            { error: 'A cancelled or no-show appointment can\'t be reopened — book a new appointment instead' },
             { status: 400 }
         )
     }
@@ -308,54 +308,23 @@ export async function PATCH(
                 // services); otherwise it stays the appointment's own — a
                 // reschedule must not silently undo a length an admin set
                 // for this client.
-                const newStartTime = parsedStartTime ?? appointment.startTime
                 const minutes =
                     parsedDuration ??
                     (newServices ? servicesDurationMinutes(newServices) : durationMinutesOf(appointment))
-                const newEndTime = new Date(newStartTime.getTime() + minutes * 60_000)
 
-                const newSlots: Date[] = []
-                let current = newStartTime
-                while (current < newEndTime) {
-                    newSlots.push(current)
-                    current = new Date(current.getTime() + SLOT_DURATION_MS)
-                }
-
-                // Free the old slots first — this also correctly lets a
-                // reschedule (or a longer length) land on (part of) its own
-                // current time without a false "not available" from its own
-                // booking.
-                await tx.appointmentSlot.deleteMany({
-                    where: { appointmentId: id }
-                })
-
-                // excludeAppointmentId is what actually makes this
-                // appointment's own current slots count as open:
-                // getOpenSlots reads through the global client, not `tx`,
-                // so it can't see the uncommitted delete just above. Without
-                // it, any new time or length overlapping the current one
-                // (every length change does) is refused as "not available".
-                const openSlots = await getOpenSlots(appointment.artistId, newStartTime, {
+                // Throws SlotUnavailableError (rolling back the whole
+                // transaction, services included) if the new span isn't open.
+                // allowPast: this route is admin-only.
+                const span = await reclaimSlots(tx, {
+                    appointmentId: id,
+                    artistId: appointment.artistId,
+                    startTime: parsedStartTime ?? appointment.startTime,
+                    durationMinutes: minutes,
                     allowPast: true,
-                    excludeAppointmentId: id,
-                })
-                const openSlotTimes = new Set(openSlots.map((slot) => slot.getTime()))
-                const isFullyAvailable = newSlots.every((slot) => openSlotTimes.has(slot.getTime()))
-
-                if (!isFullyAvailable) {
-                    throw new Error('SLOT_UNAVAILABLE')
-                }
-
-                await tx.appointmentSlot.createMany({
-                    data: newSlots.map((slotStart) => ({
-                        artistId: appointment.artistId,
-                        slotStart,
-                        appointmentId: id,
-                    })),
                 })
 
-                data.startTime = newStartTime
-                data.endTime = newEndTime
+                data.startTime = span.startTime
+                data.endTime = span.endTime
                 if (parsedStartTime) {
                     // Any reminder already sent was for the old time — clear
                     // it so the job reminds about the new one. (A length-only
@@ -392,7 +361,7 @@ export async function PATCH(
 
         return Response.json({ data: updated }, { status: 200 })
     } catch (error) {
-        if (error instanceof Error && error.message === 'SLOT_UNAVAILABLE') {
+        if (error instanceof SlotUnavailableError) {
             return Response.json(
                 {
                     error: parsedStartTime

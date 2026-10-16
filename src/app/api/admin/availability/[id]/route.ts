@@ -2,6 +2,7 @@ import { isGridAligned, isValidTimeString } from "@/lib/availability";
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@/generated/prisma/client";
 import { requireAdmin } from "@/lib/require-admin";
+import { readJsonObject } from "@/lib/request";
 
 export async function PATCH(
     request: Request,
@@ -23,24 +24,10 @@ export async function PATCH(
         )
     }
 
-    let body: unknown;
-    try {
-        body = await request.json()
-    } catch {
-        return Response.json(
-            { error: "Invalid JSON body" },
-            { status: 400 }
-        )
-    }
+    const body = await readJsonObject(request)
+    if (body instanceof Response) return body
 
-    if (typeof body !== 'object' || body === null) {
-        return Response.json(
-            { error: 'Invalid request body' },
-            { status: 400 }
-        )
-    }
-
-    const { dayOfWeek, startTime, endTime } = body as Record<string, unknown>
+    const { dayOfWeek, startTime, endTime } = body
 
     if (dayOfWeek !== undefined && (typeof dayOfWeek !== 'number' || !Number.isInteger(dayOfWeek) || dayOfWeek < 0 || dayOfWeek > 6)) {
         return Response.json(

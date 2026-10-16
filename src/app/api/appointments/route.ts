@@ -6,6 +6,8 @@ import { sendBookingConfirmation } from "@/lib/appointment-emails";
 import { BOOKING_WINDOW_DAYS, bookingWindowEnd } from "@/lib/recurring";
 import { auth } from "@/auth";
 import { isBookingEnabled } from "@/lib/settings";
+import { readJsonObject } from "@/lib/request";
+import { PROFILE_INCOMPLETE_MESSAGE } from "@/lib/validation";
 import { isValidAppointmentLength, MAX_APPOINTMENT_MINUTES } from "@/lib/schedule-grid";
 
 export async function POST(request: Request) {
@@ -25,24 +27,17 @@ export async function POST(request: Request) {
         )
     }
 
-    let body: unknown;
-    try {
-        body = await request.json();
-    } catch {
-        return Response.json(
-            { error: 'Invalid JSON body' },
-            { status: 400 }
-        )
+    // A customer booking for themselves needs a name and a real phone number
+    // on file (Google sign-ups and older accounts may lack them). Admins
+    // booking on someone's behalf aren't blocked by their own profile.
+    if (!isAdmin && session.user.profileIncomplete) {
+        return Response.json({ error: PROFILE_INCOMPLETE_MESSAGE }, { status: 403 })
     }
 
-    if (typeof body !== 'object' || body === null) {
-        return Response.json(
-            { error: 'Invalid request body' },
-            { status: 400 }
-        )
-    }
+    const body = await readJsonObject(request)
+    if (body instanceof Response) return body
 
-    const { artistId, serviceIds: requestedServiceIds, startTime, userId: requestedUserId, durationMinutes } = body as Record<string, unknown>
+    const { artistId, serviceIds: requestedServiceIds, startTime, userId: requestedUserId, durationMinutes } = body
 
     // Only an admin's requested target user is honored — a non-admin's
     // userId is silently ignored (not rejected) so the customer-facing
@@ -115,14 +110,16 @@ export async function POST(request: Request) {
 
     const [artist, services, user] = await Promise.all([
         prisma.artist.findUnique({ where: { id: artistId } }),
-        loadServicesToBook(serviceIds),
+        loadServicesToBook(serviceIds, { requireActive: true }),
         prisma.user.findUnique({ where: { id: targetUserId } }),
     ])
 
+    // 404s match every other route's existence checks (this route used 400
+    // until 2026-10-16).
     if (!artist) {
         return Response.json(
             { error: 'Artist not found' },
-            { status: 400 }
+            { status: 404 }
         )
     }
 
@@ -134,14 +131,14 @@ export async function POST(request: Request) {
     if (!artist.active) {
         return Response.json(
             { error: 'Artist not found' },
-            { status: 400 }
+            { status: 404 }
         )
     }
 
     if (!services) {
         return Response.json(
             { error: 'Service not found' },
-            { status: 400 }
+            { status: 404 }
         )
     }
 
@@ -157,7 +154,7 @@ export async function POST(request: Request) {
     if (!user) {
         return Response.json(
             { error: 'User not found' },
-            { status: 400 }
+            { status: 404 }
         )
     }
 

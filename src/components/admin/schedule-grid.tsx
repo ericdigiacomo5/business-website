@@ -13,7 +13,11 @@ import { ScheduleBookSheet } from "./schedule-book-sheet"
 import { SERVICE_CATEGORIES, SERVICE_CATEGORY_LABEL } from "@/lib/service-category"
 import { CATEGORY_BLOCK_COLOR, type AdminAppointment } from "./appointment-shared"
 
-const ROW_HEIGHT_PX = 24
+// One 15-minute row. A CSS variable rather than a constant: globals.css sets
+// it to 24px for a mouse and 44px on touch screens (pointer: coarse), so
+// every empty cell — a tap-to-book button — meets the 44px tap-target rule
+// on phones and tablets without making the desktop grid three times taller.
+const ROW_HEIGHT = "var(--schedule-row-height)"
 
 export function ScheduleGrid({
     initialAppointments,
@@ -21,6 +25,7 @@ export function ScheduleGrid({
     columns,
     services,
     gridBounds,
+    maxSeriesWeeks,
 }: {
     initialAppointments: AdminAppointment[]
     view: ScheduleView
@@ -30,6 +35,8 @@ export function ScheduleGrid({
     // Active services, for booking from an empty cell.
     services: Service[]
     gridBounds: { start: string; end: string }
+    // The salon's standing-appointment cap, for the booking dialog.
+    maxSeriesWeeks: number
 }) {
     const [appointments, setAppointments] = useState(initialAppointments)
     const [busyId, setBusyId] = useState<string | null>(null)
@@ -313,7 +320,7 @@ export function ScheduleGrid({
                         // fit beside the calendar panel on a desktop; below
                         // that the grid scrolls sideways in its container.
                         gridTemplateColumns: `64px repeat(${columns.length}, minmax(${view === "week" ? 88 : 112}px, 1fr))`,
-                        gridTemplateRows: `auto repeat(${totalRows}, ${ROW_HEIGHT_PX}px)`,
+                        gridTemplateRows: `auto repeat(${totalRows}, ${ROW_HEIGHT})`,
                     }}
                 >
                     <ScheduleTimeAxis gridStartMinutes={gridStartMinutes} totalRows={totalRows} />
@@ -370,6 +377,7 @@ export function ScheduleGrid({
                     artist={bookingArtist}
                     startTime={bookingSlot.startTime}
                     services={services}
+                    maxSeriesWeeks={maxSeriesWeeks}
                     onBooked={handleBooked}
                     onClose={() => setBookingSlot(null)}
                 />

@@ -4,7 +4,7 @@
 **Analysis date:** 2026-09-23
 **Reviewed commit:** `4a1ef82` (main)
 **Scope:** Product/feature completeness review — what a working salon still needs from the customer site and admin dashboard. Read-only audit of 27 API routes, 17 pages, and 11 Prisma models.
-**Companion docs:** `SECURITY_AUDIT.md` covers security posture; this document covers functional gaps. `PROJECT_STATUS.md` is the build history and roadmap.
+**Companion docs:** `SECURITY_AUDIT.md` covers security posture; this document covers functional gaps. `PROJECT_STATUS.md` is the current state and roadmap; `docs/PROJECT_HISTORY.md` is the archived build history.
 
 > **Scope boundary:** this is about *missing capability*, not code quality or vulnerabilities. Several items here are small code changes with large operational consequences; severity below reflects **impact on a salon actually using this**, not implementation difficulty.
 
@@ -38,17 +38,17 @@ Nearly every gap below sits in the ring *around* that core, and they cluster int
 | 10 | **SHOULD** | No notes field anywhere (customer or appointment) | `prisma/schema.prisma` | Open |
 | 11 | **SHOULD** | Standing appointments can be created but never managed | `src/lib/recurring.ts` | **CLOSED** |
 | 12 | **SHOULD** | Artists can't log in — admin-only role model | `prisma/schema.prisma` — `Role` | Open |
-| 13 | **SHOULD** | No rate limiting on public routes | *(absent)* | Open |
+| 13 | **SHOULD** | No rate limiting on public routes | *(absent)* | **Planned** (2026-10-16) — Cloudflare edge rules in `docs/DEPLOY_RUNBOOK.md`, applied at deploy |
 | 14 | **SHOULD** | Site never states address, hours, or phone | `src/app/about/page.tsx` | Open |
-| 15 | NICE | Day view only — no week view | `src/app/admin/page.tsx` | Open |
+| 15 | NICE | Day view only — no week view | `src/app/admin/page.tsx` | **CLOSED** (2026-10-15) — week view per artist |
 | 16 | NICE | Schedule never auto-refreshes | `src/components/admin/` | Open |
-| 17 | NICE | Historical appointments show today's price | `prisma/schema.prisma` — `Appointment` | Open |
-| 18 | NICE | No `error.tsx` / `not-found.tsx` / `loading.tsx` | `src/app/` | Open |
+| 17 | NICE | Historical appointments show today's price | `prisma/schema.prisma` — `Appointment` | **CLOSED** (2026-10-13) — `AppointmentService` snapshots price + duration |
+| 18 | NICE | No `error.tsx` / `not-found.tsx` / `loading.tsx` | `src/app/` | **CLOSED** (2026-10-16) — `error`, `global-error`, `not-found`; `loading` for admin + My Bookings |
 | 19 | NICE | No per-page metadata, OG tags, sitemap, or structured data | `src/app/` | Open |
 | 20 | NICE | Confirmation step is a dead end | `src/components/booking/steps/confirmed-step.tsx` | Open |
 | 21 | NICE | No audit log | *(absent)* | Open |
 
-All closed/partial gaps were verified live against the real dev database (not just typechecked or reasoned through) at the time each was fixed — see `PROJECT_STATUS.md`'s "Completed so far" section for the full build/verification account of each. All six original blockers are closed (1–6). Of the "should have" findings, three more are also now closed (8, 9, 11).
+All closed/partial gaps were verified live against the real dev database (not just typechecked or reasoned through) at the time each was fixed — the full build/verification account of each is in `docs/PROJECT_HISTORY.md` (the archived long-form `PROJECT_STATUS.md`). All six original blockers are closed (1–6). Of the "should have" findings, three more are also now closed (8, 9, 11), and of the "nice to have" findings, 15, 17 and 18 are closed. Gap 13 (rate limiting) is planned as Cloudflare edge rules, applied at deploy. **Still open, highest value first:** 7 (reporting), 14, 10, 12, 20, 19, 16, 21.
 
 ---
 
@@ -292,6 +292,8 @@ The conventional answer is a staff role scoped to its own artist column — read
 
 ### Gap 13 — SHOULD — No rate limiting or abuse protection on public routes
 
+**Status: PLANNED (2026-10-16).** Decided to enforce limits at Cloudflare's edge (WAF rate-limiting rules) rather than in app code; the exact rules are in `docs/DEPLOY_RUNBOOK.md` and get applied when the site deploys. Until then there is still no limit.
+
 **Location:** absent
 
 Grep for `rate|ratelimit|throttle|captcha|turnstile|recaptcha|honeypot` across `src/` returns nothing, and there is no `middleware.ts` / `proxy.ts`.
@@ -321,6 +323,8 @@ Real improvements, safely deferred.
 
 ### Gap 15 — NICE — Day view only, no week view
 
+**Status: CLOSED (2026-10-15).** `/admin?view=week` shows one artist Sunday–Saturday; the day view is unchanged.
+
 The schedule shows one day, stepped with prev/next buttons (`src/lib/schedule-grid.ts`; the query is bounded `startOfDay`/`endOfDay`). Planning staffing or spotting a quiet afternoon means clicking day by day. A week view is the default in most salon software for that reason.
 
 Note the grid bounds derive from `Availability` rows only and never consider appointments — so an appointment outside configured hours (which Gap 3's fix could introduce) would compute an out-of-range grid row.
@@ -333,11 +337,15 @@ If a customer books online while the front desk has the dashboard open, it won't
 
 ### Gap 17 — NICE — Historical appointments show today's price
 
+**Status: CLOSED (2026-10-13).** Part of the multi-service work: each `AppointmentService` line stores the `priceCents` and `durationMinutes` it was booked at, so repricing a service no longer changes past appointments or receipts.
+
 `Appointment` has no price field — price is read live from the related `Service`. Raising a manicure from $45 to $50 retroactively rewrites **every past appointment** to $50, including ones already checked out and paid at the old price.
 
 Severity is "nice" only because nothing currently reports on price. **It becomes a correctness blocker the moment Gap 7 is built**, so snapshot `priceCents` onto `Appointment` at booking time *before* the reporting work, not after.
 
 ### Gap 18 — NICE — No error, not-found, or loading pages
+
+**Status: CLOSED (2026-10-16).** Root `src/app/not-found.tsx` (branded 404, with links home and to booking), `src/app/error.tsx` (retry + home) and `src/app/global-error.tsx` (errors in the root layout itself). `loading.tsx` added for `/admin` and `/appointments` only — deliberately not at the root, because a streamed response is fixed at HTTP 200, which would turn public 404s into "soft 404s".
 
 The only special files in `src/app/**` are `layout.tsx` and `admin/layout.tsx`. There is no `error.tsx`, `global-error.tsx`, `not-found.tsx`, or `loading.tsx` anywhere.
 
@@ -388,9 +396,9 @@ Ordered by what unblocks the most, not by size. Steps 1 and 2, and the reschedul
 ~~A one-line exemption mirroring the existing admin bypass of the booking toggle. Smallest change on this list with the most direct effect on recorded revenue.~~
 *Covered Gap 3 — took two attempts; see that gap's note on the `getOpenSlots()` filter the first pass missed.*
 
-**3. Price snapshot, then reporting.**
-Copy `priceCents` onto `Appointment` at booking time first — otherwise every report built on top is wrong as soon as prices change. Then build daily takings and the payment-method split; the rest of the data is already captured.
-*Covers Gaps 17, 7. Still open.*
+**3. ~~Price snapshot~~, then reporting.**
+~~Copy `priceCents` onto `Appointment` at booking time first — otherwise every report built on top is wrong as soon as prices change.~~ Then build daily takings and the payment-method split; the rest of the data is already captured.
+*Gap 17 (price snapshot) done 2026-10-13 — each `AppointmentService` line records its price and duration at booking. Gap 7 (reporting) still open; an artist pay report is planned in `PLAN_ARTIST_PAY_REPORT.md`.*
 
 ~~**4. Reschedule, and a cancellation notice window.**~~
 ~~The two policy gaps the salon will hit on the phone every week. Reschedule reuses the existing booking transaction shape; the cancellation window wants a configurable value rather than a hardcoded 24h, which means extending `AppSettings`.~~
@@ -402,14 +410,10 @@ Copy `priceCents` onto `Appointment` at booking time first — otherwise every r
 
 ~~**6. Standing-appointment management.**~~
 ~~Finish the half-built feature — a series list with pause/cancel, and make single-occurrence cancellation series-aware.~~
-*Covers Gap 11 — done. Two admin surfaces (dedicated `/admin/recurring`, plus a scoped view on `/admin/users/[id]`) and customer self-service on `/appointments`, sharing one status-change transaction. Single-occurrence cancellation was deliberately left unchanged rather than made "series-aware" in the sense originally floated — see `PROJECT_STATUS.md`/`PLAN_RECURRING_MANAGEMENT.md` for why that turned out to be the right call once the real series-level cancel routes existed. A rolling re-materialization job for the 8-week horizon remains a separate follow-up — now fully planned (not built) as `PROJECT_STATUS.md` Roadmap item 15, implementation plan in `PLAN_RECURRING_MATERIALIZATION.md` — that this work surfaced but deliberately didn't build.*
+*Covers Gap 11 — done. Two admin surfaces (dedicated `/admin/recurring`, plus a scoped view on `/admin/users/[id]`) and customer self-service on `/appointments`, sharing one status-change transaction. Single-occurrence cancellation was deliberately left unchanged rather than made "series-aware" in the sense originally floated — see `PROJECT_STATUS.md`/`PLAN_RECURRING_MANAGEMENT.md` for why that turned out to be the right call once the real series-level cancel routes existed. A rolling re-materialization job for the 8-week horizon was later built (2026-10-10) and then removed (2026-10-12) when the client made a series end date mandatory — every week of a series is now booked at creation, and a series can only be cancelled (no pause/resume).*
 
 ---
 
 ## Note on `PROJECT_STATUS.md` accuracy
 
-`PROJECT_STATUS.md` currently lists **portfolio image upload** as "not started, still blocked on the Cloudinary-vs-S3 decision (unscoped)" in several places, including the "Not yet built" section and roadmap item 5.
-
-It is built and shipped — commit `4a1ef82` ("Feature: image uploads"), using Cloudinary with server-side signed uploads (`src/app/api/admin/uploads/sign/route.ts`, `src/components/admin/photo-upload-field.tsx`, `src/components/admin/artists/portfolio-manager.tsx`). The Cloudinary-vs-S3 decision was evidently made in favour of Cloudinary.
-
-Worth correcting, since that document is the orientation point for new sessions and this is the exact kind of staleness it warns against.
+*Resolved.* This section originally flagged that `PROJECT_STATUS.md` still listed portfolio image upload as unbuilt after commit `4a1ef82` had shipped it on Cloudinary. That was corrected on 2026-10-15, and on 2026-10-16 `PROJECT_STATUS.md` was condensed into a current-state summary (full history archived in `docs/PROJECT_HISTORY.md`).

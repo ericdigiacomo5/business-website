@@ -34,10 +34,20 @@ export type ServiceToBook = { serviceId: string; priceCents: number; durationMin
 // Loads the given services in the order asked for, as lines ready to book.
 // Returns null if any id doesn't exist. Shared by both booking routes and
 // the admin "edit services" path so all three snapshot the same way.
-export async function loadServicesToBook(serviceIds: string[]): Promise<ServiceToBook[] | null> {
+//
+// requireActive: the booking routes pass true, so a retired service
+// (Service.active = false) reads as not found — the same rule they already
+// apply to a deactivated artist. The admin "edit services" path leaves it
+// off on purpose: keeping a retired service that's already on an
+// appointment is allowed there.
+export async function loadServicesToBook(
+    serviceIds: string[],
+    options: { requireActive?: boolean } = {}
+): Promise<ServiceToBook[] | null> {
     const rows = await prisma.service.findMany({ where: { id: { in: serviceIds } } });
     const byId = new Map(rows.map((row) => [row.id, row]));
     if (serviceIds.some((id) => !byId.has(id))) return null;
+    if (options.requireActive && rows.some((row) => !row.active)) return null;
 
     return serviceIds.map((id) => {
         const service = byId.get(id)!;
@@ -122,6 +132,62 @@ export async function bookOccurrence(params: {
 
         throw error;
     }
+}
+
+// Thrown inside a transaction by reclaimSlots() when the new span isn't
+// open, so the caller's whole transaction (status, services, etc.) rolls
+// back with it. Catch it outside the transaction and turn it into a 400.
+export class SlotUnavailableError extends Error {
+    constructor() {
+        super("SLOT_UNAVAILABLE");
+        this.name = "SlotUnavailableError";
+    }
+}
+
+// Moves an existing appointment's slot claim to a new span — the shared core
+// of every reschedule and length change (admin PATCH and customer
+// reschedule). Must run inside the caller's transaction:
+//   1. free the appointment's current slots (so a move can overlap its own
+//      current time),
+//   2. confirm every slot of the new span is open, and
+//   3. claim them.
+// Returns the new start/end for the caller to write onto the Appointment.
+// A concurrent booking that grabs a slot between 2 and 3 still fails on the
+// AppointmentSlot unique constraint (P2002) — the database stays the real
+// guarantee.
+export async function reclaimSlots(
+    tx: Prisma.TransactionClient,
+    params: {
+        appointmentId: string;
+        artistId: string;
+        startTime: Date;
+        durationMinutes: number;
+        // Admin callers only — lets the new time be in the past.
+        allowPast: boolean;
+    }
+): Promise<{ startTime: Date; endTime: Date }> {
+    const { appointmentId, artistId, startTime, durationMinutes, allowPast } = params;
+    const endTime = new Date(startTime.getTime() + durationMinutes * 60_000);
+    const slots = slotStartsFor(startTime, durationMinutes);
+
+    await tx.appointmentSlot.deleteMany({ where: { appointmentId } });
+
+    // excludeAppointmentId is what actually makes this appointment's own
+    // current slots count as open: getOpenSlots reads through the global
+    // client, not `tx`, so it can't see the uncommitted delete just above.
+    // Without it, any new time or length overlapping the current one (every
+    // length change does) would be refused as "not available".
+    const openSlots = await getOpenSlots(artistId, startTime, { allowPast, excludeAppointmentId: appointmentId });
+    const openSlotTimes = new Set(openSlots.map((slot) => slot.getTime()));
+    if (!slots.every((slot) => openSlotTimes.has(slot.getTime()))) {
+        throw new SlotUnavailableError();
+    }
+
+    await tx.appointmentSlot.createMany({
+        data: slots.map((slotStart) => ({ artistId, slotStart, appointmentId })),
+    });
+
+    return { startTime, endTime };
 }
 
 export type MaterializeResult = {
@@ -214,18 +280,19 @@ export type CancelSeriesResult = {
 // Appointment and is rescheduled or cancelled through the normal appointment
 // routes.
 //
-// Shared by the admin and customer PATCH routes, with `respectNoticeWindow`
-// as the one behavioral difference between them. A non-admin cancelling a
-// series should not be able to route around the same 24h notice window that
-// already applies to cancelling one occurrence directly (see
-// DELETE /api/appointments/[id]) — an admin has no such restriction, same
-// asymmetry already established for admin vs. customer appointment routes
-// throughout this project. Lives here, not in src/lib/recurring.ts, because
-// that module is shared with Client Components and must stay free of
-// server-only imports.
+// Shared by the admin and customer PATCH routes, with `noticeHours` as the
+// one behavioral difference between them. A non-admin cancelling a series
+// should not be able to route around the notice window that already applies
+// to cancelling one occurrence directly (see DELETE /api/appointments/[id]),
+// so the customer route passes the salon's cancellationNoticeHours and
+// occurrences inside it stay booked. An admin passes 0 — no restriction,
+// same asymmetry already established for admin vs. customer appointment
+// routes throughout this project. Lives here, not in src/lib/recurring.ts,
+// because that module is shared with Client Components and must stay free
+// of server-only imports.
 export async function cancelRecurringSeries(
     recurringAppointmentId: string,
-    options: { respectNoticeWindow: boolean }
+    options: { noticeHours: number }
 ): Promise<CancelSeriesResult> {
     const now = new Date();
 
@@ -242,9 +309,7 @@ export async function cancelRecurringSeries(
             data: { status: RecurringStatus.CANCELLED },
         });
 
-        const cutoff = options.respectNoticeWindow
-            ? new Date(now.getTime() + 24 * 60 * 60 * 1000)
-            : now;
+        const cutoff = new Date(now.getTime() + options.noticeHours * 60 * 60 * 1000);
 
         const futureActive = await tx.appointment.findMany({
             where: {

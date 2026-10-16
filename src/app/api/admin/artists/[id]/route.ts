@@ -1,6 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@/generated/prisma/client";
 import { requireAdmin } from "@/lib/require-admin";
+import { isCloudinaryUrl, optionalText, requiredText, TEXT_LIMITS } from "@/lib/validation";
+import { readJsonObject } from "@/lib/request";
 
 export async function PATCH(
     request: Request,
@@ -11,42 +13,27 @@ export async function PATCH(
 
     const { id } = await params
 
-    let body: unknown;
-    try {
-        body = await request.json()
-    } catch {
-        return Response.json(
-            { error: "Invalid JSON body" },
-            { status: 400 }
-        )
+    const body = await readJsonObject(request)
+    if (body instanceof Response) return body
+
+    const { photoUrl, active } = body
+
+    let name: string | undefined
+    if (body.name !== undefined) {
+        const parsed = requiredText(body.name, TEXT_LIMITS.artistName)
+        if (parsed === null) {
+            return Response.json(
+                { error: 'Name is invalid' },
+                { status: 400 }
+            )
+        }
+        name = parsed
     }
 
-    if (typeof body !== 'object' || body === null) {
+    const bio = optionalText(body.bio, TEXT_LIMITS.bio)
+    if (!bio.ok) {
         return Response.json(
-            { error: 'Invalid request body' },
-            { status: 400 }
-        )
-    }
-
-    const { name, bio, photoUrl, active } = body as Record<string, unknown>
-
-    if (name !== undefined && (typeof name !== 'string' || !name)) {
-        return Response.json(
-            { error: 'Name is invalid' },
-            { status: 400 }
-        )
-    }
-
-    if (bio !== undefined && bio !== null && typeof bio !== 'string') {
-        return Response.json(
-            { error: 'Bio is invalid' },
-            { status: 400 }
-        )
-    }
-
-    if (photoUrl !== undefined && photoUrl !== null && typeof photoUrl !== 'string') {
-        return Response.json(
-            { error: 'Photo URL is invalid' },
+            { error: `Bio must be text of at most ${TEXT_LIMITS.bio} characters` },
             { status: 400 }
         )
     }
@@ -74,11 +61,26 @@ export async function PATCH(
         )
     }
 
-    const data: Record<string, unknown> = {}
+    // Photos only ever come from the signed Cloudinary upload. "" or null
+    // means "no photo". The artist's current URL is accepted unchanged —
+    // the edit form sends it back on every save, and an older photo from
+    // before uploads were Cloudinary-only shouldn't block editing the name.
+    if (
+        photoUrl !== undefined && photoUrl !== null && photoUrl !== '' &&
+        photoUrl !== artist.photoUrl &&
+        !isCloudinaryUrl(photoUrl, process.env.CLOUDINARY_CLOUD_NAME)
+    ) {
+        return Response.json(
+            { error: 'Photo must be an uploaded image' },
+            { status: 400 }
+        )
+    }
+
+    const data: Prisma.ArtistUpdateInput = {}
     if (name !== undefined) data.name = name;
-    if (bio !== undefined) data.bio = bio;
-    if (photoUrl !== undefined) data.photoUrl = photoUrl;
-    if (active !== undefined) data.active = active;
+    if (bio.value !== undefined) data.bio = bio.value;
+    if (photoUrl !== undefined) data.photoUrl = photoUrl ? (photoUrl as string) : null;
+    if (active !== undefined) data.active = active as boolean;
 
     try {
         const updatedArtist = await prisma.artist.update({

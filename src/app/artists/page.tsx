@@ -9,7 +9,7 @@ export default async function ArtistsPage() {
             <section className="bg-accent px-4 py-16 text-center">
                 <span className="font-script text-2xl text-primary">The Talent Behind</span>
                 <h1 className="mt-1 font-serif text-6xl font-extrabold text-background">Our Artists</h1>
-                <p className="mt-4 text-[#d8e2ea]">Meet the team and browse their work.</p>
+                <p className="mt-4 text-on-dark">Meet the team and browse their work.</p>
             </section>
 
             <div className="mx-auto max-w-6xl px-4 py-14">

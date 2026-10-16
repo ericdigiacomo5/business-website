@@ -1,8 +1,9 @@
 import { prisma } from "@/lib/prisma"
 import { Prisma } from "@/generated/prisma/client"
 import { requireUser } from "@/lib/require-user"
-import { isValidEmail, isValidPhone } from "@/lib/validation"
+import { normalizeEmail, normalizePhone, requiredText, TEXT_LIMITS } from "@/lib/validation"
 import { SAFE_USER_SELECT } from "@/lib/user-select"
+import { readJsonObject } from "@/lib/request"
 
 export async function GET() {
     const userId = await requireUser()
@@ -24,37 +25,44 @@ export async function PATCH(request: Request) {
     const userId = await requireUser()
     if (userId instanceof Response) return userId
 
-    let body: unknown
-    try {
-        body = await request.json()
-    } catch {
-        return Response.json({ error: "Invalid JSON body" }, { status: 400 })
+    const body = await readJsonObject(request)
+    if (body instanceof Response) return body
+
+    // role/passwordHash are never read from the body at all — this endpoint
+    // can never touch either, by construction, not just by choosing not to
+    // read them.
+    const data: { name?: string; email?: string; phone?: string } = {}
+
+    if (body.name !== undefined) {
+        const name = requiredText(body.name, TEXT_LIMITS.personName)
+        if (name === null) {
+            return Response.json(
+                { error: `Name is required (up to ${TEXT_LIMITS.personName} characters)` },
+                { status: 400 }
+            )
+        }
+        data.name = name
     }
 
-    if (typeof body !== "object" || body === null) {
-        return Response.json({ error: "Invalid request body" }, { status: 400 })
+    if (body.email !== undefined) {
+        const email = normalizeEmail(body.email)
+        if (email === null) {
+            return Response.json({ error: "A valid email is required" }, { status: 400 })
+        }
+        data.email = email
     }
 
-    // role/passwordHash are never destructured out of the body at all — this
-    // endpoint can never touch either, by construction, not just by choosing
-    // not to read them.
-    const { name, email, phone } = body as Record<string, unknown>
-
-    if (name !== undefined && (typeof name !== "string" || !name)) {
-        return Response.json({ error: "Name is invalid" }, { status: 400 })
+    if (body.phone !== undefined) {
+        const phone = normalizePhone(body.phone)
+        if (phone === null) {
+            return Response.json({ error: "A valid phone number is required" }, { status: 400 })
+        }
+        data.phone = phone
     }
 
-    if (email !== undefined && !isValidEmail(email)) {
-        return Response.json({ error: "A valid email is required" }, { status: 400 })
-    }
-
-    if (phone !== undefined && !isValidPhone(phone)) {
-        return Response.json({ error: "A valid phone number is required" }, { status: 400 })
-    }
-
-    if (email !== undefined) {
+    if (data.email !== undefined) {
         const existing = await prisma.user.findFirst({
-            where: { email: email as string, NOT: { id: userId } },
+            where: { email: data.email, NOT: { id: userId } },
         })
         if (existing) {
             return Response.json(
@@ -63,11 +71,6 @@ export async function PATCH(request: Request) {
             )
         }
     }
-
-    const data: Record<string, unknown> = {}
-    if (name !== undefined) data.name = name
-    if (email !== undefined) data.email = email
-    if (phone !== undefined) data.phone = phone
 
     try {
         const updated = await prisma.user.update({

@@ -54,17 +54,15 @@ function SlotFetcher({
         let cancelled = false
 
         const url = `/api/artists/${artistId}/availability?date=${date}`
-        // Only meaningful for an admin caller rescheduling — the API itself
-        // silently ignores this param for anyone else, so appending it here
-        // for the ordinary customer booking flow (where this is never
-        // passed) is simply a no-op, not a security concern.
+        // Only passed when rescheduling (admin, or a customer moving their
+        // own booking) — the API ignores it for anyone else.
         fetch(excludeAppointmentId ? `${url}&excludeAppointmentId=${excludeAppointmentId}` : url)
             .then(async (res) => {
                 if (!res.ok) throw new Error("Failed to load availability")
-                return res.json() as Promise<string[]>
+                return res.json() as Promise<{ data: string[] }>
             })
-            .then((data) => {
-                if (!cancelled) setSlots(filterFittableSlots(data, serviceDurationMinutes))
+            .then((body) => {
+                if (!cancelled) setSlots(filterFittableSlots(body.data, serviceDurationMinutes))
             })
             .catch(() => {
                 if (!cancelled) setError("Couldn't load open times. Please try again.")

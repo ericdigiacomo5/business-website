@@ -1,43 +1,43 @@
 import bcrypt from "bcryptjs"
 import { prisma } from "@/lib/prisma"
-import { isValidEmail, isValidPhone } from "@/lib/validation"
-import { BCRYPT_COST, PASSWORD_MIN_LENGTH } from "@/lib/password"
+import { normalizeEmail, normalizePhone, requiredText, TEXT_LIMITS } from "@/lib/validation"
+import { BCRYPT_COST, passwordError } from "@/lib/password"
+import { readJsonObject } from "@/lib/request"
 
 export async function POST(request: Request) {
-    let body: unknown;
-    try {
-        body = await request.json()
-    } catch {
+    const body = await readJsonObject(request)
+    if (body instanceof Response) return body
+
+    // Name is required so emails and the admin schedule can address the
+    // customer by name (it was optional before, so older accounts may have
+    // none — the profile prompt asks them to add it).
+    const name = requiredText(body.name, TEXT_LIMITS.personName)
+    if (name === null) {
         return Response.json(
-            { error: "Invalid JSON body" },
+            { error: "Your name is required" },
             { status: 400 }
         )
     }
 
-    if (typeof body !== "object" || body === null) {
-        return Response.json(
-            { error: "Invalid request body" },
-            { status: 400 }
-        )
-    }
-
-    const { email, password, phone } = body as Record<string, unknown>
-
-    if (!isValidEmail(email)) {
+    const email = normalizeEmail(body.email)
+    if (email === null) {
         return Response.json(
             { error: "A valid email is required" },
             { status: 400 }
         )
     }
 
-    if (!password || typeof password !== "string" || password.length < PASSWORD_MIN_LENGTH) {
+    const passwordProblem = passwordError(body.password)
+    if (passwordProblem) {
         return Response.json(
-            { error: `Password must be at least ${PASSWORD_MIN_LENGTH} characters` },
+            { error: passwordProblem },
             { status: 400 }
         )
     }
+    const password = body.password as string
 
-    if (!isValidPhone(phone)) {
+    const phone = normalizePhone(body.phone)
+    if (phone === null) {
         return Response.json(
             { error: "A phone number is required" },
             { status: 400 }
@@ -55,7 +55,7 @@ export async function POST(request: Request) {
     const passwordHash = await bcrypt.hash(password, BCRYPT_COST)
 
     const user = await prisma.user.create({
-        data: { email, phone, passwordHash },
+        data: { name, email, phone, passwordHash },
     })
 
     // Scrubbed response — never echo passwordHash back, same reasoning as

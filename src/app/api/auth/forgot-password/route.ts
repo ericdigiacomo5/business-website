@@ -1,6 +1,7 @@
 import { after } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { isValidEmail } from "@/lib/validation"
+import { normalizeEmail } from "@/lib/validation"
+import { readJsonObject } from "@/lib/request"
 import { generateResetToken } from "@/lib/password-reset-token"
 import { sendEmail } from "@/lib/email"
 import { passwordResetEmail } from "@/lib/email-templates"
@@ -18,20 +19,11 @@ const GENERIC_RESPONSE_BODY = {
 }
 
 export async function POST(request: Request) {
-    let body: unknown
-    try {
-        body = await request.json()
-    } catch {
-        return Response.json({ error: "Invalid JSON body" }, { status: 400 })
-    }
+    const body = await readJsonObject(request)
+    if (body instanceof Response) return body
 
-    if (typeof body !== "object" || body === null) {
-        return Response.json({ error: "Invalid request body" }, { status: 400 })
-    }
-
-    const { email } = body as Record<string, unknown>
-
-    if (!isValidEmail(email)) {
+    const email = normalizeEmail(body.email)
+    if (email === null) {
         return Response.json({ error: "A valid email is required" }, { status: 400 })
     }
 

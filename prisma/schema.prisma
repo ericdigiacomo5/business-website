@@ -355,4 +355,10 @@ model TimeOff {
 model AppSettings {
   id             Int     @id @default(1)
   bookingEnabled Boolean @default(true)
+  // How many hours before an appointment a customer can still cancel or
+  // reschedule it online (admins are never limited).
+  cancellationNoticeHours Int @default(24)
+  // Longest a standing appointment may run, in weeks — every week is booked
+  // at creation, so this also bounds how much of a calendar one request claims.
+  maxSeriesWeeks          Int @default(52)
 }

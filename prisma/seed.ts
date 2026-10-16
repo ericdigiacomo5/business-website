@@ -76,7 +76,9 @@ async function main() {
         );
     }
 
-    const adminEmail = process.env.SEED_ADMIN_EMAIL ?? "admin@example.com";
+    // Lowercased like every other stored email (see normalizeEmail in
+    // src/lib/validation.ts), so sign-in finds it however it's typed.
+    const adminEmail = (process.env.SEED_ADMIN_EMAIL ?? "admin@example.com").trim().toLowerCase();
     const adminPassword = process.env.SEED_ADMIN_PASSWORD ?? "admin12345";
 
     const admin = await prisma.user.upsert({
@@ -84,6 +86,7 @@ async function main() {
         update: {},
         create: {
             email: adminEmail,
+            name: "Salon Admin",
             phone: "555-0100",
             passwordHash: await bcrypt.hash(adminPassword, 10),
             role: "ADMIN",

@@ -4,6 +4,7 @@ import { useState } from "react"
 import { X } from "lucide-react"
 import type { PortfolioImage } from "@/generated/prisma/client"
 import { PhotoUploadField } from "@/components/admin/photo-upload-field"
+import { CloudinaryImage } from "@/components/ui/cloudinary-image"
 
 // Unlike ArtistForm's single photoUrl field, this manages a *list* — each
 // photo is its own row in the database, added and removed independently,
@@ -88,15 +89,19 @@ export function PortfolioManager({
                 <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
                     {images.map((image) => (
                         <div key={image.id} className="group relative">
-                            {/* DB-sourced image, same host-not-chosen-yet
-                                reasoning as the public PortfolioGallery —
-                                now Cloudinary-hosted in practice, but the
-                                field itself is still just a plain string. */}
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img
+                            {/* A non-Cloudinary image (from before uploads
+                                were required) can't be displayed, but still
+                                shows a placeholder so it can be deleted. */}
+                            <CloudinaryImage
                                 src={image.imageUrl}
                                 alt={image.caption ?? "Portfolio photo"}
-                                className="aspect-square w-full rounded-sm object-cover"
+                                sizes="160px"
+                                className="aspect-square w-full rounded-sm"
+                                fallback={
+                                    <div className="flex aspect-square w-full items-center justify-center rounded-sm border border-dashed border-border p-2 text-center text-xs text-muted-foreground">
+                                        Image unavailable
+                                    </div>
+                                }
                             />
                             <button
                                 type="button"

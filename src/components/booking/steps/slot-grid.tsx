@@ -20,6 +20,7 @@ export function SlotGrid({
                         key={slot}
                         type="button"
                         onClick={() => onSelect(slot)}
+                        aria-pressed={selected}
                         className={
                             "min-h-11 cursor-pointer rounded-sm border text-sm font-medium transition-colors " +
                             (selected

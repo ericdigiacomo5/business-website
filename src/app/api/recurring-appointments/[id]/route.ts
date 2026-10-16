@@ -2,6 +2,8 @@ import { after } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { sendRecurringCancelledNotice } from "@/lib/appointment-emails";
 import { requireUser } from "@/lib/require-user";
+import { readJsonObject } from "@/lib/request";
+import { getPolicySettings } from "@/lib/settings";
 import { cancelRecurringSeries, upcomingSkipsInclude } from "@/lib/booking";
 import { SERVICE_LINES_INCLUDE } from "@/lib/appointment-services";
 
@@ -31,18 +33,10 @@ export async function PATCH(
         return Response.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    let body: unknown;
-    try {
-        body = await request.json();
-    } catch {
-        return Response.json({ error: "Invalid JSON body" }, { status: 400 });
-    }
+    const body = await readJsonObject(request);
+    if (body instanceof Response) return body;
 
-    if (typeof body !== "object" || body === null) {
-        return Response.json({ error: "Invalid request body" }, { status: 400 });
-    }
-
-    const { status } = body as Record<string, unknown>;
+    const { status } = body;
     if (status !== "CANCELLED") {
         return Response.json(
             { error: "A standing appointment can only be cancelled" },
@@ -50,12 +44,14 @@ export async function PATCH(
         );
     }
 
+    const { cancellationNoticeHours } = await getPolicySettings();
     const result = await cancelRecurringSeries(id, {
-        // An imminent occurrence (<24h out) stays untouched — same policy as
-        // cancelling it directly via DELETE /api/appointments/[id]. Without
-        // this, "cancel the whole series" would be a backdoor around a
-        // notice-window policy that already exists one layer down.
-        respectNoticeWindow: true,
+        // An imminent occurrence (inside the notice window) stays untouched —
+        // same policy as cancelling it directly via
+        // DELETE /api/appointments/[id]. Without this, "cancel the whole
+        // series" would be a backdoor around a notice-window policy that
+        // already exists one layer down.
+        noticeHours: cancellationNoticeHours,
     });
 
     // Only on an actual transition — re-cancelling stays silent.

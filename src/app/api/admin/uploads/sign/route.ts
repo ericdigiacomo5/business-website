@@ -1,4 +1,3 @@
-import { createHash } from "crypto";
 import { requireAdmin } from "@/lib/require-admin";
 
 // Cloudinary's signature recipe: take every parameter that will be part of
@@ -9,13 +8,18 @@ import { requireAdmin } from "@/lib/require-admin";
 // rejects it if the signatures don't match — this is what proves the
 // request really came from us, without ever sending the secret itself over
 // the network.
-function signParams(params: Record<string, string | number>, apiSecret: string): string {
+//
+// Web Crypto (crypto.subtle), not Node's `crypto` module — same reasoning as
+// src/lib/password-reset-token.ts and src/lib/job-auth.ts: it runs unchanged
+// on Cloudflare Workers without the nodejs_compat flag.
+async function signParams(params: Record<string, string | number>, apiSecret: string): Promise<string> {
     const sorted = Object.keys(params)
         .sort()
         .map((key) => `${key}=${params[key]}`)
         .join("&");
 
-    return createHash("sha1").update(sorted + apiSecret).digest("hex");
+    const digest = await crypto.subtle.digest("SHA-1", new TextEncoder().encode(sorted + apiSecret));
+    return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
 export async function POST() {
@@ -43,7 +47,7 @@ export async function POST() {
     // exact same value, or the signature check fails.
     const paramsToSign = { timestamp, folder: "nail-salon" };
 
-    const signature = signParams(paramsToSign, apiSecret);
+    const signature = await signParams(paramsToSign, apiSecret);
 
     return Response.json({
         cloudName,

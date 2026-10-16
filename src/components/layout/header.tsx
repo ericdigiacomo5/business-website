@@ -1,5 +1,6 @@
 'use client'
 
+import Image from "next/image"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useState } from "react"
@@ -34,9 +35,11 @@ export function Header() {
         <header className="sticky top-0 z-30 border-b-2 border-foreground bg-background/95 backdrop-blur">
             <div className="mx-auto flex h-20 max-w-6xl items-center justify-between px-4">
                 <Link href="/" onClick={closeMenu} className="flex min-w-0 items-center gap-3">
-                    <img
+                    <Image
                         src="/nail-image.jpg"
                         alt=""
+                        width={44}
+                        height={44}
                         className="h-11 w-11 flex-none rounded-full border-2 border-accent object-cover"
                     />
                     <span className="flex min-w-0 flex-col leading-tight">

@@ -1,9 +1,8 @@
-import { NextRequest } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { requireUser } from "@/lib/require-user"
 import { SERVICE_LINES_INCLUDE } from "@/lib/appointment-services"
 
-export async function GET(request: NextRequest) {
+export async function GET() {
     const userId = await requireUser()
     if (userId instanceof Response) return userId
 
@@ -13,5 +12,5 @@ export async function GET(request: NextRequest) {
         orderBy: { startTime: 'asc' }
     })
 
-    return Response.json(appointments)
+    return Response.json({ data: appointments })
 }

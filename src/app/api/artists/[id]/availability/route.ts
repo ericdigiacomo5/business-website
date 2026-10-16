@@ -43,20 +43,30 @@ export async function GET(
         );
     }
 
-    // Only an admin's excludeAppointmentId is honored — same silently-ignore
-    // pattern the booking routes already use for a non-admin's userId
-    // override. This route stays public/unauthenticated for the ordinary
-    // customer-booking case; the param exists so the admin reschedule UI can
-    // show an appointment's own currently-held slots as open (the PATCH
-    // route already frees them before checking the new time — hiding them
-    // here would make the picker lie about what a reschedule would allow).
-    const session = await auth()
-    const isAdmin = session?.user?.role === "ADMIN"
-    const excludeAppointmentId = isAdmin
-        ? request.nextUrl.searchParams.get("excludeAppointmentId") ?? undefined
-        : undefined
+    // excludeAppointmentId lets a reschedule picker show an appointment's own
+    // currently-held slots as open (the reschedule routes free them before
+    // checking the new time — hiding them here would make the picker lie
+    // about what a reschedule would allow). Honored only for an admin or for
+    // the appointment's own customer; anyone else's is silently ignored,
+    // same pattern as a non-admin's userId override on the booking routes.
+    // This route stays public/unauthenticated for ordinary browsing, so
+    // knowing an appointment id alone mustn't reveal whether it holds slots.
+    let excludeAppointmentId: string | undefined
+    const requestedExclude = request.nextUrl.searchParams.get("excludeAppointmentId")
+    if (requestedExclude) {
+        const session = await auth()
+        if (session?.user?.role === "ADMIN") {
+            excludeAppointmentId = requestedExclude
+        } else if (session?.user?.id) {
+            const owned = await prisma.appointment.findFirst({
+                where: { id: requestedExclude, userId: session.user.id },
+                select: { id: true },
+            })
+            if (owned) excludeAppointmentId = owned.id
+        }
+    }
 
     const openSlots = await getOpenSlots(artist.id, date, { excludeAppointmentId })
 
-    return Response.json(openSlots)
+    return Response.json({ data: openSlots })
 }

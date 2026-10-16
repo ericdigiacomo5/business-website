@@ -1,4 +1,5 @@
 import { requireAdmin } from "@/lib/require-admin";
+import { readJsonObject } from "@/lib/request";
 import { prisma } from "@/lib/prisma"
 import { isValidTimeString, isGridAligned, startOfDay, endOfDay, timeOffDateRangeOverlap } from "@/lib/availability"
 import { parseLocalDate } from "@/lib/format"
@@ -7,24 +8,10 @@ export async function POST(request: Request) {
     const forbidden = await requireAdmin()
     if (forbidden) return forbidden
 
-    let body: unknown;
-    try {
-        body = await request.json()
-    } catch {
-        return Response.json(
-            { error: "Invalid JSON body" },
-            { status: 400 }
-        )
-    }
+    const body = await readJsonObject(request)
+    if (body instanceof Response) return body
 
-    if (typeof body !== 'object' || body === null) {
-        return Response.json(
-            { error: 'Invalid request body' },
-            { status: 400 }
-        )
-    }
-
-    const { artistId, date, endDate, startTime, endTime } = body as Record<string, unknown>
+    const { artistId, date, endDate, startTime, endTime } = body
 
     // artistId is optional — omitted (or explicitly null) means salon-wide,
     // blocking every artist including ones created after this row (see

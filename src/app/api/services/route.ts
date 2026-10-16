@@ -5,5 +5,5 @@ export async function GET() {
         where: { active: true }
     });
 
-    return Response.json(services)
+    return Response.json({ data: services })
 }

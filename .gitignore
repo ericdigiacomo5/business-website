@@ -32,6 +32,8 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+# variable names + setup notes only, no values
+!.env.example
 
 # vercel
 .vercel
@@ -45,6 +47,9 @@ next-env.d.ts
 # local-only security audit notes — describes unpatched-at-time-of-writing
 # vulnerabilities and exact exploit steps; keep out of a public repo
 SECURITY_AUDIT.md
+AUDIT_2026-10-16.md
 PLAN_SALON_CLOSURES.md
 PLAN_RECURRING_MANAGEMENT.md
 PLAN_RECURRING_MATERIALIZATION.md
+PLAN_GIFT_CARDS_AND_VOUCHERS.md
+PLAN_ARTIST_PAY_REPORT.md

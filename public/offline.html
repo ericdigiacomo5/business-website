@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#16212c">
+    <title>You're offline — Nail Image Inc.</title>
+    <!-- Self-contained on purpose: the service worker shows this page when
+         there's no connection, so it can't rely on the site's CSS or fonts
+         having been cached. Colors match src/app/globals.css. -->
+    <style>
+        body {
+            margin: 0;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #f6ead9;
+            color: #16212c;
+            font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+            text-align: center;
+            padding: 24px;
+            box-sizing: border-box;
+        }
+        main { max-width: 26rem; }
+        img { width: 96px; height: 96px; border-radius: 50%; border: 2px solid #2f6f9e; object-fit: cover; }
+        h1 { font-family: Georgia, "Times New Roman", serif; font-size: 1.9rem; margin: 20px 0 8px; }
+        p { color: #5f6f7d; line-height: 1.5; margin: 0 0 24px; }
+        a {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 44px;
+            padding: 0 24px;
+            background: #2f6f9e;
+            color: #ffffff;
+            border: 1px solid #16212c;
+            border-radius: 2px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            text-decoration: none;
+        }
+    </style>
+</head>
+<body>
+    <main>
+        <img src="/icons/icon-192.png" alt="">
+        <h1>You're offline</h1>
+        <p>
+            Booking needs an internet connection so we can show you times that are really open.
+            Check your connection and try again.
+        </p>
+        <a href="/">Try Again</a>
+    </main>
+</body>
+</html>

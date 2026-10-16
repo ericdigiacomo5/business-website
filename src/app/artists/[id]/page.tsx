@@ -3,6 +3,7 @@ import { notFound } from "next/navigation"
 import { prisma } from "@/lib/prisma"
 import { buttonVariants } from "@/components/ui/button"
 import { PortfolioGallery } from "@/components/artists/portfolio-gallery"
+import { CloudinaryImage } from "@/components/ui/cloudinary-image"
 
 export default async function ArtistDetailPage({
     params,
@@ -32,23 +33,23 @@ export default async function ArtistDetailPage({
             </Link>
 
             <div className="mt-8 flex flex-col items-center gap-10 text-center sm:flex-row sm:items-start sm:text-left">
-                {artist.photoUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                        src={artist.photoUrl}
-                        alt={artist.name}
-                        className="h-36 w-36 flex-none rounded-full border-2 border-accent object-cover"
-                    />
-                ) : (
-                    <div className="flex h-36 w-36 flex-none items-center justify-center rounded-full border-2 border-accent bg-muted text-3xl font-semibold text-accent">
-                        {artist.name
-                            .split(" ")
-                            .map((p) => p[0])
-                            .slice(0, 2)
-                            .join("")
-                            .toUpperCase()}
-                    </div>
-                )}
+                <CloudinaryImage
+                    src={artist.photoUrl}
+                    alt={artist.name}
+                    sizes="144px"
+                    className="h-36 w-36 flex-none rounded-full border-2 border-accent"
+                    fallback={
+                        <div className="flex h-36 w-36 flex-none items-center justify-center rounded-full border-2 border-accent bg-muted text-3xl font-semibold text-accent">
+                            {artist.name
+                                .split(" ")
+                                .filter(Boolean)
+                                .map((p) => p[0])
+                                .slice(0, 2)
+                                .join("")
+                                .toUpperCase()}
+                        </div>
+                    }
+                />
                 <div>
                     <span className="font-script text-2xl text-accent">Meet</span>
                     <h1 className="mt-1 font-serif text-4xl font-extrabold text-foreground">{artist.name}</h1>

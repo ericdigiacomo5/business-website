@@ -1,29 +1,16 @@
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/require-admin";
+import { readJsonObject } from "@/lib/request";
 import { isValidTimeString, isGridAligned } from "@/lib/availability";
 
 export async function POST(request: Request) {
     const forbidden = await requireAdmin()
     if (forbidden) return forbidden
 
-    let body: unknown;
-    try {
-        body = await request.json()
-    } catch {
-        return Response.json(
-            { error: "Invalid JSON body" },
-            { status: 400 }
-        )
-    }
+    const body = await readJsonObject(request)
+    if (body instanceof Response) return body
 
-    if (typeof body !== 'object' || body === null) {
-        return Response.json(
-            { error: 'Invalid request body' },
-            { status: 400 }
-        )
-    }
-
-    const { artistId, dayOfWeek, startTime, endTime } = body as Record<string, unknown>
+    const { artistId, dayOfWeek, startTime, endTime } = body
 
     if (!artistId || typeof artistId !== 'string') {
         return Response.json(

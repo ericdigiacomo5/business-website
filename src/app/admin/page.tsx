@@ -11,7 +11,8 @@ import { startOfDay, endOfDay, getWorkingWindows, getGridBounds, getTimeOffForDa
 import { parseScheduleView, startOfWeek, type ScheduleColumn } from "@/lib/schedule-grid"
 import { addDays } from "@/lib/recurring"
 import { toLocalDateKey, parseLocalDate } from "@/lib/format"
-import { isBookingEnabled } from "@/lib/settings"
+import { getPolicySettings, isBookingEnabled } from "@/lib/settings"
+import { PolicySettingsForm } from "@/components/admin/policy-settings"
 import { SERVICE_LINES_INCLUDE } from "@/lib/appointment-services"
 import { SAFE_USER_SELECT_BASIC } from "@/lib/user-select"
 
@@ -93,7 +94,7 @@ export default async function AdminBookingsPage({
         where.artistId = artistIdParam
     }
 
-    const [appointments, services, bookingEnabled] = await Promise.all([
+    const [appointments, services, bookingEnabled, policy] = await Promise.all([
         prisma.appointment.findMany({
             where,
             // Explicit select on `user`, never a bare include — Prisma returns
@@ -110,6 +111,7 @@ export default async function AdminBookingsPage({
         // For booking straight from the grid (clicking an open time).
         prisma.service.findMany({ where: { active: true }, orderBy: { createdAt: "asc" } }),
         isBookingEnabled(),
+        getPolicySettings(),
     ])
 
     // The artistId filter already scopes `appointments` server-side above —
@@ -159,8 +161,9 @@ export default async function AdminBookingsPage({
 
     return (
         <div>
-            <div className="mb-6">
+            <div className="mb-6 flex flex-col gap-4">
                 <BookingToggle initialEnabled={bookingEnabled} />
+                <PolicySettingsForm initial={policy} />
             </div>
             <BookingFilters
                 artists={allArtists}
@@ -211,6 +214,7 @@ export default async function AdminBookingsPage({
                         columns={columns}
                         services={services}
                         gridBounds={gridBounds}
+                        maxSeriesWeeks={policy.maxSeriesWeeks}
                     />
                 </div>
             </div>

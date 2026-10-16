@@ -9,6 +9,10 @@ import type { Role } from "@/generated/prisma/client"
 declare module "@auth/core/types" {
   interface User {
     role: Role
+    // Set on Session.user by the session callback (see auth.ts) — true when
+    // the account has no name or the placeholder phone. Optional because
+    // authorize()/OAuth sign-in return a User without it.
+    profileIncomplete?: boolean
   }
 }
 
@@ -22,5 +26,6 @@ declare module "@auth/core/jwt" {
   interface JWT {
     id: string
     role: Role
+    profileIncomplete?: boolean
   }
 }

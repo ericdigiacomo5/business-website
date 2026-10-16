@@ -1,6 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/require-admin";
-import { isValidEmail, isValidPhone } from "@/lib/validation";
+import { normalizeEmail, normalizePhone, requiredText, TEXT_LIMITS } from "@/lib/validation";
+import { SAFE_USER_SELECT } from "@/lib/user-select";
+import { readJsonObject } from "@/lib/request";
 import { NextRequest } from "next/server";
 
 export async function GET(request: NextRequest) {
@@ -21,7 +23,7 @@ export async function GET(request: NextRequest) {
             : undefined,
         // Explicit select, never a bare/include'd query — this is what
         // guarantees passwordHash can never leak through this endpoint.
-        select: { id: true, name: true, email: true, phone: true, role: true },
+        select: SAFE_USER_SELECT,
         orderBy: { createdAt: "desc" },
         take: 20,
     })
@@ -33,40 +35,27 @@ export async function POST(request: Request) {
     const forbidden = await requireAdmin()
     if (forbidden) return forbidden
 
-    let body: unknown;
-    try {
-        body = await request.json()
-    } catch {
-        return Response.json(
-            { error: "Invalid JSON body" },
-            { status: 400 }
-        )
-    }
+    const body = await readJsonObject(request)
+    if (body instanceof Response) return body
 
-    if (typeof body !== "object" || body === null) {
-        return Response.json(
-            { error: "Invalid request body" },
-            { status: 400 }
-        )
-    }
-
-    const { name, email, phone } = body as Record<string, unknown>
-
-    if (!name || typeof name !== "string") {
+    const name = requiredText(body.name, TEXT_LIMITS.personName)
+    if (name === null) {
         return Response.json(
             { error: "Name is required" },
             { status: 400 }
         )
     }
 
-    if (!isValidEmail(email)) {
+    const email = normalizeEmail(body.email)
+    if (email === null) {
         return Response.json(
             { error: "A valid email is required" },
             { status: 400 }
         )
     }
 
-    if (!isValidPhone(phone)) {
+    const phone = normalizePhone(body.phone)
+    if (phone === null) {
         return Response.json(
             { error: "A phone number is required" },
             { status: 400 }
@@ -86,7 +75,7 @@ export async function POST(request: Request) {
     // read from the body — this endpoint cannot mint admins.
     const user = await prisma.user.create({
         data: { name, email, phone, passwordHash: null, role: "CUSTOMER" },
-        select: { id: true, name: true, email: true, phone: true, role: true },
+        select: SAFE_USER_SELECT,
     })
 
     return Response.json({ data: user }, { status: 201 })

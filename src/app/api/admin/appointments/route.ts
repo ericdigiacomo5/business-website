@@ -72,5 +72,5 @@ export async function GET(request: NextRequest) {
         orderBy: { startTime: "asc" },
     })
 
-    return Response.json(appointments)
+    return Response.json({ data: appointments })
 }

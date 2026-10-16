@@ -18,6 +18,7 @@ export async function resizeImageFile(
     // Already small enough — skip re-encoding, which would only lose
     // quality for no size benefit.
     if (scale === 1) {
+        bitmap.close();
         return file;
     }
 
@@ -30,10 +31,14 @@ export async function resizeImageFile(
         // Extremely unlikely (2d context is universally supported), but if
         // it ever happens, uploading the original file is a better failure
         // mode than blocking the upload entirely.
+        bitmap.close();
         return file;
     }
 
     ctx.drawImage(bitmap, 0, 0, width, height);
+    // A decoded phone photo can hold tens of MB until garbage-collected —
+    // release it as soon as it's been drawn.
+    bitmap.close();
 
     const blob: Blob | null = await new Promise((resolve) =>
         canvas.toBlob(resolve, "image/jpeg", quality)

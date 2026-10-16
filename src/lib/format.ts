@@ -34,7 +34,7 @@ export function toLocalTimeKey(date: Date): string {
 // parts back out to catch anything that overflowed (month 13, day 45, etc.)
 // instead of silently landing on some other valid-but-wrong date. Returns
 // null for anything malformed. For an end-of-day bound, compose with
-// endOfDay() from @/lib/availability rather than passing a flag here.
+// endOfDay() from @/lib/schedule-grid rather than passing a flag here.
 export function parseLocalDate(value: string): Date | null {
     const parts = value.split("-").map(Number)
     if (parts.length !== 3 || parts.some((n) => Number.isNaN(n))) return null

@@ -1,7 +1,8 @@
 import bcrypt from "bcryptjs"
 import { prisma } from "@/lib/prisma"
 import { hashResetToken } from "@/lib/password-reset-token"
-import { PASSWORD_MIN_LENGTH, BCRYPT_COST } from "@/lib/password"
+import { BCRYPT_COST, passwordError } from "@/lib/password"
+import { readJsonObject } from "@/lib/request"
 
 // One identical error for "not found," "already used," and "expired" — and
 // also for a malformed/missing token in the request itself. Distinguishing
@@ -9,28 +10,18 @@ import { PASSWORD_MIN_LENGTH, BCRYPT_COST } from "@/lib/password"
 const INVALID_TOKEN_ERROR = { error: "This link is invalid or has expired." }
 
 export async function POST(request: Request) {
-    let body: unknown
-    try {
-        body = await request.json()
-    } catch {
-        return Response.json({ error: "Invalid JSON body" }, { status: 400 })
-    }
+    const body = await readJsonObject(request)
+    if (body instanceof Response) return body
 
-    if (typeof body !== "object" || body === null) {
-        return Response.json({ error: "Invalid request body" }, { status: 400 })
-    }
-
-    const { token, password } = body as Record<string, unknown>
+    const { token, password } = body
 
     if (typeof token !== "string" || !token) {
         return Response.json(INVALID_TOKEN_ERROR, { status: 400 })
     }
 
-    if (typeof password !== "string" || password.length < PASSWORD_MIN_LENGTH) {
-        return Response.json(
-            { error: `Password must be at least ${PASSWORD_MIN_LENGTH} characters` },
-            { status: 400 }
-        )
+    const passwordProblem = passwordError(password)
+    if (passwordProblem || typeof password !== "string") {
+        return Response.json({ error: passwordProblem }, { status: 400 })
     }
 
     const tokenHash = await hashResetToken(token)
