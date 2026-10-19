@@ -2,6 +2,8 @@ import { redirect } from "next/navigation"
 import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
 import { MyProfileForm } from "@/components/account/my-profile-form"
+import { MyStoreCredit } from "@/components/account/my-store-credit"
+import { CREDIT_ENTRY_SELECT } from "@/lib/credit-shared"
 import { safeCallbackUrl, UNKNOWN_PHONE } from "@/lib/validation"
 
 export default async function AccountPage({
@@ -17,10 +19,15 @@ export default async function AccountPage({
         redirect("/login?callbackUrl=/account")
     }
 
-    const [user, params] = await Promise.all([
+    const [user, creditEntries, params] = await Promise.all([
         prisma.user.findUnique({
             where: { id: session.user.id },
-            select: { name: true, email: true, phone: true },
+            select: { name: true, email: true, phone: true, creditBalanceCents: true },
+        }),
+        prisma.creditEntry.findMany({
+            where: { userId: session.user.id },
+            select: CREDIT_ENTRY_SELECT,
+            orderBy: { createdAt: "desc" },
         }),
         searchParams,
     ])
@@ -63,6 +70,7 @@ export default async function AccountPage({
                 }}
                 returnTo={returnTo}
             />
+            <MyStoreCredit initialBalanceCents={user.creditBalanceCents} initialEntries={creditEntries} />
         </div>
     )
 }

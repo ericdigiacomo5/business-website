@@ -3,6 +3,9 @@ import { requireAdmin } from "@/lib/require-admin"
 import { isServiceCategory } from "@/lib/service-category"
 import { optionalText, requiredText, TEXT_LIMITS } from "@/lib/validation"
 import { readJsonObject } from "@/lib/request"
+import { isFeeCents, MAX_SERVICE_FEE_CENTS } from "@/lib/pay-report"
+import { formatPrice } from "@/lib/format"
+import { SERVICE_PAY_TERMS_INCLUDE, setServiceFee } from "@/lib/pay-terms"
 
 export async function POST(request: Request) {
     const notAuthorized = await requireAdmin()
@@ -61,14 +64,29 @@ export async function POST(request: Request) {
         )
     }
 
-    const service = await prisma.service.create({
-        data: {
-            name,
-            description: description.value ?? null,
-            category,
-            durationMinutes,
-            priceCents,
-        },
+    // Optional fixed fee charged to the artist each time they perform it.
+    const { serviceFeeCents } = body
+    if (serviceFeeCents !== undefined && !isFeeCents(serviceFeeCents)) {
+        return Response.json(
+            { error: `Service fee must be from $0 to ${formatPrice(MAX_SERVICE_FEE_CENTS)}` },
+            { status: 400 },
+        )
+    }
+
+    const service = await prisma.$transaction(async (tx) => {
+        const created = await tx.service.create({
+            data: {
+                name,
+                description: description.value ?? null,
+                category,
+                durationMinutes,
+                priceCents,
+            },
+        })
+        if (typeof serviceFeeCents === "number") {
+            await setServiceFee(tx, created.id, serviceFeeCents)
+        }
+        return tx.service.findUniqueOrThrow({ where: { id: created.id }, include: SERVICE_PAY_TERMS_INCLUDE })
     })
 
     return Response.json({ data: service }, { status: 201 })

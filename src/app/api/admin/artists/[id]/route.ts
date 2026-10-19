@@ -3,6 +3,8 @@ import { Prisma } from "@/generated/prisma/client";
 import { requireAdmin } from "@/lib/require-admin";
 import { isCloudinaryUrl, optionalText, requiredText, TEXT_LIMITS } from "@/lib/validation";
 import { readJsonObject } from "@/lib/request";
+import { isBasisPoints } from "@/lib/pay-report";
+import { ARTIST_PAY_TERMS_INCLUDE, setArtistCommission } from "@/lib/pay-terms";
 
 export async function PATCH(
     request: Request,
@@ -50,6 +52,16 @@ export async function PATCH(
         )
     }
 
+    // 4500 = 45%; null = clear it (back to "not set"). Visits already
+    // checked out keep the rate they were snapshotted with.
+    const { commissionBasisPoints } = body
+    if (commissionBasisPoints !== undefined && commissionBasisPoints !== null && !isBasisPoints(commissionBasisPoints)) {
+        return Response.json(
+            { error: 'Commission must be a percentage from 0 to 100' },
+            { status: 400 }
+        )
+    }
+
     const artist = await prisma.artist.findUnique({
         where: { id }
     })
@@ -83,9 +95,15 @@ export async function PATCH(
     if (active !== undefined) data.active = active as boolean;
 
     try {
-        const updatedArtist = await prisma.artist.update({
-            where: { id: artist.id },
-            data
+        const updatedArtist = await prisma.$transaction(async (tx) => {
+            await tx.artist.update({
+                where: { id: artist.id },
+                data
+            })
+            if (commissionBasisPoints !== undefined) {
+                await setArtistCommission(tx, artist.id, commissionBasisPoints as number | null)
+            }
+            return tx.artist.findUniqueOrThrow({ where: { id: artist.id }, include: ARTIST_PAY_TERMS_INCLUDE })
         })
 
         return Response.json({ data: updatedArtist }, { status: 200 })

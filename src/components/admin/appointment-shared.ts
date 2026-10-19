@@ -91,5 +91,6 @@ export const STATUS_BAR_COLOR: Record<AppointmentStatus, string> = {
 export const PAYMENT_METHOD_LABEL: Record<PaymentMethod, string> = {
     CASH: "Cash",
     CARD: "Card",
+    GROUPON: "Groupon",
     OTHER: "Other",
 }

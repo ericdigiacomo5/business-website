@@ -16,6 +16,7 @@ export const SAFE_USER_SELECT = {
     email: true,
     phone: true,
     role: true,
+    creditBalanceCents: true,
 } as const
 
 // For relation includes where role isn't needed (e.g. rendering a booking's

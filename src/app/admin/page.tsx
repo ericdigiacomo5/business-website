@@ -1,9 +1,9 @@
+import Link from "next/link"
 import { redirect } from "next/navigation"
 import { prisma } from "@/lib/prisma"
 import { AppointmentStatus, type Prisma } from "@/generated/prisma/client"
 import { BookingFilters } from "@/components/admin/booking-filters"
 import { ScheduleGrid } from "@/components/admin/schedule-grid"
-import { BookingToggle } from "@/components/admin/booking-toggle"
 import { DatePicker } from "@/components/admin/admin-date-picker"
 import { MonthCalendar } from "@/components/admin/month-calendar"
 import { ScheduleViewToggle } from "@/components/admin/schedule-view-toggle"
@@ -12,7 +12,6 @@ import { parseScheduleView, startOfWeek, type ScheduleColumn } from "@/lib/sched
 import { addDays } from "@/lib/recurring"
 import { toLocalDateKey, parseLocalDate } from "@/lib/format"
 import { getPolicySettings, isBookingEnabled } from "@/lib/settings"
-import { PolicySettingsForm } from "@/components/admin/policy-settings"
 import { SERVICE_LINES_INCLUDE } from "@/lib/appointment-services"
 import { SAFE_USER_SELECT_BASIC } from "@/lib/user-select"
 
@@ -161,10 +160,16 @@ export default async function AdminBookingsPage({
 
     return (
         <div>
-            <div className="mb-6 flex flex-col gap-4">
-                <BookingToggle initialEnabled={bookingEnabled} />
-                <PolicySettingsForm initial={policy} />
-            </div>
+            {/* The switch itself lives on Settings; this keeps a closed
+                booking from going unnoticed on the page staff use most. */}
+            {!bookingEnabled && (
+                <p role="status" className="mb-4 rounded-sm border border-danger px-3 py-2 text-sm text-foreground">
+                    Online booking is closed — customers can&apos;t book themselves.{" "}
+                    <Link href="/admin/settings" className="font-medium">
+                        Change in Settings
+                    </Link>
+                </p>
+            )}
             <BookingFilters
                 artists={allArtists}
                 currentStatus={statusParam}

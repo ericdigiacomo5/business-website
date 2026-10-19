@@ -137,3 +137,56 @@
     color: #ffffff;
   }
 }
+
+/* Printing a newly issued gift card (/admin/gift-cards): only the card
+   prints, not the admin page around it. visibility rather than display so
+   the card's own layout is untouched; it's then pinned to the page's top
+   left, since its hidden ancestors still take up their space. Scoped with
+   :has() to pages showing a card, so other pages (the pay report) print
+   normally. */
+@media print {
+  body:has(.gift-card-print) * {
+    visibility: hidden;
+  }
+
+  .gift-card-print,
+  .gift-card-print * {
+    visibility: visible;
+  }
+
+  .gift-card-print {
+    position: absolute;
+    top: 0;
+    left: 0;
+  }
+}
+
+/* The pay report (/admin/reports/pay): one artist per printed page. Site
+   chrome, filters and buttons carry Tailwind's print:hidden. A table's
+   header row repeats on each page it runs onto. */
+@media print {
+  @page {
+    size: letter portrait;
+    margin: 0.5in;
+  }
+
+  body {
+    background: #ffffff;
+  }
+
+  .pay-sheet {
+    break-after: page;
+  }
+
+  .pay-sheet:last-of-type {
+    break-after: auto;
+  }
+
+  .pay-sheet thead {
+    display: table-header-group;
+  }
+
+  .pay-sheet tr {
+    break-inside: avoid;
+  }
+}

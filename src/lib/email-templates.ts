@@ -1,6 +1,6 @@
 import { SITE_NAME } from "@/lib/site"
 import { formatDuration, formatPrice } from "@/lib/format"
-import { describeDiscount, discountCents, totalCents, type Discount } from "@/lib/discount"
+import { amountDueCents, describeDiscount, discountCents, totalCents, type Discount } from "@/lib/discount"
 import { describeNoticeWindow } from "@/lib/recurring"
 
 type RenderedEmail = {
@@ -204,8 +204,15 @@ export function appointmentCancelledEmail(
 }
 
 export function receiptEmail(
-    a: AppointmentEmailDetails & { paymentMethodLabel: string; checkedOutAt: Date },
+    a: AppointmentEmailDetails & {
+        // Null when store credit covered the whole visit (nothing went
+        // through the POS).
+        paymentMethodLabel: string | null
+        creditAppliedCents: number
+        checkedOutAt: Date
+    },
 ): RenderedEmail {
+    const dueCents = amountDueCents(a.priceCents, a.discount, a.creditAppliedCents)
     return render(`Your receipt from ${SITE_NAME}`, {
         heading: "Thanks for visiting",
         paragraphs: [greeting(a.customerName), `Here's a record of your ${SITE_NAME} visit.`],
@@ -218,10 +225,40 @@ export function receiptEmail(
                   ] as [string, string][])
                 : []),
             ["Total", formatPrice(totalCents(a.priceCents, a.discount))],
-            ["Paid by", a.paymentMethodLabel],
+            ...(a.creditAppliedCents > 0
+                ? ([
+                      ["Store credit", `-${formatPrice(a.creditAppliedCents)}`],
+                      ["Paid in salon", formatPrice(dueCents)],
+                  ] as [string, string][])
+                : []),
+            ["Paid by", a.paymentMethodLabel ?? "Store credit"],
             ["Checked out", formatAppointmentWhen(a.checkedOutAt)],
         ],
         footer: "Payment was taken in the salon. This email is for your records only.",
+    })
+}
+
+// Sent when a gift card is redeemed onto an account, by the customer or by
+// staff at the desk.
+export function creditAddedEmail(c: {
+    customerName: string | null
+    addedCents: number
+    balanceCents: number
+    // Null for a walk-in who can't sign in (same rule as manageUrl).
+    accountUrl: string | null
+}): RenderedEmail {
+    return render(`${formatPrice(c.addedCents)} gift card added to your account`, {
+        heading: "Your gift card has been added",
+        paragraphs: [
+            greeting(c.customerName),
+            `A ${formatPrice(c.addedCents)} gift card is now store credit on your ${SITE_NAME} account. It's applied at checkout when you visit — no need to bring the card.`,
+        ],
+        details: [
+            ["Added", formatPrice(c.addedCents)],
+            ["Your balance", formatPrice(c.balanceCents)],
+        ],
+        button: c.accountUrl ? { label: "View My Account", url: c.accountUrl } : undefined,
+        footer: "Store credit never expires. Questions? Contact the salon directly.",
     })
 }
 

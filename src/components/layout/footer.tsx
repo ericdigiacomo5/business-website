@@ -3,7 +3,7 @@ import { SITE_NAME } from "@/lib/site"
 
 export function Footer() {
     return (
-        <footer className="bg-foreground text-background">
+        <footer className="bg-foreground text-background print:hidden">
             <div className="mx-auto max-w-6xl px-4 py-8 text-sm">
                 <p className="font-serif text-lg font-extrabold text-background">{SITE_NAME.toUpperCase()}</p>
                 <nav className="mt-3 flex flex-wrap gap-x-6 gap-y-2 text-on-dark-muted">

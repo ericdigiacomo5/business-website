@@ -1,11 +1,13 @@
 import { after } from "next/server";
-import { requireAdmin } from "@/lib/require-admin";
+import { requireAdminId } from "@/lib/require-admin";
 import { readJsonObject } from "@/lib/request";
 import { sendCancellationNotice, sendReceipt, sendRescheduleNotice } from "@/lib/appointment-emails";
 import { prisma } from "@/lib/prisma";
 import { AppointmentStatus, PaymentMethod, Prisma, type DiscountType } from "@/generated/prisma/client";
 import { durationMinutesOf, isValidAppointmentLength, MAX_APPOINTMENT_MINUTES } from "@/lib/schedule-grid";
-import { discountError } from "@/lib/discount";
+import { discountError, discountOf, totalCents } from "@/lib/discount";
+import { InsufficientCreditError, spendCredit } from "@/lib/credit";
+import { snapshotPayAtCheckout } from "@/lib/pay-terms";
 import { loadServicesToBook, reclaimSlots, SlotUnavailableError, type ServiceToBook } from "@/lib/booking";
 import {
     parseServiceIds,
@@ -19,8 +21,9 @@ export async function PATCH(
     request: Request,
     { params }: { params: Promise<{ id: string }> }
 ) {
-    const forbidden = await requireAdmin()
-    if (forbidden) return forbidden
+    // The admin's id is recorded on the ledger row when credit is spent.
+    const adminId = await requireAdminId()
+    if (adminId instanceof Response) return adminId
 
     const { id } = await params
 
@@ -39,7 +42,7 @@ export async function PATCH(
     const body = await readJsonObject(request)
     if (body instanceof Response) return body
 
-    const { status, paymentMethod, startTime, durationMinutes, discount, serviceIds } = body
+    const { status, paymentMethod, creditCents, startTime, durationMinutes, discount, serviceIds } = body
 
     // status is optional — a pure reschedule (startTime only), length
     // change, services change, or discount change shouldn't have to also
@@ -83,13 +86,20 @@ export async function PATCH(
 
     // Checkout: completing an appointment is how payment gets recorded —
     // the physical POS handles the actual charge, this just logs how it was
-    // paid. Require a valid paymentMethod any time status is being set to
-    // COMPLETED, whether from CONFIRMED (the normal checkout flow) or from
-    // any other status (e.g. re-marking a booking complete after a mistake).
+    // paid. Whether a paymentMethod is required depends on what's left
+    // after discount and store credit, so that's checked further down, once
+    // the total is known; here it only has to be a real method if sent.
+    // Applies whether completing from CONFIRMED (the normal checkout flow)
+    // or from any other status (e.g. re-marking a booking complete after a
+    // mistake).
     if (status === AppointmentStatus.COMPLETED) {
-        if (typeof paymentMethod !== 'string' || !(Object.values(PaymentMethod) as string[]).includes(paymentMethod)) {
+        if (
+            paymentMethod !== undefined &&
+            paymentMethod !== null &&
+            (typeof paymentMethod !== 'string' || !(Object.values(PaymentMethod) as string[]).includes(paymentMethod))
+        ) {
             return Response.json(
-                { error: 'paymentMethod must be one of CASH, CARD, OTHER when completing an appointment' },
+                { error: 'paymentMethod must be one of CASH, CARD, GROUPON, OTHER' },
                 { status: 400 }
             )
         }
@@ -98,6 +108,25 @@ export async function PATCH(
             { error: 'paymentMethod can only be set when status is COMPLETED' },
             { status: 400 }
         )
+    }
+
+    // Store credit to spend now, in cents — only as part of checkout, never
+    // held against an open booking that might be cancelled. Added to any
+    // credit already on the appointment (re-marking it complete after its
+    // credit was returned).
+    if (creditCents !== undefined) {
+        if (status !== AppointmentStatus.COMPLETED) {
+            return Response.json(
+                { error: 'creditCents can only be sent when status is COMPLETED' },
+                { status: 400 }
+            )
+        }
+        if (typeof creditCents !== 'number' || !Number.isInteger(creditCents) || creditCents < 0) {
+            return Response.json(
+                { error: 'creditCents must be a whole number of cents, 0 or more' },
+                { status: 400 }
+            )
+        }
     }
 
     // Services: replaces the appointment's whole list (e.g. a client adds a
@@ -190,6 +219,34 @@ export async function PATCH(
         }
     }
 
+    // What's owed once this request is applied: discount first, then store
+    // credit (the customer's own money only covers what's genuinely left).
+    // The client sends the credit amount it showed the admin; the server
+    // re-checks it here against the total, and the debit itself re-checks
+    // it against the balance.
+    const creditNowCents = (creditCents as number | undefined) ?? 0
+    if (status === AppointmentStatus.COMPLETED) {
+        const owedCents =
+            totalCents(priceCents, parsedDiscount === undefined ? discountOf(appointment) : parsedDiscount) -
+            appointment.creditAppliedCents
+        if (creditNowCents > Math.max(0, owedCents)) {
+            return Response.json(
+                { error: "That's more store credit than is owed" },
+                { status: 400 }
+            )
+        }
+
+        // Nothing left for the POS (credit or a discount covered it all):
+        // no payment method needed — the receipt says "Store credit" instead
+        // of inventing a method. Otherwise one is required.
+        if (owedCents - creditNowCents > 0 && (paymentMethod === undefined || paymentMethod === null)) {
+            return Response.json(
+                { error: 'paymentMethod (CASH, CARD, GROUPON or OTHER) is required when something is still owed' },
+                { status: 400 }
+            )
+        }
+    }
+
     // Reschedule: admin-only (this whole route already is), same artist —
     // only the time moves. A different artist is really "cancel and
     // rebook," not a reschedule, and is deliberately out of scope here (see
@@ -272,8 +329,26 @@ export async function PATCH(
             }
 
             if (status === AppointmentStatus.COMPLETED) {
-                data.paymentMethod = paymentMethod as PaymentMethod
+                data.paymentMethod = (paymentMethod as PaymentMethod | null | undefined) ?? null
                 data.checkedOutAt = new Date()
+
+                // The artist's commission rate and each service's fee as
+                // they stand now, for the pay report. Kept if already taken.
+                await snapshotPayAtCheckout(tx, id, appointment.artistId)
+
+                if (creditNowCents > 0) {
+                    // Throws InsufficientCreditError if the balance no longer
+                    // covers it (another checkout got there first), rolling
+                    // back the completion along with everything else.
+                    await spendCredit(tx, {
+                        userId: appointment.userId,
+                        amountCents: creditNowCents,
+                        kind: "SPENT",
+                        appointmentId: id,
+                        createdById: adminId,
+                    })
+                    data.creditAppliedCents = { increment: creditNowCents }
+                }
             }
 
             if (parsedDiscount !== undefined) {
@@ -361,6 +436,13 @@ export async function PATCH(
 
         return Response.json({ data: updated }, { status: 200 })
     } catch (error) {
+        if (error instanceof InsufficientCreditError) {
+            return Response.json(
+                { error: "The customer's store credit balance has changed. Close this and check out again." },
+                { status: 409 }
+            )
+        }
+
         if (error instanceof SlotUnavailableError) {
             return Response.json(
                 {

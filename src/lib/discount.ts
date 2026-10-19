@@ -32,6 +32,14 @@ export function totalCents(priceCents: number, discount: Discount | null): numbe
     return priceCents - discountCents(priceCents, discount)
 }
 
+// What's left for the POS after store credit (Appointment.creditAppliedCents)
+// — the order is discount first, then credit, so the customer's own money
+// only covers what's genuinely owed. Floored at 0 for the same reason
+// discountCents is capped: a credit applied before services were removed.
+export function amountDueCents(priceCents: number, discount: Discount | null, creditAppliedCents: number): number {
+    return Math.max(0, totalCents(priceCents, discount) - creditAppliedCents)
+}
+
 // "10% off" / "$5.00 off"
 export function describeDiscount(discount: Discount): string {
     return discount.type === "PERCENT" ? `${discount.value}% off` : `${formatPrice(discount.value)} off`

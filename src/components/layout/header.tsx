@@ -32,7 +32,7 @@ export function Header() {
     const mobileNavLinkClass = "flex h-11 items-center font-jost text-base font-semibold uppercase tracking-wide text-foreground"
 
     return (
-        <header className="sticky top-0 z-30 border-b-2 border-foreground bg-background/95 backdrop-blur">
+        <header className="sticky top-0 z-30 border-b-2 border-foreground bg-background/95 backdrop-blur print:hidden">
             <div className="mx-auto flex h-20 max-w-6xl items-center justify-between px-4">
                 <Link href="/" onClick={closeMenu} className="flex min-w-0 items-center gap-3">
                     <Image

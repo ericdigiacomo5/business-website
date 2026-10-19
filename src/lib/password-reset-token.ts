@@ -10,7 +10,8 @@ function toHex(bytes: ArrayBuffer | Uint8Array): string {
     return Array.from(arr, (b) => b.toString(16).padStart(2, "0")).join("")
 }
 
-async function sha256Hex(input: string): Promise<string> {
+// Also used for gift-card codes (src/lib/gift-card-code.ts).
+export async function sha256Hex(input: string): Promise<string> {
     const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(input))
     return toHex(digest)
 }

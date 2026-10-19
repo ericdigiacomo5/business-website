@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { X } from "lucide-react"
 import type { DiscountType, PaymentMethod, Service } from "@/generated/prisma/client"
 import {
@@ -15,6 +15,7 @@ import { DateTimeStep } from "@/components/booking/steps/datetime-step"
 import { ADMIN_DAYS_AHEAD } from "@/lib/recurring"
 import { appointmentLengthOptions, durationMinutesOf } from "@/lib/schedule-grid"
 import {
+    amountDueCents,
     describeDiscount,
     discountCents,
     discountError,
@@ -22,9 +23,224 @@ import {
     totalCents,
     type Discount,
 } from "@/lib/discount"
+import { CREDIT_NOTE_MAX } from "@/lib/credit-shared"
 import { PAYMENT_METHOD_LABEL, STATUS_LABEL, STATUS_TONE, type AdminAppointment } from "./appointment-shared"
 
-const PAYMENT_METHODS: PaymentMethod[] = ["CASH", "CARD", "OTHER"]
+// GROUPON: the customer showed a Groupon voucher. Staff redeem it in
+// Groupon's Merchant Center; this only records that it paid for the visit.
+const PAYMENT_METHODS: PaymentMethod[] = ["CASH", "CARD", "GROUPON", "OTHER"]
+
+// What checking out records. paymentMethod is null when nothing was left
+// for the POS; creditCents is the store credit spent now (0 = none).
+export type Checkout = { paymentMethod: PaymentMethod | null; creditCents: number }
+
+// The checkout step: total, optional discount, optional store credit, and
+// how the rest was paid. The customer's balance is fetched fresh when this
+// opens rather than carried on the schedule's data, which could be hours
+// old; the server re-checks it at the moment of the debit anyway.
+function CheckoutForm({
+    userId,
+    owedCents,
+    discount,
+    busy,
+    onCheckout,
+    onDiscount,
+    onBack,
+}: {
+    userId: string
+    // After discount and any credit already applied.
+    owedCents: number
+    discount: Discount | null
+    busy: boolean
+    onCheckout: (checkout: Checkout) => void
+    onDiscount: () => void
+    onBack: () => void
+}) {
+    // null while loading; a failed load just hides the credit option.
+    const [balanceCents, setBalanceCents] = useState<number | null>(null)
+    const [usingCredit, setUsingCredit] = useState(false)
+    const [creditInput, setCreditInput] = useState("")
+
+    useEffect(() => {
+        let cancelled = false
+        fetch(`/api/admin/users/${userId}/credit`)
+            .then((res) => (res.ok ? res.json() : null))
+            .then((body) => {
+                if (!cancelled) setBalanceCents(body?.data?.balanceCents ?? 0)
+            })
+            .catch(() => {
+                if (!cancelled) setBalanceCents(0)
+            })
+        return () => {
+            cancelled = true
+        }
+    }, [userId])
+
+    const maxCreditCents = Math.min(balanceCents ?? 0, owedCents)
+    const typed = Number(creditInput)
+    const creditCents = usingCredit ? Math.round(typed * 100) : 0
+    const creditProblem = !usingCredit
+        ? null
+        : creditInput.trim() === "" || Number.isNaN(typed) || creditCents < 1
+          ? "Enter an amount"
+          : creditCents > maxCreditCents
+            ? `At most ${formatPrice(maxCreditCents)}`
+            : null
+    const dueCents = owedCents - (creditProblem ? 0 : creditCents)
+
+    return (
+        <div className="flex flex-col gap-2">
+            {/* A discount is part of checking out: it's offered here, once
+                the visit is being rung up, not on the appointment beforehand. */}
+            <div className="flex items-center justify-between gap-3">
+                <p className="text-sm font-medium text-foreground">Total due: {formatPrice(owedCents)}</p>
+                <button
+                    type="button"
+                    onClick={onDiscount}
+                    disabled={busy}
+                    className="min-h-11 cursor-pointer text-sm font-medium text-primary disabled:cursor-not-allowed"
+                >
+                    {discount ? "Change discount" : "Add discount"}
+                </button>
+            </div>
+
+            {balanceCents !== null && balanceCents > 0 && owedCents > 0 && (
+                <div className="rounded-sm border border-border p-3">
+                    <label className="flex min-h-11 cursor-pointer items-center gap-3 text-sm">
+                        <input
+                            type="checkbox"
+                            checked={usingCredit}
+                            disabled={busy}
+                            onChange={(e) => {
+                                setUsingCredit(e.target.checked)
+                                // Defaults to as much as can be used.
+                                setCreditInput((maxCreditCents / 100).toFixed(2))
+                            }}
+                            className="h-5 w-5 rounded border-border"
+                        />
+                        <span className="font-medium text-foreground">
+                            Use store credit (balance {formatPrice(balanceCents)})
+                        </span>
+                    </label>
+                    {usingCredit && (
+                        <div>
+                            <label htmlFor="credit-amount" className="block text-xs font-medium text-muted-foreground">
+                                Credit to use ($)
+                            </label>
+                            <input
+                                id="credit-amount"
+                                type="number"
+                                inputMode="decimal"
+                                min={0.01}
+                                max={maxCreditCents / 100}
+                                step={0.01}
+                                value={creditInput}
+                                onChange={(e) => setCreditInput(e.target.value)}
+                                disabled={busy}
+                                className="mt-1 h-11 w-full rounded-sm border border-border bg-background px-3 text-sm text-foreground"
+                            />
+                            {creditProblem && (
+                                <p role="alert" className="mt-1 text-xs text-danger">
+                                    {creditProblem}
+                                </p>
+                            )}
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {usingCredit && !creditProblem && (
+                <p className="text-sm font-medium text-foreground">Left to pay: {formatPrice(dueCents)}</p>
+            )}
+
+            {dueCents > 0 ? (
+                <>
+                    <p className="text-sm text-muted-foreground">
+                        {usingCredit ? "How was the rest paid?" : "How was this paid?"} (POS terminal, or a Groupon
+                        voucher redeemed in Merchant Center)
+                    </p>
+                    <div className="grid grid-cols-2 gap-2">
+                        {PAYMENT_METHODS.map((method) => (
+                            <Button
+                                key={method}
+                                variant="secondary"
+                                size="md"
+                                onClick={() => onCheckout({ paymentMethod: method, creditCents: creditProblem ? 0 : creditCents })}
+                                disabled={busy || creditProblem !== null || balanceCents === null}
+                            >
+                                {PAYMENT_METHOD_LABEL[method]}
+                            </Button>
+                        ))}
+                    </div>
+                </>
+            ) : (
+                <Button
+                    variant="secondary"
+                    size="md"
+                    onClick={() => onCheckout({ paymentMethod: null, creditCents: creditProblem ? 0 : creditCents })}
+                    disabled={busy || creditProblem !== null}
+                >
+                    Complete &mdash; Nothing Due
+                </Button>
+            )}
+
+            <Button variant="ghost" size="md" onClick={onBack} disabled={busy}>
+                Back
+            </Button>
+        </div>
+    )
+}
+
+// Gives back store credit spent at checkout (it was entered by mistake).
+// A reason is required; it's kept on the customer's credit history.
+function ReturnCreditForm({
+    creditCents,
+    busy,
+    onReturn,
+    onBack,
+}: {
+    creditCents: number
+    busy: boolean
+    onReturn: (note: string) => void
+    onBack: () => void
+}) {
+    const [note, setNote] = useState("")
+    const ready = note.trim().length > 0
+
+    return (
+        <form
+            className="flex flex-col gap-3"
+            onSubmit={(e) => {
+                e.preventDefault()
+                if (ready) onReturn(note.trim())
+            }}
+        >
+            <p className="text-sm text-muted-foreground">
+                {`Puts ${formatPrice(creditCents)} back on the customer's store credit. If the visit was paid some other way instead, check it out again with that payment method afterwards.`}
+            </p>
+            <div>
+                <label htmlFor="return-credit-note" className="block text-xs font-medium text-muted-foreground">
+                    Reason
+                </label>
+                <input
+                    id="return-credit-note"
+                    type="text"
+                    maxLength={CREDIT_NOTE_MAX}
+                    value={note}
+                    onChange={(e) => setNote(e.target.value)}
+                    disabled={busy}
+                    className="mt-1 h-11 w-full rounded-sm border border-border bg-background px-3 text-sm text-foreground"
+                />
+            </div>
+            <Button type="submit" variant="danger" size="md" disabled={busy || !ready}>
+                Return Credit
+            </Button>
+            <Button type="button" variant="ghost" size="md" onClick={onBack} disabled={busy}>
+                Back
+            </Button>
+        </form>
+    )
+}
 
 const DISCOUNT_TYPES: { type: DiscountType; label: string }[] = [
     { type: "PERCENT", label: "% off" },
@@ -450,6 +666,7 @@ export function ScheduleDetailSheet({
     error,
     onConfirm,
     onCheckout,
+    onReturnCredit,
     onCancel,
     onNoShow,
     onReschedule,
@@ -466,7 +683,9 @@ export function ScheduleDetailSheet({
     // it longer). Shown here because the page behind is under the overlay.
     error: string | null
     onConfirm: () => void
-    onCheckout: (paymentMethod: PaymentMethod) => void
+    onCheckout: (checkout: Checkout) => void
+    // Gives back the store credit a completed appointment used.
+    onReturnCredit: (note: string) => void
     onCancel: () => void
     onNoShow: () => void
     onReschedule: (startTime: string) => void
@@ -487,6 +706,7 @@ export function ScheduleDetailSheet({
     const [changingLength, setChangingLength] = useState(false)
     const [editingServices, setEditingServices] = useState(false)
     const [rebooking, setRebooking] = useState(false)
+    const [returningCredit, setReturningCredit] = useState(false)
 
     if (!appointment) return null
 
@@ -496,6 +716,8 @@ export function ScheduleDetailSheet({
 
     const priceCents = servicesPriceCents(appointment.services)
     const discount = discountOf(appointment)
+    const creditCents = appointment.creditAppliedCents
+    const dueCents = amountDueCents(priceCents, discount, creditCents)
     const isOpen = appointment.status === "PENDING" || appointment.status === "CONFIRMED"
 
     const start = new Date(appointment.startTime)
@@ -591,11 +813,27 @@ export function ScheduleDetailSheet({
                             </div>
                         </>
                     )}
-                    {appointment.status === "COMPLETED" && appointment.paymentMethod && (
+                    {creditCents > 0 && (
+                        <>
+                            <div className="flex justify-between">
+                                <dt className="text-muted-foreground">Store credit</dt>
+                                <dd className="font-medium text-foreground">&minus;{formatPrice(creditCents)}</dd>
+                            </div>
+                            <div className="flex justify-between">
+                                <dt className="text-muted-foreground">Paid in salon</dt>
+                                <dd className="font-medium text-foreground">{formatPrice(dueCents)}</dd>
+                            </div>
+                        </>
+                    )}
+                    {appointment.status === "COMPLETED" && (
                         <div className="flex justify-between">
                             <dt className="text-muted-foreground">Paid</dt>
                             <dd className="font-medium text-foreground">
-                                {PAYMENT_METHOD_LABEL[appointment.paymentMethod]}
+                                {appointment.paymentMethod
+                                    ? PAYMENT_METHOD_LABEL[appointment.paymentMethod]
+                                    : creditCents > 0
+                                      ? "Store credit"
+                                      : "Nothing due"}
                             </dd>
                         </div>
                     )}
@@ -677,49 +915,15 @@ export function ScheduleDetailSheet({
                                 onBack={() => setDiscounting(false)}
                             />
                         ) : checkingOut ? (
-                            <div className="flex flex-col gap-2">
-                                {/* A discount is part of checking out: it's
-                                    offered here, once the visit is being rung
-                                    up, not on the appointment beforehand. */}
-                                <div className="flex items-center justify-between gap-3">
-                                    <p className="text-sm font-medium text-foreground">
-                                        Total due: {formatPrice(totalCents(priceCents, discount))}
-                                    </p>
-                                    <button
-                                        type="button"
-                                        onClick={() => setDiscounting(true)}
-                                        disabled={busy}
-                                        className="min-h-11 cursor-pointer text-sm font-medium text-primary disabled:cursor-not-allowed"
-                                    >
-                                        {discount ? "Change discount" : "Add discount"}
-                                    </button>
-                                </div>
-                                <p className="text-sm text-muted-foreground">
-                                    How was this paid? (via the POS terminal)
-                                </p>
-                                <div className="flex gap-2">
-                                    {PAYMENT_METHODS.map((method) => (
-                                        <Button
-                                            key={method}
-                                            variant="secondary"
-                                            size="md"
-                                            onClick={() => onCheckout(method)}
-                                            disabled={busy}
-                                            className="flex-1"
-                                        >
-                                            {PAYMENT_METHOD_LABEL[method]}
-                                        </Button>
-                                    ))}
-                                </div>
-                                <Button
-                                    variant="ghost"
-                                    size="md"
-                                    onClick={() => setCheckingOut(false)}
-                                    disabled={busy}
-                                >
-                                    Back
-                                </Button>
-                            </div>
+                            <CheckoutForm
+                                userId={appointment.userId}
+                                owedCents={dueCents}
+                                discount={discount}
+                                busy={busy}
+                                onCheckout={onCheckout}
+                                onDiscount={() => setDiscounting(true)}
+                                onBack={() => setCheckingOut(false)}
+                            />
                         ) : rescheduling ? (
                             <div className="flex flex-col gap-2">
                                 <div className={busy ? "pointer-events-none opacity-50" : undefined}>
@@ -789,7 +993,19 @@ export function ScheduleDetailSheet({
                     picking the payment method. */}
                 {appointment.status === "COMPLETED" && (
                     <div className="mt-4">
-                        {rebooking ? (
+                        {returningCredit ? (
+                            <ReturnCreditForm
+                                creditCents={creditCents}
+                                busy={busy}
+                                // Steps aside right away; the rows above (or
+                                // the error) update when the server answers.
+                                onReturn={(note) => {
+                                    onReturnCredit(note)
+                                    setReturningCredit(false)
+                                }}
+                                onBack={() => setReturningCredit(false)}
+                            />
+                        ) : rebooking ? (
                             <RebookForm
                                 appointment={appointment}
                                 activeServices={services}
@@ -800,9 +1016,21 @@ export function ScheduleDetailSheet({
                                 onBack={() => setRebooking(false)}
                             />
                         ) : (
-                            <Button size="md" onClick={() => setRebooking(true)} disabled={busy} className="w-full">
-                                Book Next Visit
-                            </Button>
+                            <>
+                                <Button size="md" onClick={() => setRebooking(true)} disabled={busy} className="w-full">
+                                    Book Next Visit
+                                </Button>
+                                {creditCents > 0 && (
+                                    <button
+                                        type="button"
+                                        onClick={() => setReturningCredit(true)}
+                                        disabled={busy}
+                                        className="mt-1 min-h-11 cursor-pointer text-sm font-medium text-primary disabled:cursor-not-allowed"
+                                    >
+                                        Return store credit
+                                    </button>
+                                )}
+                            </>
                         )}
                     </div>
                 )}

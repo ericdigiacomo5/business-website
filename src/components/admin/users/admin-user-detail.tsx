@@ -12,6 +12,8 @@ import { formatDuration } from "@/lib/format"
 import { durationMinutesOf } from "@/lib/schedule-grid"
 import { STATUS_LABEL, STATUS_TONE } from "@/components/admin/appointment-shared"
 import { AdminRecurringAppointments } from "./admin-recurring-appointments"
+import { AdminCreditPanel } from "./admin-credit-panel"
+import type { CreditEntryRow } from "@/lib/credit-shared"
 import type { AdminUser } from "./admin-user-row"
 
 type UserAppointment = Appointment & { artist: Artist; services: ServiceLine[] }
@@ -19,9 +21,11 @@ type UserAppointment = Appointment & { artist: Artist; services: ServiceLine[] }
 export function AdminUserDetail({
     user,
     appointments,
+    creditEntries,
 }: {
     user: AdminUser
     appointments: UserAppointment[]
+    creditEntries: CreditEntryRow[]
 }) {
     const [current, setCurrent] = useState(user)
     const [editing, setEditing] = useState(false)
@@ -86,6 +90,13 @@ export function AdminUserDetail({
                     </Button>
                 </div>
             )}
+
+            <h3 className="mt-8 text-base font-semibold text-foreground">Store Credit</h3>
+            <AdminCreditPanel
+                userId={current.id}
+                initialBalanceCents={user.creditBalanceCents}
+                initialEntries={creditEntries}
+            />
 
             <h3 className="mt-8 text-base font-semibold text-foreground">Standing Appointments</h3>
             <AdminRecurringAppointments userId={current.id} />

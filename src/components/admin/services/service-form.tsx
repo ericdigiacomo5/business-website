@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react"
 import type { ServiceType } from "@/generated/prisma/client"
 import { Button } from "@/components/ui/button"
 import { SERVICE_CATEGORIES, SERVICE_CATEGORY_LABEL } from "@/lib/service-category"
+import { MAX_SERVICE_FEE_CENTS } from "@/lib/pay-report"
 
 export type ServiceFormValues = {
     name: string
@@ -9,6 +10,8 @@ export type ServiceFormValues = {
     category: ServiceType
     durationMinutes: number
     priceCents: number
+    // Charged to the artist each time they perform it; 0 = no fee.
+    serviceFeeCents: number
 }
 
 const emptyValues: ServiceFormValues = {
@@ -17,6 +20,7 @@ const emptyValues: ServiceFormValues = {
     category: "HANDS",
     durationMinutes: 45,
     priceCents: 0,
+    serviceFeeCents: 0,
 }
 
 export function ServiceForm({
@@ -40,6 +44,10 @@ export function ServiceForm({
         String((initial?.priceCents ?? emptyValues.priceCents) / 100)
     )
 
+    const [feeDollars, setFeeDollars] = useState(
+        String((initial?.serviceFeeCents ?? emptyValues.serviceFeeCents) / 100)
+    )
+
     function handleSubmit(e: FormEvent) {
         e.preventDefault()
         onSubmit({
@@ -48,6 +56,7 @@ export function ServiceForm({
             category,
             durationMinutes: Number(durationMinutes),
             priceCents: Math.round(Number(priceDollars) * 100),
+            serviceFeeCents: Math.round(Number(feeDollars || 0) * 100),
         })
     }
 
@@ -129,6 +138,27 @@ export function ServiceForm({
                         className="mt-1 h-11 w-full rounded-sm border border-border bg-background px-3 text-sm text-foreground"
                     />
                 </div>
+            </div>
+
+            <div>
+                <label htmlFor="service-fee" className="block text-xs font-medium text-muted-foreground">
+                    Service fee (USD)
+                </label>
+                <input
+                    id="service-fee"
+                    type="number"
+                    min={0}
+                    max={MAX_SERVICE_FEE_CENTS / 100}
+                    step={0.01}
+                    value={feeDollars}
+                    onChange={(e) => setFeeDollars(e.target.value)}
+                    aria-describedby="service-fee-help"
+                    className="mt-1 h-11 w-full rounded-sm border border-border bg-background px-3 text-sm text-foreground sm:w-40"
+                />
+                <p id="service-fee-help" className="mt-1 text-xs text-muted-foreground">
+                    Charged to the artist each time they perform this service (e.g. supplies), and taken out of
+                    their pay. Only visits checked out from now on use a new fee.
+                </p>
             </div>
 
             <div className="flex gap-2">

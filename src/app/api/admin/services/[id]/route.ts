@@ -4,6 +4,9 @@ import { requireAdmin } from "@/lib/require-admin"
 import { isServiceCategory } from "@/lib/service-category"
 import { optionalText, requiredText, TEXT_LIMITS } from "@/lib/validation"
 import { readJsonObject } from "@/lib/request"
+import { isFeeCents, MAX_SERVICE_FEE_CENTS } from "@/lib/pay-report"
+import { formatPrice } from "@/lib/format"
+import { SERVICE_PAY_TERMS_INCLUDE, setServiceFee } from "@/lib/pay-terms"
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
     const forbidden = await requireAdmin()
@@ -14,7 +17,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const body = await readJsonObject(request)
     if (body instanceof Response) return body
 
-    const { category, durationMinutes, priceCents, active } = body
+    const { category, durationMinutes, priceCents, active, serviceFeeCents } = body
 
     let name: string | undefined
     if (body.name !== undefined) {
@@ -70,6 +73,15 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         return Response.json({ error: "Active must be a boolean" }, { status: 400 })
     }
 
+    // Fee charged to the artist per service performed; 0 removes it. Only
+    // visits checked out from now on use the new fee.
+    if (serviceFeeCents !== undefined && !isFeeCents(serviceFeeCents)) {
+        return Response.json(
+            { error: `Service fee must be from $0 to ${formatPrice(MAX_SERVICE_FEE_CENTS)}` },
+            { status: 400 },
+        )
+    }
+
     const service = await prisma.service.findUnique({
         where: { id: id },
     })
@@ -87,9 +99,15 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     if (active !== undefined) data.active = active
 
     try {
-        const updatedService = await prisma.service.update({
-            where: { id: service.id },
-            data,
+        const updatedService = await prisma.$transaction(async (tx) => {
+            await tx.service.update({
+                where: { id: service.id },
+                data,
+            })
+            if (serviceFeeCents !== undefined) {
+                await setServiceFee(tx, service.id, serviceFeeCents as number)
+            }
+            return tx.service.findUniqueOrThrow({ where: { id: service.id }, include: SERVICE_PAY_TERMS_INCLUDE })
         })
 
         return Response.json({ data: updatedService }, { status: 200 })

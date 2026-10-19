@@ -5,6 +5,10 @@ import { formatDuration, formatPrice } from "@/lib/format"
 import { SERVICE_CATEGORY_LABEL } from "@/lib/service-category"
 import { ServiceForm, type ServiceFormValues } from "./service-form"
 
+// payTerms: the fee charged to the artist (admin-only data, see
+// ServicePayTerms); null = no fee.
+export type AdminService = Service & { payTerms: { serviceFeeCents: number } | null }
+
 export function AdminServiceCard({
     service,
     isEditing,
@@ -13,7 +17,7 @@ export function AdminServiceCard({
     onSave,
     onToggleActive,
 }: {
-    service: Service
+    service: AdminService
     isEditing: boolean
     onEdit: () => void
     onCancelEdit: () => void
@@ -30,6 +34,7 @@ export function AdminServiceCard({
                     category: service.category,
                     durationMinutes: service.durationMinutes,
                     priceCents: service.priceCents,
+                    serviceFeeCents: service.payTerms?.serviceFeeCents ?? 0,
                 }}
                 onSubmit={onSave}
                 onCancel={onCancelEdit}
@@ -53,6 +58,11 @@ export function AdminServiceCard({
                     {SERVICE_CATEGORY_LABEL[service.category]} &middot;{" "}
                     {formatDuration(service.durationMinutes)} &middot; {formatPrice(service.priceCents)}
                 </p>
+                {service.payTerms && (
+                    <p className="mt-1 text-sm text-muted-foreground">
+                        {`Service fee ${formatPrice(service.payTerms.serviceFeeCents)} (charged to the artist)`}
+                    </p>
+                )}
             </div>
 
             <div className="flex shrink-0 gap-2">

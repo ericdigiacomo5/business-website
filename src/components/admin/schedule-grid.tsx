@@ -1,13 +1,13 @@
 'use client'
 
 import { useState } from "react"
-import type { AppointmentStatus, PaymentMethod, Service } from "@/generated/prisma/client"
+import type { AppointmentStatus, Service } from "@/generated/prisma/client"
 import { SLOT_MINUTES, type ScheduleColumn, type ScheduleView } from "@/lib/schedule-grid"
 import { toLocalDateKey } from "@/lib/format"
 import type { Discount } from "@/lib/discount"
 import { ScheduleTimeAxis } from "./schedule-time-axis"
 import { ScheduleArtistColumn } from "./schedule-artist-column"
-import { ScheduleDetailSheet, type Rebooking } from "./schedule-detail-sheet"
+import { ScheduleDetailSheet, type Checkout, type Rebooking } from "./schedule-detail-sheet"
 import { servicesLabel } from "@/lib/appointment-services"
 import { ScheduleBookSheet } from "./schedule-book-sheet"
 import { SERVICE_CATEGORIES, SERVICE_CATEGORY_LABEL } from "@/lib/service-category"
@@ -79,7 +79,9 @@ export function ScheduleGrid({
         setBookingSlot(null)
     }
 
-    async function updateStatus(id: string, status: AppointmentStatus, paymentMethod?: PaymentMethod) {
+    // `checkout` only with COMPLETED. paymentMethod is null when store
+    // credit (or a discount) left nothing for the POS.
+    async function updateStatus(id: string, status: AppointmentStatus, checkout?: Checkout) {
         setError(null)
         setBusyId(id)
 
@@ -87,7 +89,11 @@ export function ScheduleGrid({
             const res = await fetch(`/api/admin/appointments/${id}`, {
                 method: "PATCH",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(paymentMethod ? { status, paymentMethod } : { status }),
+                body: JSON.stringify({
+                    status,
+                    ...(checkout?.paymentMethod && { paymentMethod: checkout.paymentMethod }),
+                    ...(checkout && checkout.creditCents > 0 && { creditCents: checkout.creditCents }),
+                }),
             })
 
             if (!res.ok) {
@@ -171,6 +177,33 @@ export function ScheduleGrid({
             if (!res.ok) {
                 const body = await res.json().catch(() => null)
                 setError(body?.error ?? "Couldn't change that appointment's length. Please try again.")
+                return
+            }
+
+            const body = await res.json()
+            applyUpdate(id, body.data)
+        } catch {
+            setError("Network error. Please try again.")
+        } finally {
+            setBusyId(null)
+        }
+    }
+
+    // Gives back the store credit spent on a completed appointment.
+    async function returnCredit(id: string, note: string) {
+        setError(null)
+        setBusyId(id)
+
+        try {
+            const res = await fetch(`/api/admin/appointments/${id}/return-credit`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ note }),
+            })
+
+            if (!res.ok) {
+                const body = await res.json().catch(() => null)
+                setError(body?.error ?? "Couldn't return that credit. Please try again.")
                 return
             }
 
@@ -355,7 +388,8 @@ export function ScheduleGrid({
                 busy={busyId === selectedId}
                 error={error}
                 onConfirm={() => selectedId && updateStatus(selectedId, "CONFIRMED")}
-                onCheckout={(paymentMethod) => selectedId && updateStatus(selectedId, "COMPLETED", paymentMethod)}
+                onCheckout={(checkout) => selectedId && updateStatus(selectedId, "COMPLETED", checkout)}
+                onReturnCredit={(note) => selectedId && returnCredit(selectedId, note)}
                 onCancel={() => selectedId && updateStatus(selectedId, "CANCELLED")}
                 onNoShow={() => selectedId && updateStatus(selectedId, "NO_SHOW")}
                 onReschedule={(startTime) => selectedId && rescheduleAppointment(selectedId, startTime)}

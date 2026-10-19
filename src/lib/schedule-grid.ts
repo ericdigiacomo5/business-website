@@ -90,6 +90,13 @@ export function startOfWeek(date: Date): Date {
   return result;
 }
 
+// The 1st of the month containing `date`, at midnight.
+export function startOfMonth(date: Date): Date {
+  const result = startOfDay(date);
+  result.setDate(1);
+  return result;
+}
+
 export function endOfDay(date: Date): Date {
   const result = new Date(date);
   result.setHours(23, 59, 59, 999);

@@ -2,10 +2,16 @@ import { useState } from "react"
 import type { Artist, PortfolioImage } from "@/generated/prisma/client"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { formatRate } from "@/lib/pay-report"
 import { ArtistForm, type ArtistFormValues } from "./artist-form"
 import { PortfolioManager } from "./portfolio-manager"
 
-export type ArtistWithPortfolio = Artist & { portfolio: PortfolioImage[] }
+// payTerms: the commission rate (admin-only data, see ArtistPayTerms);
+// null = not set yet.
+export type ArtistWithPortfolio = Artist & {
+    portfolio: PortfolioImage[]
+    payTerms: { commissionBasisPoints: number } | null
+}
 
 export function AdminArtistCard({
     artist,
@@ -34,6 +40,7 @@ export function AdminArtistCard({
                     name: artist.name,
                     bio: artist.bio ?? "",
                     photoUrl: artist.photoUrl ?? "",
+                    commissionBasisPoints: artist.payTerms?.commissionBasisPoints ?? null,
                 }}
                 onSubmit={onSave}
                 onCancel={onCancelEdit}
@@ -52,6 +59,11 @@ export function AdminArtistCard({
                         </Badge>
                     </div>
                     {artist.bio && <p className="mt-1 text-sm text-muted-foreground">{artist.bio}</p>}
+                    <p className="mt-1 text-sm text-muted-foreground">
+                        {artist.payTerms
+                            ? `Commission ${formatRate(artist.payTerms.commissionBasisPoints)}`
+                            : "Commission not set"}
+                    </p>
                 </div>
 
                 <div className="flex shrink-0 gap-2">

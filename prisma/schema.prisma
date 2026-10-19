@@ -35,6 +35,7 @@ model Service {
 
   appointmentServices          AppointmentService[]
   recurringAppointmentServices RecurringAppointmentService[]
+  payTerms                     ServicePayTerms?
 }
 
 model User {
@@ -53,12 +54,21 @@ model User {
   passwordChangedAt DateTime?
   role              Role      @default(CUSTOMER)
   createdAt         DateTime  @default(now())
+  // Store credit (from redeemed gift cards), in cents. A cache of
+  // SUM(CreditEntry.amountCents) for this user, written only by
+  // src/lib/credit.ts in the same transaction as the ledger row. A CHECK
+  // constraint (hand-written in the migration) keeps it from going below 0.
+  creditBalanceCents Int    @default(0)
 
   appointments          Appointment[]
   accounts              Account[]
   sessions              Session[]
   recurringAppointments RecurringAppointment[]
   passwordResetTokens   PasswordResetToken[]
+  creditEntries         CreditEntry[]          @relation("CreditEntryUser")
+  creditEntriesCreated  CreditEntry[]          @relation("CreditEntryCreatedBy")
+  giftCardsIssued       GiftCard[]             @relation("GiftCardIssuedBy")
+  giftCardsRedeemed     GiftCard[]             @relation("GiftCardRedeemedBy")
 }
 
 model Account {
@@ -140,6 +150,7 @@ model Artist {
   appointments          Appointment[]
   slots                 AppointmentSlot[]
   recurringAppointments RecurringAppointment[]
+  payTerms              ArtistPayTerms?
 }
 
 model PortfolioImage {
@@ -176,9 +187,14 @@ enum DiscountType {
   AMOUNT
 }
 
+// How the part of the bill left after discount and store credit was paid.
+// GROUPON: the customer showed a Groupon voucher, which staff redeem in
+// Groupon's Merchant Center — this app records only that it was the form of
+// payment, nothing about the voucher itself.
 enum PaymentMethod {
   CASH
   CARD
+  GROUPON
   OTHER
 }
 
@@ -260,6 +276,11 @@ model Appointment {
   // stored.
   discountType           DiscountType?
   discountValue          Int?
+  // Store credit spent on this visit at checkout, in cents (0 = none).
+  // Written only in the same transaction as the matching SPENT / REVERSED
+  // CreditEntry rows, so it always equals minus their sum. Kept on the row
+  // so every view of the appointment can show "Due" without the ledger.
+  creditAppliedCents     Int               @default(0)
   // Set once the 24h reminder email has gone out (or once some other email
   // already told the customer about an imminent time — see
   // src/lib/appointment-emails.ts). The reminder job claims rows by flipping
@@ -282,6 +303,8 @@ model Appointment {
   services             AppointmentService[]
   slots                AppointmentSlot[]
   recurringAppointment RecurringAppointment? @relation(fields: [recurringAppointmentId], references: [id])
+  creditEntries        CreditEntry[]
+  pay                  AppointmentPay?
 
   // Each week of a series can be materialized at most once — the database,
   // not careful call-site logic, is what makes a concurrent job run or a
@@ -305,8 +328,9 @@ model AppointmentService {
   // Cascade: a line means nothing without its appointment. The Service side
   // stays RESTRICT — a booked service is retired via Service.active, never
   // deleted.
-  appointment Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
-  service     Service     @relation(fields: [serviceId], references: [id])
+  appointment Appointment            @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  service     Service                @relation(fields: [serviceId], references: [id])
+  pay         AppointmentServicePay?
 
   @@unique([appointmentId, serviceId])
 }
@@ -350,6 +374,135 @@ model TimeOff {
   endTime   String
 
   artist Artist? @relation(fields: [artistId], references: [id])
+}
+
+// Store credit and gift cards. This app never takes money: a gift card is
+// paid for at the POS, and credit only reduces what the POS charges later.
+// What's recorded here is value the salon owes its customers, so every
+// change goes through src/lib/credit.ts — see PLAN_GIFT_CARDS_AND_VOUCHERS.md.
+
+enum CreditEntryKind {
+  GIFT_CARD  // + a gift card's value moved onto the account
+  SPENT      // − applied to an appointment at checkout
+  REVERSED   // + credit spent on an appointment, given back
+  ADJUSTMENT // ± manual correction by an admin; note required
+}
+
+// Append-only ledger: rows are never updated or deleted. A correction is a
+// new, opposite entry. User.creditBalanceCents caches the sum per user.
+// RESTRICT foreign keys throughout, so nothing can cascade into the history.
+model CreditEntry {
+  id            String          @id @default(cuid())
+  userId        String
+  // Signed: positive adds credit, negative spends it.
+  amountCents   Int
+  kind          CreditEntryKind
+  giftCardId    String?
+  appointmentId String?
+  note          String?
+  // The admin who made the change, or the customer for a self-redeem.
+  createdById   String
+  createdAt     DateTime        @default(now())
+
+  user        User         @relation("CreditEntryUser", fields: [userId], references: [id])
+  createdBy   User         @relation("CreditEntryCreatedBy", fields: [createdById], references: [id])
+  // Restrict spelled out: Prisma's default for an optional relation is
+  // SET NULL, which would quietly unlink history.
+  giftCard    GiftCard?    @relation(fields: [giftCardId], references: [id], onDelete: Restrict)
+  appointment Appointment? @relation(fields: [appointmentId], references: [id], onDelete: Restrict)
+
+  @@index([userId, createdAt])
+}
+
+enum GiftCardStatus {
+  ISSUED
+  REDEEMED
+  VOID
+}
+
+// A gift card sold at the desk as a printed code. Redeeming moves its whole
+// value onto one account, once; after that the card has no balance of its
+// own. Never expires and never charges fees (NY gift card law).
+model GiftCard {
+  id               String         @id @default(cuid())
+  // SHA-256 of the normalized code — the plaintext is shown once, to be
+  // printed, and never stored (same reasoning as PasswordResetToken). A
+  // database leak then doesn't hand out spendable codes.
+  codeHash         String         @unique
+  // So staff can find a card ("the $50 one ending 2PNB") and void it.
+  codeLast4        String
+  valueCents       Int
+  status           GiftCardStatus @default(ISSUED)
+  purchaserName    String?
+  recipientName    String?
+  issuedById       String
+  issuedAt         DateTime       @default(now())
+  redeemedByUserId String?
+  redeemedAt       DateTime?
+  voidedAt         DateTime?
+  voidReason       String?
+
+  issuedBy      User          @relation("GiftCardIssuedBy", fields: [issuedById], references: [id])
+  redeemedBy    User?         @relation("GiftCardRedeemedBy", fields: [redeemedByUserId], references: [id], onDelete: Restrict)
+  creditEntries CreditEntry[]
+
+  @@index([issuedAt])
+}
+
+// Artist pay (the pay report, /admin/reports/pay — see
+// PLAN_ARTIST_PAY_REPORT.md). Kept in tables of their own rather than as
+// columns on Artist / Service / Appointment / AppointmentService on purpose:
+// those rows are read with plain `include: { artist: true }` and
+// findMany()s by public pages and customer API responses, so a column there
+// would hand every customer the artists' pay terms. Nothing outside the
+// admin pay pages and checkout reads these tables.
+
+// An artist's commission, as a share of what clients paid for their
+// services after discounts. No row = not set yet: the report then shows the
+// artist's sales but no take-home, rather than guessing 0% or 100%.
+model ArtistPayTerms {
+  artistId              String   @id
+  // 4500 = 45.00%. Basis points, not a float, for the same reason money is
+  // in cents. A CHECK constraint (hand-written in the migration) keeps it
+  // within 0-10000.
+  commissionBasisPoints Int
+  updatedAt             DateTime @updatedAt
+
+  artist Artist @relation(fields: [artistId], references: [id])
+}
+
+// A fixed amount charged to the artist each time they perform this service
+// (e.g. supplies), taken out of their pay. No row = no fee.
+model ServicePayTerms {
+  serviceId       String   @id
+  serviceFeeCents Int
+  updatedAt       DateTime @updatedAt
+
+  service Service @relation(fields: [serviceId], references: [id])
+}
+
+// The commission rate in effect when this appointment was checked out, so a
+// later rate change doesn't rewrite a past pay period (same reasoning as
+// AppointmentService's price snapshot). Written once at checkout, or — for
+// an appointment checked out before its artist had a rate — when the rate is
+// first saved (backfilled = true, which the report notes).
+model AppointmentPay {
+  appointmentId         String   @id
+  commissionBasisPoints Int
+  backfilled            Boolean  @default(false)
+  createdAt             DateTime @default(now())
+
+  appointment Appointment @relation(fields: [appointmentId], references: [id])
+}
+
+// The service fee in effect for one service line when its appointment was
+// checked out. Cascade with the line: a line is only replaced while its
+// appointment is open, and a re-completed appointment snapshots again.
+model AppointmentServicePay {
+  appointmentServiceId String @id
+  serviceFeeCents      Int
+
+  appointmentService AppointmentService @relation(fields: [appointmentServiceId], references: [id], onDelete: Cascade)
 }
 
 model AppSettings {

@@ -5,6 +5,7 @@ import {
     appointmentReminderEmail,
     appointmentRescheduledEmail,
     bookingConfirmationEmail,
+    creditAddedEmail,
     receiptEmail,
     recurringConfirmationEmail,
     recurringCancelledEmail,
@@ -161,14 +162,39 @@ export function sendCancellationNotice(appointmentId: string, cancelledBy: "cust
 export function sendReceipt(appointmentId: string) {
     return safely("receipt", async () => {
         const appointment = await loadAppointment(appointmentId)
-        if (!appointment || !appointment.paymentMethod || !appointment.checkedOutAt) return
+        // No payment method is normal when store credit covered everything.
+        if (!appointment || !appointment.checkedOutAt) return
 
         await sendEmail({
             to: appointment.user.email,
             ...receiptEmail({
                 ...toDetails(appointment, await noticeHours()),
-                paymentMethodLabel: PAYMENT_METHOD_LABEL[appointment.paymentMethod],
+                paymentMethodLabel: appointment.paymentMethod ? PAYMENT_METHOD_LABEL[appointment.paymentMethod] : null,
+                creditAppliedCents: appointment.creditAppliedCents,
                 checkedOutAt: appointment.checkedOutAt,
+            }),
+        })
+    })
+}
+
+// After a gift card is redeemed onto an account. Not appointment-specific,
+// but lives here for the shared customer lookup and links.
+export function sendCreditAdded(userId: string, addedCents: number) {
+    return safely("credit added", async () => {
+        const user = await prisma.user.findUnique({
+            where: { id: userId },
+            select: { ...CUSTOMER_SELECT, creditBalanceCents: true },
+        })
+        if (!user) return
+
+        const { manageUrl } = customerLinks(user)
+        await sendEmail({
+            to: user.email,
+            ...creditAddedEmail({
+                customerName: user.name,
+                addedCents,
+                balanceCents: user.creditBalanceCents,
+                accountUrl: manageUrl ? `${process.env.NEXT_PUBLIC_APP_URL}/account` : null,
             }),
         })
     })

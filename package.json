@@ -9,7 +9,9 @@
     "lint": "eslint",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "promote-admin": "tsx scripts/promote-admin.ts"
+    "test": "node --import tsx --test \"src/**/*.test.ts\"",
+    "promote-admin": "tsx scripts/promote-admin.ts",
+    "check-credit": "tsx scripts/check-credit-ledger.ts"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.11.3",

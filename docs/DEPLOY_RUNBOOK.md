@@ -23,10 +23,12 @@ The app has no rate limiter of its own, by decision: limits are enforced at Clou
 | Password reset | `http.request.uri.path in {"/api/auth/forgot-password" "/api/auth/reset-password"}` | 5 / 10 minutes | Block for 1 hour |
 | Availability (public) | `starts_with(http.request.uri.path, "/api/artists/") and ends_with(http.request.uri.path, "/availability")` | 120 / 1 minute | Managed Challenge |
 | Booking | `http.request.uri.path in {"/api/appointments" "/api/appointments/recurring"} and http.request.method eq "POST"` | 20 / 10 minutes | Block for 10 minutes |
+| Gift card redeem (customer) | `http.request.uri.path eq "/api/gift-cards/redeem"` | 5 / 10 minutes | Block for 1 hour |
 
 Notes:
 - Cloudflare's free plan allows one rate-limiting rule. If that's the plan, the **sign-in** rule matters most (password guessing), then password reset. Combine paths with `or` into one rule if needed.
 - Forgot-password already has a per-email 60-second cooldown in the app; the edge rule adds the per-IP limit.
+- Gift card codes carry 80 random bits, so guessing one is hopeless even unlimited; the redeem rule is defense in depth. Staff redeeming at the desk use `/api/admin/gift-cards/redeem`, which this rule doesn't touch.
 - Front-desk staff share the salon's IP. If the booking limit trips during a busy day, raise it or exclude admin traffic.
 
 ## 3. Security headers

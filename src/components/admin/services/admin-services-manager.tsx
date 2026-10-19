@@ -1,12 +1,11 @@
 'use client'
 
 import { useState } from "react"
-import type { Service } from "@/generated/prisma/client"
 import { Button } from "@/components/ui/button"
-import { AdminServiceCard } from "./admin-service-card"
+import { AdminServiceCard, type AdminService } from "./admin-service-card"
 import { ServiceForm, type ServiceFormValues } from "./service-form"
 
-export function AdminServicesManager({ initialServices }: { initialServices: Service[] }) {
+export function AdminServicesManager({ initialServices }: { initialServices: AdminService[] }) {
     const [services, setServices] = useState(initialServices)
     const [isCreating, setIsCreating] = useState(false)
     const [editingId, setEditingId] = useState<string | null>(null)
@@ -60,7 +59,7 @@ export function AdminServicesManager({ initialServices }: { initialServices: Ser
         }
     }
 
-    async function handleToggleActive(service: Service) {
+    async function handleToggleActive(service: AdminService) {
         setError(null)
 
         try {
@@ -79,7 +78,9 @@ export function AdminServicesManager({ initialServices }: { initialServices: Ser
             }
 
             const body = await res.json()
-            setServices((prev) => prev.map((s) => (s.id === service.id ? body.data : s)))
+            // DELETE returns the plain Service (no payTerms) — keep the fee
+            // this service already had in state.
+            setServices((prev) => prev.map((s) => (s.id === service.id ? { ...s, ...body.data } : s)))
         } catch {
             setError("Network error. Please try again.")
         }

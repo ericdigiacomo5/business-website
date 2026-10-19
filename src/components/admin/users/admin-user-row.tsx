@@ -7,6 +7,7 @@ export type AdminUser = {
     email: string
     phone: string
     role: "CUSTOMER" | "ADMIN"
+    creditBalanceCents: number
 }
 
 export function AdminUserRow({ user }: { user: AdminUser }) {

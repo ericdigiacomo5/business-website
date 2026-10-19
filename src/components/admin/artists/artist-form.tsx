@@ -3,17 +3,21 @@ import { Button } from "@/components/ui/button"
 import { PhotoUploadField } from "@/components/admin/photo-upload-field"
 import { CloudinaryImage } from "@/components/ui/cloudinary-image"
 import { TEXT_LIMITS } from "@/lib/validation"
+import { percentToBasisPoints } from "@/lib/pay-report"
 
 export type ArtistFormValues = {
     name: string
     bio: string
     photoUrl: string
+    // 4500 = 45%; null = not set.
+    commissionBasisPoints: number | null
 }
 
 const emptyValues: ArtistFormValues = {
     name: "",
     bio: "",
     photoUrl: "",
+    commissionBasisPoints: null,
 }
 
 export function ArtistForm({
@@ -30,10 +34,16 @@ export function ArtistForm({
     const [name, setName] = useState(initial?.name ?? emptyValues.name)
     const [bio, setBio] = useState(initial?.bio ?? emptyValues.bio)
     const [photoUrl, setPhotoUrl] = useState(initial?.photoUrl ?? emptyValues.photoUrl)
+    // Typed as a percent ("45", "42.5"), stored as basis points.
+    const initialRate = initial?.commissionBasisPoints ?? emptyValues.commissionBasisPoints
+    const [commission, setCommission] = useState(initialRate === null ? "" : String(initialRate / 100))
+    const commissionBasisPoints = commission.trim() === "" ? null : percentToBasisPoints(commission)
+    const commissionInvalid = commission.trim() !== "" && commissionBasisPoints === null
 
     function handleSubmit(e: FormEvent) {
         e.preventDefault()
-        onSubmit({ name, bio, photoUrl })
+        if (commissionInvalid) return
+        onSubmit({ name, bio, photoUrl, commissionBasisPoints })
     }
 
     return (
@@ -64,6 +74,30 @@ export function ArtistForm({
                     rows={3}
                     className="mt-1 w-full rounded-sm border border-border bg-background px-3 py-2 text-sm text-foreground"
                 />
+            </div>
+
+            <div>
+                <label htmlFor="artist-commission" className="block text-xs font-medium text-muted-foreground">
+                    Commission (%)
+                </label>
+                <input
+                    id="artist-commission"
+                    inputMode="decimal"
+                    placeholder="e.g. 45"
+                    value={commission}
+                    onChange={(e) => setCommission(e.target.value)}
+                    aria-invalid={commissionInvalid}
+                    aria-describedby="artist-commission-help"
+                    className="mt-1 h-11 w-full rounded-sm border border-border bg-background px-3 text-sm text-foreground sm:w-40"
+                />
+                <p
+                    id="artist-commission-help"
+                    className={"mt-1 text-xs " + (commissionInvalid ? "text-danger" : "text-muted-foreground")}
+                >
+                    {commissionInvalid
+                        ? "Enter a percentage from 0 to 100, up to two decimals."
+                        : "Share of service sales (after discounts) paid to the artist. Only visits checked out from now on use a new rate. Leave blank if not agreed yet."}
+                </p>
             </div>
 
             <div>
