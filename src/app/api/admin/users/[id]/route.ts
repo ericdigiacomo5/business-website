@@ -1,9 +1,12 @@
+import { after } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { Prisma } from "@/generated/prisma/client"
 import { requireAdmin } from "@/lib/require-admin"
-import { normalizeEmail, normalizePhone, requiredText, TEXT_LIMITS } from "@/lib/validation"
+import { normalizeEmail, normalizePhone, personNameError, requiredPersonName } from "@/lib/validation"
 import { SAFE_USER_SELECT } from "@/lib/user-select"
 import { readJsonObject } from "@/lib/request"
+import { sendEmail } from "@/lib/email"
+import { emailChangedEmail } from "@/lib/email-templates"
 
 export async function GET(
     request: Request,
@@ -45,12 +48,9 @@ export async function PATCH(
     const data: { name?: string; email?: string; phone?: string } = {}
 
     if (body.name !== undefined) {
-        const name = requiredText(body.name, TEXT_LIMITS.personName)
+        const name = requiredPersonName(body.name)
         if (name === null) {
-            return Response.json(
-                { error: `Name is required (up to ${TEXT_LIMITS.personName} characters)` },
-                { status: 400 }
-            )
+            return Response.json({ error: personNameError(body.name) }, { status: 400 })
         }
         data.name = name
     }
@@ -71,10 +71,14 @@ export async function PATCH(
         data.phone = phone
     }
 
-    const user = await prisma.user.findUnique({ where: { id } })
+    const user = await prisma.user.findUnique({
+        where: { id },
+        select: { id: true, email: true, passwordHash: true },
+    })
     if (!user) {
         return Response.json({ error: "User not found" }, { status: 404 })
     }
+    const emailChanging = data.email !== undefined && data.email !== user.email
 
     if (data.email !== undefined) {
         const existing = await prisma.user.findFirst({
@@ -89,11 +93,30 @@ export async function PATCH(
     }
 
     try {
-        const updated = await prisma.user.update({
-            where: { id: user.id },
-            data,
-            select: SAFE_USER_SELECT,
+        // An admin is trusted to set a customer's address (they're usually
+        // fixing it with the customer at the desk), so it changes right
+        // away. But any reset or verification link already sent went to the
+        // old address and must stop working, and an account that can sign
+        // in gets a notice at the old address so a change it didn't ask for
+        // doesn't go unnoticed.
+        const updated = await prisma.$transaction(async (tx) => {
+            if (emailChanging) {
+                await tx.passwordResetToken.deleteMany({ where: { userId: user.id, usedAt: null } })
+                await tx.emailVerificationToken.deleteMany({ where: { userId: user.id, usedAt: null } })
+            }
+            return tx.user.update({
+                where: { id: user.id },
+                data,
+                select: SAFE_USER_SELECT,
+            })
         })
+
+        // No password = a walk-in, which can't sign in; nobody to warn.
+        const canSignIn = user.passwordHash !== null
+        if (emailChanging && canSignIn) {
+            const previousEmail = user.email
+            after(() => sendEmail({ to: previousEmail, ...emailChangedEmail({ newEmail: updated.email }) }))
+        }
 
         return Response.json({ data: updated }, { status: 200 })
     } catch (error) {

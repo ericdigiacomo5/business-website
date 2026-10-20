@@ -33,7 +33,7 @@ export function PayReportFilters({
     presets: ReportPreset[]
 }) {
     return (
-        <div className="rounded-sm border border-border bg-surface p-4 print:hidden">
+        <div className="rounded-lg border border-line bg-surface shadow-sm p-4 print:hidden">
             <form method="get" className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_1.5fr_1fr_auto] lg:items-end">
                 <div>
                     <label htmlFor="report-from" className="block text-xs font-medium text-muted-foreground">

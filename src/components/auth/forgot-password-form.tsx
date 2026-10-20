@@ -38,12 +38,12 @@ export function ForgotPasswordForm() {
 
     if (submitted) {
         return (
-            <div className="flex flex-col gap-4 border border-foreground bg-surface p-8 text-center">
+            <div className="flex flex-col gap-4 rounded-xl border border-line bg-surface p-8 shadow-raised text-center">
                 <p className="text-sm text-foreground">
                     If an account exists for that email, we&apos;ve sent a password reset link.
                     It expires in 15 minutes.
                 </p>
-                <Link href="/login" className="text-sm font-semibold text-accent hover:text-primary">
+                <Link href="/login" className="text-sm font-semibold text-accent hover:text-primary-strong">
                     Back to sign in
                 </Link>
             </div>
@@ -51,7 +51,7 @@ export function ForgotPasswordForm() {
     }
 
     return (
-        <form onSubmit={handleSubmit} className="flex flex-col gap-5 border border-foreground bg-surface p-8">
+        <form onSubmit={handleSubmit} className="flex flex-col gap-5 rounded-xl border border-line bg-surface p-8 shadow-raised">
             <div>
                 <label htmlFor="email" className="block font-jost text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                     Email

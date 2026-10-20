@@ -2,15 +2,25 @@
 
 import { useState } from "react"
 import type { PortfolioImage } from "@/generated/prisma/client"
+import { Users } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { EmptyState } from "@/components/ui/empty-state"
+import { useToast } from "@/components/ui/toast"
 import { AdminArtistCard, type ArtistWithPortfolio } from "./admin-artist-card"
-import { ArtistForm, type ArtistFormValues } from "./artist-form"
+import { ArtistForm, type ArtistFormValues, type PickableService } from "./artist-form"
 
-export function AdminArtistsManager({ initialArtists }: { initialArtists: ArtistWithPortfolio[] }) {
+export function AdminArtistsManager({
+    initialArtists,
+    services,
+}: {
+    initialArtists: ArtistWithPortfolio[]
+    services: PickableService[]
+}) {
     const [artists, setArtists] = useState(initialArtists)
     const [isCreating, setIsCreating] = useState(false)
     const [editingId, setEditingId] = useState<string | null>(null)
     const [error, setError] = useState<string | null>(null)
+    const toast = useToast()
 
     async function handleCreate(values: ArtistFormValues) {
         setError(null)
@@ -35,6 +45,7 @@ export function AdminArtistsManager({ initialArtists }: { initialArtists: Artist
             const created: ArtistWithPortfolio = { ...body.data, portfolio: [] }
             setArtists((prev) => [...prev, created])
             setIsCreating(false)
+            toast(`${created.name} added.`)
         } catch {
             setError("Network error. Please try again.")
         }
@@ -65,6 +76,7 @@ export function AdminArtistsManager({ initialArtists }: { initialArtists: Artist
                 prev.map((a) => (a.id === id ? { ...body.data, portfolio: a.portfolio } : a))
             )
             setEditingId(null)
+            toast(`${body.data.name} saved.`)
         } catch {
             setError("Network error. Please try again.")
         }
@@ -90,6 +102,7 @@ export function AdminArtistsManager({ initialArtists }: { initialArtists: Artist
             setArtists((prev) =>
                 prev.map((a) => (a.id === artist.id ? { ...body.data, portfolio: a.portfolio } : a))
             )
+            toast(body.data.active ? `${body.data.name} is bookable again.` : `${body.data.name} deactivated — no longer bookable.`)
         } catch {
             setError("Network error. Please try again.")
         }
@@ -119,6 +132,7 @@ export function AdminArtistsManager({ initialArtists }: { initialArtists: Artist
             {isCreating && (
                 <div className="mt-4">
                     <ArtistForm
+                        services={services}
                         submitLabel="Create Artist"
                         onSubmit={handleCreate}
                         onCancel={() => setIsCreating(false)}
@@ -127,13 +141,16 @@ export function AdminArtistsManager({ initialArtists }: { initialArtists: Artist
             )}
 
             {artists.length === 0 ? (
-                <p className="mt-8 text-muted-foreground">No artists yet.</p>
+                <EmptyState icon={Users} title="No artists yet" className="mt-8">
+                    Add the first one with New Artist, then set their weekly hours under Availability.
+                </EmptyState>
             ) : (
                 <div className="mt-6 flex flex-col gap-3">
                     {artists.map((artist) => (
                         <AdminArtistCard
                             key={artist.id}
                             artist={artist}
+                            services={services}
                             isEditing={editingId === artist.id}
                             onEdit={() => setEditingId(artist.id)}
                             onCancelEdit={() => setEditingId(null)}

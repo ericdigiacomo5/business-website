@@ -46,10 +46,16 @@ export async function POST(request: Request) {
     // together — a partial write here would leave either a usable second
     // link, or a password that appears changed while passwordChangedAt (and
     // therefore session invalidation, see auth.ts) silently didn't happen.
+    //
+    // emailVerified: the link only ever goes to the account's current
+    // address (a confirmed email change deletes outstanding reset links), so
+    // using it proves control of that inbox. This is also how an owner takes
+    // back an address someone else registered first (unverified): the
+    // reset replaces their password and signs them out everywhere.
     await prisma.$transaction([
         prisma.user.update({
             where: { id: resetToken.userId },
-            data: { passwordHash, passwordChangedAt: now },
+            data: { passwordHash, passwordChangedAt: now, emailVerified: now },
         }),
         prisma.passwordResetToken.update({
             where: { id: resetToken.id },

@@ -1,58 +1,44 @@
 import NextAuth from "next-auth"
 import Credentials from "next-auth/providers/credentials"
-import Google from "next-auth/providers/google"
-import { PrismaAdapter } from "@auth/prisma-adapter"
 import { prisma } from "@/lib/prisma"
 import bcrypt from "bcryptjs"
 import { BCRYPT_COST } from "@/lib/password"
 import { normalizeEmail, UNKNOWN_PHONE } from "@/lib/validation"
 
-// Precomputed once so authorize() always runs a bcrypt.compare of roughly the
-// same cost, whether or not the account exists — without this, a nonexistent
-// email returns near-instantly (no compare at all) while a real email with a
-// wrong password takes bcrypt's deliberately-slow compare time, letting an
-// attacker enumerate valid emails purely by timing. Uses the same BCRYPT_COST
-// that register/reset-password hash real passwords with, so the two can't
-// drift apart.
-const DUMMY_PASSWORD_HASH = bcrypt.hashSync("no-such-user-timing-safety", BCRYPT_COST)
+// Compared against when an account doesn't exist, so authorize() always runs
+// one bcrypt.compare of the same cost — without this, a nonexistent email
+// returns near-instantly while a real email with a wrong password takes
+// bcrypt's deliberately-slow compare time, letting an attacker enumerate
+// valid emails purely by timing. A precomputed hash of a random string
+// nobody knows (not hashSync at startup: on Cloudflare Workers that would
+// spend bcrypt's CPU time on every cold start). Its cost must match
+// BCRYPT_COST, or the timing reasoning breaks — the check below fails loudly
+// if they drift apart.
+const DUMMY_PASSWORD_HASH = "$2b$10$duWU74THNTZm36HrP2HhDueSiNwv2Go7vZOUVWwVzUWd12M.o/4b."
+if (bcrypt.getRounds(DUMMY_PASSWORD_HASH) !== BCRYPT_COST) {
+  throw new Error("DUMMY_PASSWORD_HASH must use BCRYPT_COST — regenerate it with bcrypt.hashSync(<random>, BCRYPT_COST)")
+}
 
-const prismaAdapter = PrismaAdapter(prisma)
+// Absolute session lifetimes. The 8-hour maxAge below slides — Auth.js
+// re-issues the token on every session read, so a token in regular use
+// never expires on its own. These cap how long one sign-in lasts no matter
+// how active it is, timed from authTime (stamped once, at sign-in).
+const ABSOLUTE_SESSION_SECONDS = {
+  ADMIN: 12 * 60 * 60, // one long shift
+  CUSTOMER: 14 * 24 * 60 * 60,
+} as const
 
+// Email and password is the only way to sign in. Google sign-in was
+// configured until 2026-10-19 but never offered in the UI, so it was
+// removed (with the Auth.js database adapter it needed) rather than shipped
+// untested. No adapter: Credentials sign-in never uses one.
 export const { handlers, auth, signIn, signOut } = NextAuth({
-  // IMPORTANT: pass our own singleton, never `import { PrismaClient } from "@prisma/client"`
-  // directly — that import path is broken in this project because schema.prisma uses a
-  // custom generator `output`, and no node_modules/.prisma compatibility shim gets written.
-  adapter: {
-    ...prismaAdapter,
-    // User.phone is required, but the adapter's own createUser (used for
-    // first-time OAuth sign-in, e.g. Google) has no phone to supply — it
-    // only ever gets name/email/image/emailVerified from the provider
-    // profile. Same placeholder sentinel as the migration's backfill for
-    // pre-existing rows, so it's recognizable everywhere as "needs a real
-    // value," not a coincidentally-blank field — the session's
-    // profileIncomplete flag (below) prompts the user to replace it. The
-    // email is stored in the same normalized (lowercase) form as
-    // Credentials accounts.
-    createUser: (data) =>
-      prismaAdapter.createUser!({
-        ...data,
-        email: data.email.trim().toLowerCase(),
-        phone: UNKNOWN_PHONE,
-      } as typeof data & { phone: string }),
-  },
-
-  // JWT, not database, despite having an adapter configured. Originally tried
-  // "database" for revocable sessions, but confirmed (via a real sign-in
-  // against a running server, then checking the DB) that Credentials sign-ins
-  // are a hard exception: Auth.js's own callback handler always JWT-encodes
-  // the cookie for the "credentials" provider type, regardless of this
-  // setting — while session *reads* branch on this setting globally, with no
-  // per-provider awareness. Under "database", that mismatch meant a
-  // Credentials sign-in's cookie could never be read back — the very next
-  // request saw the user as signed out, and the server actively cleared the
-  // cookie. "jwt" makes both providers behave consistently (correctly) at the
-  // cost of losing server-side revocability for Google sign-ins too, which
-  // previously worked correctly under "database" — see PROJECT_STATUS.md.
+  // JWT sessions. "database" sessions can't work with Credentials: Auth.js
+  // always JWT-encodes the cookie for the "credentials" provider type, while
+  // session *reads* follow this setting — confirmed against a running server
+  // when this project briefly tried "database", where every Credentials
+  // sign-in was signed out on its next request. The jwt callback below
+  // re-reads the user on every request to get revocation back.
   // maxAge bounds how long a stolen or no-longer-authorized token stays
   // usable. JWTs can't be revoked server-side (no Session row to delete under
   // this strategy), so the expiry is the only backstop — Auth.js's 30-day
@@ -103,20 +89,14 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         }
       },
     }),
-    // Google, like every provider, auto-infers AUTH_GOOGLE_ID/AUTH_GOOGLE_SECRET
-    // from its provider id ("google") — no explicit clientId/clientSecret
-    // needed here. Real values are in .env (from a Google Cloud Console OAuth
-    // client, Web application type).
-    Google,
   ],
 
   callbacks: {
-    // Runs at sign-in (`user` defined — this is what authorize() or the OAuth
-    // profile callback returned) AND again on every subsequent request (`user`
-    // undefined then, since there's no adapter lookup under JWT strategy — the
-    // token itself is the only source of truth). Only copy from `user` when
-    // it's actually there; otherwise leave whatever's already encoded in the
-    // token from the original sign-in untouched.
+    // Runs at sign-in (`user` defined — this is what authorize() returned)
+    // AND again on every subsequent request (`user` undefined then — under
+    // JWT strategy the token itself is the only source of truth). Only copy
+    // from `user` when it's actually there; otherwise leave whatever's
+    // already encoded in the token from the original sign-in untouched.
     //
     // On every later request the User row is re-read, for two reasons:
     //
@@ -142,52 +122,76 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (user?.id) {
         token.id = user.id
         token.role = user.role
+        // When this sign-in happened, for the absolute lifetime below. Not
+        // `iat`: Auth.js re-stamps iat every time it re-issues the token.
+        token.authTime = Math.floor(Date.now() / 1000)
       }
 
       if (token.id) {
         const fresh = await prisma.user.findUnique({
           where: { id: token.id },
-          select: { name: true, email: true, phone: true, role: true, passwordChangedAt: true },
+          select: {
+            name: true,
+            email: true,
+            emailVerified: true,
+            phone: true,
+            role: true,
+            passwordChangedAt: true,
+            sessionsRevokedAt: true,
+          },
         })
 
         // Returning null tells Auth.js to clear the session cookie, so a
         // deleted account can't keep using an already-signed token.
         if (!fresh) return null
 
-        // A password reset can't delete this token the way a database
-        // session could (JWT strategy has no server-side row to revoke) —
-        // this is the substitute. Any token minted before the last reset is
-        // treated the same as a deleted account: signed out on its very next
-        // request, rather than staying valid until it expires on its own.
-        if (
-          fresh.passwordChangedAt &&
-          token.iat &&
-          token.iat * 1000 < fresh.passwordChangedAt.getTime()
-        ) {
+        // A password reset or "Sign out of all devices" can't delete this
+        // token the way a database session could (JWT strategy has no
+        // server-side row to revoke) — this is the substitute. A token last
+        // issued before either is treated the same as a deleted account:
+        // signed out on its very next request. (Every token in use is
+        // re-issued with a fresh iat, so "issued before" means "this
+        // session existed before the revocation".)
+        const revokedAt = Math.max(
+          fresh.passwordChangedAt?.getTime() ?? 0,
+          fresh.sessionsRevokedAt?.getTime() ?? 0,
+        )
+        if (token.iat && token.iat * 1000 < revokedAt) {
+          return null
+        }
+
+        // A sign-in lasts at most ABSOLUTE_SESSION_SECONDS, however active.
+        // Tokens from before authTime existed have none and are signed out
+        // once.
+        const maxSeconds = ABSOLUTE_SESSION_SECONDS[fresh.role]
+        if (!token.authTime || Date.now() / 1000 - token.authTime > maxSeconds) {
           return null
         }
 
         token.name = fresh.name
         token.email = fresh.email
         token.role = fresh.role
-        // Missing name (older self-registered accounts) or the placeholder
-        // phone (Google sign-ups). Drives the "complete your profile" banner
-        // and blocks customer self-booking until fixed. Re-evaluated on every
-        // request, so it clears the moment the profile is saved.
+        // Missing name or the placeholder phone (both only on accounts older
+        // than those required fields). Drives the "complete your profile"
+        // banner and blocks customer self-booking until fixed. Re-evaluated
+        // on every request, so it clears the moment the profile is saved.
         token.profileIncomplete = !fresh.name || fresh.phone === UNKNOWN_PHONE
+        // A self-registered account whose address isn't confirmed yet. Same
+        // treatment: banner, and no customer self-booking until fixed.
+        token.emailUnverified = !fresh.emailVerified
       }
 
       return token
     },
-    // Reads back off `token`, not `user` — under JWT strategy there's no
-    // database row to fetch a fresh AdapterUser from on every request, unlike
-    // the "database" strategy shape this started out as.
+    // Reads back off `token`, not `user` — under JWT strategy the token is
+    // what the jwt callback above just refreshed from the database.
     async session({ session, token }) {
       session.user.id = token.id
       session.user.role = token.role
       if (token.name) session.user.name = token.name
       if (token.email) session.user.email = token.email
       session.user.profileIncomplete = token.profileIncomplete ?? false
+      session.user.emailUnverified = token.emailUnverified ?? false
       return session
     },
   },

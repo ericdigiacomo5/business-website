@@ -83,7 +83,7 @@ export function MyRecurringAppointments() {
 
     return (
         <section className="mt-10">
-            <h2 className="border-b-2 border-foreground pb-2.5 font-jost text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            <h2 className="font-serif text-2xl font-extrabold text-foreground">
                 Standing Appointments
             </h2>
 

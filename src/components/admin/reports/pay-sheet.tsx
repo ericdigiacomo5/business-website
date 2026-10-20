@@ -88,7 +88,7 @@ export function PaySheet({
     return (
         <section
             aria-labelledby={headingId}
-            className="pay-sheet rounded-sm border border-border bg-surface p-4 text-surface-foreground sm:p-6 print:border-0 print:p-0"
+            className="pay-sheet rounded-lg border border-line bg-surface shadow-sm print:shadow-none p-4 text-surface-foreground sm:p-6 print:border-0 print:p-0"
         >
             <header className="flex flex-col gap-1 border-b-2 border-border pb-3 sm:flex-row sm:items-end sm:justify-between">
                 <div>

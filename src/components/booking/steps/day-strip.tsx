@@ -3,10 +3,15 @@ import { toLocalDateKey } from "@/lib/format"
 export function DayStrip({
     days,
     selectedDate,
+    openDays,
     onSelect,
 }: {
     days: Date[]
     selectedDate: string | null
+    // Days with at least one time that fits (FEATURE_GAPS.md U6); the rest
+    // are greyed out and can't be picked. null while it loads, or if it
+    // couldn't be loaded — then every day stays pickable, as before.
+    openDays: Set<string> | null
     onSelect: (dateKey: string) => void
 }) {
     return (
@@ -14,24 +19,28 @@ export function DayStrip({
             {days.map((day) => {
                 const key = toLocalDateKey(day)
                 const selected = key === selectedDate
+                const full = openDays !== null && !openDays.has(key)
+                const label = day.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })
                 return (
                     <button
                         key={key}
                         type="button"
                         onClick={() => onSelect(key)}
+                        disabled={full}
                         aria-pressed={selected}
-                        aria-label={day.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
+                        aria-label={full ? `${label}, no openings` : label}
                         className={
-                            "flex h-16 w-14 shrink-0 cursor-pointer flex-col items-center justify-center rounded-sm border text-sm transition-colors " +
+                            "pop-on-select flex h-16 w-14 shrink-0 cursor-pointer flex-col items-center justify-center rounded-lg border text-sm transition " +
+                            "disabled:cursor-not-allowed disabled:border-dashed disabled:bg-transparent disabled:text-muted-foreground disabled:opacity-60 " +
                             (selected
-                                ? "border-primary bg-primary text-primary-foreground"
-                                : "border-border bg-surface text-surface-foreground hover:bg-muted")
+                                ? "border-lacquer bg-lacquer text-lacquer-foreground shadow-md"
+                                : "border-line bg-surface text-surface-foreground shadow-sm hover:border-foreground/40")
                         }
                     >
                         <span className="text-xs uppercase opacity-80">
                             {day.toLocaleDateString("en-US", { weekday: "short" })}
                         </span>
-                        <span className="text-base font-semibold">{day.getDate()}</span>
+                        <span className={"text-base font-semibold " + (full ? "line-through" : "")}>{day.getDate()}</span>
                     </button>
                 )
             })}

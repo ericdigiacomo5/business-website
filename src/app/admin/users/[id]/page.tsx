@@ -5,6 +5,7 @@ import { SAFE_USER_SELECT } from "@/lib/user-select"
 import { AdminUserDetail } from "@/components/admin/users/admin-user-detail"
 import { SERVICE_LINES_INCLUDE } from "@/lib/appointment-services"
 import { ADMIN_CREDIT_ENTRY_SELECT } from "@/lib/credit-shared"
+import { requireAdminPage } from "@/lib/require-admin-page"
 
 export default async function AdminUserDetailPage({
     params,
@@ -12,6 +13,7 @@ export default async function AdminUserDetailPage({
     params: Promise<{ id: string }>
 }) {
     const { id } = await params
+    await requireAdminPage(`/admin/users/${id}`)
 
     const [user, appointments, creditEntries] = await Promise.all([
         prisma.user.findUnique({ where: { id }, select: SAFE_USER_SELECT }),

@@ -37,7 +37,7 @@ export function RegisterForm() {
     }
 
     return (
-        <form onSubmit={handleSubmit} className="flex flex-col gap-5 border border-foreground bg-surface p-8">
+        <form onSubmit={handleSubmit} className="flex flex-col gap-5 rounded-xl border border-line bg-surface p-8 shadow-raised">
             <div>
                 <label htmlFor="name" className="block font-jost text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                     Name

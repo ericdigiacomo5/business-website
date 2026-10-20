@@ -24,7 +24,7 @@ export default function Error({
 
     return (
         <div className="mx-auto max-w-3xl px-4 py-14">
-            <span className="font-script text-2xl text-accent">Something went wrong</span>
+            <span className="font-script text-2xl text-lacquer">Something went wrong</span>
             <h1 className="mt-1 font-serif text-4xl font-extrabold leading-tight text-foreground">
                 This page didn&apos;t load
             </h1>

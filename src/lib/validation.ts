@@ -59,6 +59,25 @@ export function optionalText(
     return { ok: true, value: text.length > 0 ? text : null }
 }
 
+// A person's name: requiredText, plus no web or email addresses. A name is
+// the one piece of free text that goes into customer emails ("Hi <name>,"),
+// so without this, "Your account is locked, verify at evil.example" as a
+// name would be delivered from the salon's own domain. Returns null if
+// invalid; personNameError() says why.
+const NAME_LINK_PATTERN =
+    /:\/\/|www\.|@|\b[a-z0-9-]+\.(com|net|org|info|biz|io|co|xyz|app|link|site|online|top|me|us|ly)\b/i
+
+export function requiredPersonName(value: unknown): string | null {
+    const name = requiredText(value, TEXT_LIMITS.personName)
+    return name !== null && !NAME_LINK_PATTERN.test(name) ? name : null
+}
+
+export function personNameError(value: unknown): string {
+    return requiredText(value, TEXT_LIMITS.personName) === null
+        ? `Name is required (up to ${TEXT_LIMITS.personName} characters)`
+        : "Names can't contain web or email addresses"
+}
+
 // No format validation beyond length — phone formats vary too much (country
 // codes, extensions, formatting) to regex meaningfully. Returns the trimmed
 // number, or null if invalid.
@@ -66,8 +85,9 @@ export function normalizePhone(value: unknown): string | null {
     return requiredText(value, TEXT_LIMITS.phone)
 }
 
-// Placeholder phone stored for accounts created without one (Google sign-up,
-// and rows that predate the phone column). Treated as "missing" everywhere.
+// Placeholder phone on rows that predate the phone column (and on Google
+// sign-ups, before Google sign-in was removed). Treated as "missing"
+// everywhere.
 export const UNKNOWN_PHONE = "UNKNOWN"
 
 // Returned by the booking routes when a customer without a name or real
@@ -75,6 +95,11 @@ export const UNKNOWN_PHONE = "UNKNOWN"
 // the booking review step can show the same wording.
 export const PROFILE_INCOMPLETE_MESSAGE =
     "Please add your name and phone number to your profile before booking, so the salon can reach you."
+
+// Returned by the booking routes for a self-registered account whose email
+// isn't confirmed yet (Session.user.emailUnverified).
+export const EMAIL_UNVERIFIED_MESSAGE =
+    "Please confirm your email address before booking — we sent you a link when you signed up."
 
 // Artist photos and portfolio images must be Cloudinary delivery URLs —
 // they're only ever produced by the signed upload flow (see

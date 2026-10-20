@@ -19,7 +19,7 @@
 // serves it with no-cache), installs the new version, and the activate step
 // below deletes caches from older versions.
 
-const CACHE_VERSION = "v1"
+const CACHE_VERSION = "v2"
 const STATIC_CACHE = `nail-image-static-${CACHE_VERSION}`
 const OFFLINE_CACHE = `nail-image-offline-${CACHE_VERSION}`
 const OFFLINE_URL = "/offline.html"
@@ -56,7 +56,7 @@ self.addEventListener("fetch", (event) => {
 
     const url = new URL(request.url)
     // Only this site's own requests; anything cross-origin (Cloudinary
-    // uploads, Google sign-in) is left entirely to the browser.
+    // uploads and images) is left entirely to the browser.
     if (url.origin !== self.location.origin) return
 
     // Page loads: network first, offline page as the fallback.

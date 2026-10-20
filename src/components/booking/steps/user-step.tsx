@@ -2,8 +2,10 @@
 
 import { useEffect, useState } from "react"
 import type { SelectedUser } from "../wizard-state"
+import { Badge } from "@/components/ui/badge"
+import { isNoShowFlagged, noShowLabel } from "@/lib/customer-summary"
 
-type ApiUser = { id: string; name: string | null; email: string; phone: string; role: string }
+type ApiUser = { id: string; name: string | null; email: string; phone: string; role: string; noShowCount: number }
 
 // Keyed by `debouncedQuery` in the parent so a query change remounts this
 // component — loading state then comes from useState's initial value, not a
@@ -56,7 +58,12 @@ function UserResults({
                     onClick={() => onSelect(user)}
                     className="flex min-h-11 cursor-pointer flex-col rounded-sm border border-border bg-surface p-4 text-left transition-colors hover:bg-muted"
                 >
-                    <span className="font-medium text-surface-foreground">{user.name ?? user.email}</span>
+                    <span className="flex flex-wrap items-center gap-2 font-medium text-surface-foreground">
+                        {user.name ?? user.email}
+                        {isNoShowFlagged(user.noShowCount) && (
+                            <Badge tone="danger">{noShowLabel(user.noShowCount)}</Badge>
+                        )}
+                    </span>
                     <span className="mt-1 text-sm text-muted-foreground">
                         {user.email} &middot; {user.phone}
                     </span>
@@ -102,7 +109,7 @@ export function UserStep({ onSelect }: { onSelect: (user: SelectedUser) => void 
                     <button
                         type="button"
                         onClick={() => setShowCreateForm(true)}
-                        className="min-h-11 w-full cursor-pointer text-left text-sm font-medium text-primary"
+                        className="min-h-11 w-full cursor-pointer text-left text-sm font-medium text-primary-strong"
                     >
                         + Add new customer
                     </button>

@@ -2,19 +2,23 @@ import { useState } from "react"
 import type { Artist, PortfolioImage } from "@/generated/prisma/client"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { ConfirmAction } from "@/components/ui/confirm-action"
 import { formatRate } from "@/lib/pay-report"
-import { ArtistForm, type ArtistFormValues } from "./artist-form"
+import { ArtistForm, type ArtistFormValues, type PickableService } from "./artist-form"
 import { PortfolioManager } from "./portfolio-manager"
+import { offeredServiceIdsOf } from "@/lib/artist-services"
 
 // payTerms: the commission rate (admin-only data, see ArtistPayTerms);
-// null = not set yet.
+// null = not set yet. services: what they perform; none = everything.
 export type ArtistWithPortfolio = Artist & {
     portfolio: PortfolioImage[]
     payTerms: { commissionBasisPoints: number } | null
+    services: { serviceId: string }[]
 }
 
 export function AdminArtistCard({
     artist,
+    services,
     isEditing,
     onEdit,
     onCancelEdit,
@@ -23,6 +27,7 @@ export function AdminArtistCard({
     onPortfolioChange,
 }: {
     artist: ArtistWithPortfolio
+    services: PickableService[]
     isEditing: boolean
     onEdit: () => void
     onCancelEdit: () => void
@@ -31,16 +36,19 @@ export function AdminArtistCard({
     onPortfolioChange: (images: PortfolioImage[]) => void
 }) {
     const [portfolioOpen, setPortfolioOpen] = useState(false)
+    const offered = offeredServiceIdsOf(artist)
 
     if (isEditing) {
         return (
             <ArtistForm
+                services={services}
                 submitLabel="Save Changes"
                 initial={{
                     name: artist.name,
                     bio: artist.bio ?? "",
                     photoUrl: artist.photoUrl ?? "",
                     commissionBasisPoints: artist.payTerms?.commissionBasisPoints ?? null,
+                    serviceIds: offered,
                 }}
                 onSubmit={onSave}
                 onCancel={onCancelEdit}
@@ -49,7 +57,7 @@ export function AdminArtistCard({
     }
 
     return (
-        <div className="rounded-sm border border-border bg-surface p-4">
+        <div className="rounded-lg border border-line bg-surface shadow-sm p-4">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                     <div className="flex items-center gap-2">
@@ -64,6 +72,14 @@ export function AdminArtistCard({
                             ? `Commission ${formatRate(artist.payTerms.commissionBasisPoints)}`
                             : "Commission not set"}
                     </p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                        {offered.length === 0
+                            ? "Does every service"
+                            : `Does: ${services
+                                  .filter((service) => offered.includes(service.id))
+                                  .map((service) => service.name)
+                                  .join(", ")}`}
+                    </p>
                 </div>
 
                 <div className="flex shrink-0 gap-2">
@@ -73,9 +89,18 @@ export function AdminArtistCard({
                     <Button variant="secondary" size="md" onClick={onEdit}>
                         Edit
                     </Button>
-                    <Button variant={artist.active ? "danger" : "secondary"} size="md" onClick={onToggleActive}>
-                        {artist.active ? "Deactivate" : "Reactivate"}
-                    </Button>
+                    {artist.active ? (
+                        <ConfirmAction
+                            label="Deactivate"
+                            prompt={`Stop taking bookings for ${artist.name}?`}
+                            confirmLabel="Yes, Deactivate"
+                            onConfirm={onToggleActive}
+                        />
+                    ) : (
+                        <Button variant="secondary" size="md" onClick={onToggleActive}>
+                            Reactivate
+                        </Button>
+                    )}
                 </div>
             </div>
 

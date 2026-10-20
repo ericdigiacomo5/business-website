@@ -1,6 +1,7 @@
 import type { TimeOff } from "@/generated/prisma/client"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { ConfirmAction } from "@/components/ui/confirm-action"
 import { toLocalDateKey } from "@/lib/format"
 import { TimeOffForm, type TimeOffFormValues } from "./time-off-form"
 
@@ -47,7 +48,7 @@ export function AdminTimeOffRow({
           })
 
     return (
-        <div className="flex flex-col gap-3 rounded-sm border border-border bg-surface p-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-3 rounded-lg border border-line bg-surface shadow-sm p-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
                 <div className="flex flex-wrap items-center gap-2">
                     <span className="font-medium text-surface-foreground">{dateLabel}</span>
@@ -64,9 +65,12 @@ export function AdminTimeOffRow({
                 <Button variant="secondary" size="md" onClick={onEdit}>
                     Edit
                 </Button>
-                <Button variant="danger" size="md" onClick={onDelete}>
-                    Delete
-                </Button>
+                <ConfirmAction
+                    label="Delete"
+                    prompt="Remove this time off? Those hours become bookable."
+                    confirmLabel="Yes, Delete"
+                    onConfirm={onDelete}
+                />
             </div>
         </div>
     )

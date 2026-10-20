@@ -1,8 +1,13 @@
 'use client'
 
 import { useState } from "react"
+import Link from "next/link"
+import { CalendarDays } from "lucide-react"
 import { AppointmentCard, type AppointmentWithRelations } from "./appointment-card"
-import { Button } from "@/components/ui/button"
+import { Button, buttonVariants } from "@/components/ui/button"
+import { EmptyState } from "@/components/ui/empty-state"
+import { useToast } from "@/components/ui/toast"
+import { ConfirmAction } from "@/components/ui/confirm-action"
 import { DateTimeStep } from "@/components/booking/steps/datetime-step"
 import { customerChangeDeadline, describeNoticeWindow } from "@/lib/recurring"
 import { durationMinutesOf } from "@/lib/schedule-grid"
@@ -34,6 +39,7 @@ export function MyBookingsList({
     cancellationNoticeHours: number
 }) {
     const [appointments, setAppointments] = useState(initialAppointments)
+    const toast = useToast()
     const [busyId, setBusyId] = useState<string | null>(null)
     const [error, setError] = useState<string | null>(null)
     // The appointment being rescheduled, and the new time picked for it
@@ -74,6 +80,7 @@ export function MyBookingsList({
 
             const body = await res.json()
             setAppointments((prev) => prev.map((a) => (a.id === id ? { ...a, status: body.data.status } : a)))
+            toast("Booking cancelled.")
         } catch {
             setError("Network error. Please try again.")
         } finally {
@@ -109,6 +116,7 @@ export function MyBookingsList({
                     .sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime())
             )
             stopReschedule()
+            toast(`Moved to ${formatWhen(new Date(updated.startTime).toISOString())}. The salon will confirm it.`)
         } catch {
             setError("Network error. Please try again.")
         } finally {
@@ -116,8 +124,18 @@ export function MyBookingsList({
         }
     }
 
+    const bookNow = (
+        <Link href="/book" className={buttonVariants()}>
+            Book Now
+        </Link>
+    )
+
     if (appointments.length === 0) {
-        return <p className="mt-8 text-muted-foreground">You don&apos;t have any bookings yet.</p>
+        return (
+            <EmptyState icon={CalendarDays} title="Nothing booked yet" action={bookNow} className="mt-8">
+                Your next set is a minute away — pick a service, an artist and a time.
+            </EmptyState>
+        )
     }
 
     const upcoming = appointments.filter((a) => isUpcoming(a, now))
@@ -153,14 +171,18 @@ export function MyBookingsList({
                 >
                     Reschedule
                 </Button>
-                <Button
-                    variant="danger"
-                    size="md"
-                    onClick={() => handleCancel(appointment.id)}
-                    disabled={busy || reschedulingId !== null}
-                >
-                    {busy ? "Cancelling..." : "Cancel"}
-                </Button>
+                {/* Asks first: cancelling frees the slot, and someone else
+                    may take it. */}
+                <ConfirmAction
+                    label="Cancel"
+                    prompt="Cancel this booking?"
+                    confirmLabel="Yes, Cancel"
+                    keepLabel="Keep It"
+                    busy={busy}
+                    busyLabel="Cancelling..."
+                    disabled={reschedulingId !== null}
+                    onConfirm={() => handleCancel(appointment.id)}
+                />
             </>
         )
 
@@ -228,9 +250,15 @@ export function MyBookingsList({
                 </p>
             )}
 
+            {upcoming.length === 0 && (
+                <EmptyState icon={CalendarDays} title="No upcoming bookings" action={bookNow}>
+                    Time for a fresh set? Your past visits are below.
+                </EmptyState>
+            )}
+
             {upcoming.length > 0 && (
                 <section>
-                    <h2 className="border-b-2 border-foreground pb-2.5 font-jost text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    <h2 className="font-serif text-2xl font-extrabold text-foreground">
                         Upcoming
                     </h2>
                     <div className="mt-5 flex flex-col gap-4">{upcoming.map(renderUpcoming)}</div>
@@ -239,7 +267,7 @@ export function MyBookingsList({
 
             {other.length > 0 && (
                 <section>
-                    <h2 className="border-b-2 border-foreground pb-2.5 font-jost text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    <h2 className="font-serif text-2xl font-extrabold text-foreground">
                         Past &amp; Cancelled
                     </h2>
                     <div className="mt-5 flex flex-col gap-4">

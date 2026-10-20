@@ -2,7 +2,7 @@
 
 A mobile-first booking platform for a nail salon: customers book online (one-off or standing appointments), and staff run the day from an admin schedule. The scheduling engine is built in-house; double-booking is prevented by a database constraint, not application logic.
 
-**Stack:** Next.js 16 (App Router, Turbopack) · TypeScript · Tailwind CSS v4 · Prisma 7 · PostgreSQL (Neon) · Auth.js v5 (email/password + Google) · Resend (email) · Cloudinary (images). Deploy target: Cloudflare Workers (not yet deployed).
+**Stack:** Next.js 16 (App Router, Turbopack) · TypeScript · Tailwind CSS v4 · Prisma 7 · PostgreSQL (Neon) · Auth.js v5 (email/password) · Resend (email) · Cloudinary (images). Deploy target: Cloudflare Workers (not yet deployed).
 
 ## Features
 

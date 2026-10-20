@@ -3,6 +3,7 @@ import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
 import { MyProfileForm } from "@/components/account/my-profile-form"
 import { MyStoreCredit } from "@/components/account/my-store-credit"
+import { SignOutEverywhere } from "@/components/account/sign-out-everywhere"
 import { CREDIT_ENTRY_SELECT } from "@/lib/credit-shared"
 import { safeCallbackUrl, UNKNOWN_PHONE } from "@/lib/validation"
 
@@ -54,14 +55,15 @@ export default async function AccountPage({
                     {initials}
                 </div>
                 <div>
-                    <span className="font-script text-xl text-accent">Hello,</span>
+                    <span className="font-script text-xl text-lacquer">Hello,</span>
                     <h1 className="mt-0.5 font-serif text-3xl font-extrabold text-foreground">
                         {user.name || user.email}
                     </h1>
                 </div>
             </div>
             <MyProfileForm
-                // The placeholder phone (Google sign-ups) shows as an empty
+                // The placeholder phone (accounts older than the phone
+                // field) shows as an empty
                 // field to fill in, not the literal word "UNKNOWN".
                 initial={{
                     name: user.name ?? "",
@@ -71,6 +73,7 @@ export default async function AccountPage({
                 returnTo={returnTo}
             />
             <MyStoreCredit initialBalanceCents={user.creditBalanceCents} initialEntries={creditEntries} />
+            <SignOutEverywhere />
         </div>
     )
 }

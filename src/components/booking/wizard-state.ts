@@ -19,6 +19,9 @@ export type SelectedUser = {
     name: string | null
     email: string
     phone: string
+    // Lifetime no-shows, when picked from the customer search (a walk-in
+    // just created has none).
+    noShowCount?: number
 }
 
 export type WizardState = {
@@ -40,6 +43,11 @@ export type WizardAction =
     | { type: "SELECT_ARTIST"; artistId: string }
     | { type: "SELECT_DATETIME"; date: string; startTime: string }
     | { type: "GO_BACK" }
+    // Jump back to an earlier step (the step indicator). Later steps are
+    // ignored: they need the choices in between.
+    | { type: "GO_TO"; step: WizardStep }
+    // After a booking: same services and artist, pick a new time.
+    | { type: "BOOK_AGAIN" }
     | { type: "SUBMIT_SUCCESS"; appointment: BookedAppointment }
     | { type: "SUBMIT_RECURRING_SUCCESS"; result: RecurringBookingResult }
     | { type: "SLOT_UNAVAILABLE" }
@@ -101,6 +109,13 @@ export function wizardReducer(state: WizardState, action: WizardAction): WizardS
             return { ...state, date: action.date, startTime: action.startTime, step: "review" }
         case "GO_BACK":
             return { ...state, step: previousStep(state.step) }
+        case "GO_TO":
+            return STEP_ORDER.indexOf(action.step) < STEP_ORDER.indexOf(state.step) ? { ...state, step: action.step } : state
+        case "BOOK_AGAIN":
+            return {
+                ...initialWizardState({ serviceIds: state.serviceIds, artistId: state.artistId }),
+                step: state.serviceIds.length > 0 && state.artistId ? "datetime" : "service",
+            }
         case "SUBMIT_SUCCESS":
             return { ...state, step: "confirmed", confirmedAppointment: action.appointment, confirmedRecurring: null }
         case "SUBMIT_RECURRING_SUCCESS":

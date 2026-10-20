@@ -2,7 +2,7 @@ import { isGridAligned, isValidTimeString } from "@/lib/availability";
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@/generated/prisma/client";
 import { requireAdmin } from "@/lib/require-admin";
-import { readJsonObject } from "@/lib/request";
+import { readJsonObject, rejectCrossOrigin } from "@/lib/request";
 
 export async function PATCH(
     request: Request,
@@ -120,6 +120,9 @@ export async function DELETE(
 ) {
     const forbidden = await requireAdmin()
     if (forbidden) return forbidden
+
+    const crossOrigin = rejectCrossOrigin(request)
+    if (crossOrigin) return crossOrigin
 
     const { id } = await params
 

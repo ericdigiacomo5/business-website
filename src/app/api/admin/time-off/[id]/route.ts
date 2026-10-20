@@ -1,9 +1,12 @@
 import { requireAdmin } from "@/lib/require-admin";
-import { readJsonObject } from "@/lib/request";
+import { readJsonObject, rejectCrossOrigin } from "@/lib/request";
 import { prisma } from "@/lib/prisma"
 import { isGridAligned, isValidTimeString, startOfDay, endOfDay, timeOffDateRangeOverlap } from "@/lib/availability";
 import { parseLocalDate } from "@/lib/format";
 import { Prisma } from "@/generated/prisma/client";
+import { after } from "next/server";
+import { conflictsResponse, parseApprovedIds, saveTimeOffChecked } from "@/lib/time-off-conflicts";
+import { sendCancellationNotice } from "@/lib/appointment-emails";
 
 export async function PATCH(
     request: Request,
@@ -29,6 +32,15 @@ export async function PATCH(
     if (body instanceof Response) return body
 
     const { artistId, date, endDate, startTime, endTime } = body
+
+    // Same as POST: bookings the admin has seen and agreed to cancel.
+    const approvedIds = parseApprovedIds(body.cancelConflictingAppointmentIds)
+    if (approvedIds === null) {
+        return Response.json(
+            { error: 'Appointments to cancel must be a list of ids' },
+            { status: 400 }
+        )
+    }
 
     // Three-way, same convention admin/services's PATCH established for
     // Service.description: undefined = don't touch, null = clear it (make
@@ -179,12 +191,27 @@ export async function PATCH(
     if (endTime !== undefined) data.endTime = endTime;
 
     try {
-        const updatedTimeOff = await prisma.timeOff.update({
-            where: { id: timeOff.id },
-            data: data
-        })
+        // Checked against the row's effective values after the edit, so
+        // widening an entry (or moving it) onto a booked day is caught too.
+        const result = await saveTimeOffChecked(
+            { artistId: effectiveArtistId, date: effectiveDate, endDate: effectiveEndDate, startTime: start, endTime: end },
+            approvedIds,
+            (tx) => tx.timeOff.update({
+                where: { id: timeOff.id },
+                data: data
+            })
+        )
 
-        return Response.json({ data: updatedTimeOff }, { status: 200 })
+        if (!result.ok) return conflictsResponse(result.conflicts)
+
+        for (const cancelledId of result.cancelledIds) {
+            after(() => sendCancellationNotice(cancelledId, "salon"))
+        }
+
+        return Response.json(
+            { data: { ...result.timeOff, cancelledAppointmentIds: result.cancelledIds } },
+            { status: 200 }
+        )
     } catch (error) {
         // Race between the findUnique above and this update — e.g. the row
         // was removed in between. Same pattern as admin/availability/[id].
@@ -205,6 +232,9 @@ export async function DELETE(
 ) {
     const forbidden = await requireAdmin()
     if (forbidden) return forbidden
+
+    const crossOrigin = rejectCrossOrigin(request)
+    if (crossOrigin) return crossOrigin
 
     const { id } = await params
 

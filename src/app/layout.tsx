@@ -5,6 +5,7 @@ import { auth } from "@/auth";
 import { Providers } from "@/components/providers";
 import { Header } from "@/components/layout/header";
 import { FooterGate } from "@/components/layout/footer-gate";
+import { Footer } from "@/components/layout/footer";
 import { ProfileBanner } from "@/components/layout/profile-banner";
 import { RegisterServiceWorker } from "@/components/pwa/service-worker-registration";
 import { SITE_NAME, SITE_TAGLINE } from "@/lib/site";
@@ -54,11 +55,25 @@ export default async function RootLayout({
       className={`${bodoniModa.variable} ${yesteryear.variable} ${jost.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
+        {/* First thing a keyboard or screen-reader user reaches: jumps past
+            the sticky header's links. Hidden until focused. */}
+        <a
+          href="#main"
+          className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 focus:rounded-sm focus:bg-foreground focus:px-4 focus:py-3 focus:text-background"
+        >
+          Skip to content
+        </a>
         <Providers session={session}>
           <Header />
           <ProfileBanner />
-          <main className="flex-1">{children}</main>
-          <FooterGate />
+          {/* tabIndex -1 so the skip link moves focus here, not just the
+              scroll position. */}
+          <main id="main" tabIndex={-1} className="flex-1 focus:outline-none">
+            {children}
+          </main>
+          <FooterGate>
+            <Footer />
+          </FooterGate>
         </Providers>
         <RegisterServiceWorker />
       </body>

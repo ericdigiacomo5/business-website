@@ -1,12 +1,14 @@
 'use client'
 
 import { useState } from "react"
+import { useSession } from "next-auth/react"
 import type { Artist, Service } from "@/generated/prisma/client"
 import { Button } from "@/components/ui/button"
 import { StickyActionBar } from "@/components/ui/sticky-action-bar"
+import { ResendVerificationButton } from "@/components/auth/resend-verification-button"
 import { formatDuration, formatPrice, toLocalDateKey, toLocalTimeKey } from "@/lib/format"
 import { maxSeriesEnd } from "@/lib/recurring"
-import { PROFILE_INCOMPLETE_MESSAGE } from "@/lib/validation"
+import { EMAIL_UNVERIFIED_MESSAGE, PROFILE_INCOMPLETE_MESSAGE } from "@/lib/validation"
 import { appointmentLengthOptions } from "@/lib/schedule-grid"
 import type { BookedAppointment, RecurringBookingResult } from "../wizard-state"
 
@@ -28,6 +30,7 @@ export function ReviewStep({
     slotUnavailableMessage = "That time was just taken — please pick another.",
     maxSeriesWeeks,
     profileIncomplete = false,
+    emailUnverified = false,
     onCompleteProfile,
     onBack,
     onSuccess,
@@ -56,6 +59,9 @@ export function ReviewStep({
     // server refuses their booking until fixed, so offer the fix instead of
     // a Confirm button that can only fail.
     profileIncomplete?: boolean
+    // Customer only: the account's email isn't confirmed yet — same idea:
+    // offer the resend link instead of a Confirm the server will refuse.
+    emailUnverified?: boolean
     onCompleteProfile?: () => void
     onBack: () => void
     onSuccess: (appointment: BookedAppointment) => void
@@ -66,8 +72,11 @@ export function ReviewStep({
     const [error, setError] = useState<string | null>(null)
     const [pending, setPending] = useState(false)
     const ActionBar = inline ? "div" : StickyActionBar
+    const { update: refreshSession } = useSession()
     // Admins booking for someone else are never blocked by their own profile.
-    const mustCompleteProfile = !adminMode && profileIncomplete && onCompleteProfile !== undefined
+    // Email first: it's the one the customer has to leave the page for.
+    const mustVerifyEmail = !adminMode && emailUnverified
+    const mustCompleteProfile = !adminMode && !mustVerifyEmail && profileIncomplete && onCompleteProfile !== undefined
 
     const serviceIds = services.map((service) => service.id)
     const usualMinutes = services.reduce((sum, service) => sum + service.durationMinutes, 0)
@@ -165,7 +174,7 @@ export function ReviewStep({
         <div className={inline ? undefined : "pb-28"}>
             <h2 className="text-lg font-semibold text-foreground">Review &amp; Confirm</h2>
 
-            <dl className="mt-4 divide-y divide-border rounded-sm border border-border bg-surface">
+            <dl className="mt-4 divide-y divide-line rounded-xl border border-line bg-surface shadow-card">
                 <div className="flex justify-between gap-4 px-4 py-3">
                     <dt className="text-sm text-muted-foreground">{services.length === 1 ? "Service" : "Services"}</dt>
                     <dd className="text-right text-sm font-medium text-surface-foreground">
@@ -232,7 +241,7 @@ export function ReviewStep({
                 </div>
             </dl>
 
-            <div className="mt-4 rounded-sm border border-border bg-surface p-4">
+            <div className="mt-4 rounded-xl border border-line bg-surface p-4 shadow-card">
                 <label className="flex items-center gap-3">
                     <input
                         type="checkbox"
@@ -298,6 +307,16 @@ export function ReviewStep({
                 </p>
             )}
 
+            {mustVerifyEmail && (
+                <div role="status" className="mt-4 rounded-sm border border-accent bg-surface p-4 text-sm text-surface-foreground">
+                    <p>
+                        {EMAIL_UNVERIFIED_MESSAGE} Once you&apos;ve clicked it, come back here and choose
+                        &ldquo;I&apos;ve Confirmed&rdquo; — your selections will be kept.
+                    </p>
+                    <ResendVerificationButton />
+                </div>
+            )}
+
             {mustCompleteProfile && (
                 <p role="status" className="mt-4 rounded-sm border border-accent bg-surface p-4 text-sm text-surface-foreground">
                     {PROFILE_INCOMPLETE_MESSAGE} Your selections will be kept.
@@ -308,7 +327,14 @@ export function ReviewStep({
                 <Button type="button" variant="secondary" onClick={onBack} disabled={pending}>
                     Back
                 </Button>
-                {mustCompleteProfile ? (
+                {mustVerifyEmail ? (
+                    // Re-reads the session (the jwt callback re-checks the
+                    // database), so a link clicked in another tab or on a
+                    // phone unlocks this step.
+                    <Button type="button" onClick={() => refreshSession({})} className="flex-1">
+                        I&apos;ve Confirmed
+                    </Button>
+                ) : mustCompleteProfile ? (
                     <Button type="button" onClick={onCompleteProfile} className="flex-1">
                         Complete Profile
                     </Button>

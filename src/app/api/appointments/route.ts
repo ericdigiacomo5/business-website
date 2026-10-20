@@ -1,14 +1,15 @@
 import { after } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { bookOccurrence, loadServicesToBook } from "@/lib/booking";
+import { bookOccurrence, customerBookingLimitError, loadServicesToBook } from "@/lib/booking";
 import { parseServiceIds, servicesFitOneAppointment } from "@/lib/appointment-services";
 import { sendBookingConfirmation } from "@/lib/appointment-emails";
 import { BOOKING_WINDOW_DAYS, bookingWindowEnd } from "@/lib/recurring";
 import { auth } from "@/auth";
 import { isBookingEnabled } from "@/lib/settings";
 import { readJsonObject } from "@/lib/request";
-import { PROFILE_INCOMPLETE_MESSAGE } from "@/lib/validation";
+import { EMAIL_UNVERIFIED_MESSAGE, PROFILE_INCOMPLETE_MESSAGE } from "@/lib/validation";
 import { isValidAppointmentLength, MAX_APPOINTMENT_MINUTES } from "@/lib/schedule-grid";
+import { artistServicesError } from "@/lib/artist-services-data";
 
 export async function POST(request: Request) {
     const session = await auth()
@@ -28,10 +29,26 @@ export async function POST(request: Request) {
     }
 
     // A customer booking for themselves needs a name and a real phone number
-    // on file (Google sign-ups and older accounts may lack them). Admins
+    // on file (accounts older than those required fields may lack them). Admins
     // booking on someone's behalf aren't blocked by their own profile.
     if (!isAdmin && session.user.profileIncomplete) {
         return Response.json({ error: PROFILE_INCOMPLETE_MESSAGE }, { status: 403 })
+    }
+
+    // Same idea for an unconfirmed email: until the owner of the address
+    // clicks the signup link, the account can't book (or receive booking
+    // emails — see appointment-emails.ts).
+    if (!isAdmin && session.user.emailUnverified) {
+        return Response.json({ error: EMAIL_UNVERIFIED_MESSAGE }, { status: 403 })
+    }
+
+    // How many upcoming bookings one customer can hold online
+    // (src/lib/booking-limits.ts). Staff booking for someone aren't limited.
+    if (!isAdmin) {
+        const limitError = await customerBookingLimitError(session.user.id, "one-off")
+        if (limitError) {
+            return Response.json({ error: limitError }, { status: 403 })
+        }
     }
 
     const body = await readJsonObject(request)
@@ -140,6 +157,18 @@ export async function POST(request: Request) {
             { error: 'Service not found' },
             { status: 404 }
         )
+    }
+
+    // Customers can only book an artist for services they perform; an admin
+    // may override (the schedule's booking sheet warns them).
+    if (!isAdmin) {
+        const notOffered = await artistServicesError(artist, serviceIds)
+        if (notOffered) {
+            return Response.json(
+                { error: notOffered },
+                { status: 400 }
+            )
+        }
     }
 
     // Only matters without an admin length override, which is validated

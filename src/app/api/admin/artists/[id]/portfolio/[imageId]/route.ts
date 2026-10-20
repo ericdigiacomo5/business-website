@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@/generated/prisma/client";
 import { requireAdmin } from "@/lib/require-admin";
+import { rejectCrossOrigin } from "@/lib/request";
 
 export async function DELETE(
     request: Request,
@@ -8,6 +9,9 @@ export async function DELETE(
 ) {
     const forbidden = await requireAdmin()
     if (forbidden) return forbidden
+
+    const crossOrigin = rejectCrossOrigin(request)
+    if (crossOrigin) return crossOrigin
 
     const { id: artistId, imageId } = await params
 

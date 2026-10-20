@@ -1,8 +1,9 @@
 import bcrypt from "bcryptjs"
 import { prisma } from "@/lib/prisma"
-import { normalizeEmail, normalizePhone, requiredText, TEXT_LIMITS } from "@/lib/validation"
+import { normalizeEmail, normalizePhone, personNameError, requiredPersonName } from "@/lib/validation"
 import { BCRYPT_COST, passwordError } from "@/lib/password"
 import { readJsonObject } from "@/lib/request"
+import { issueEmailVerification } from "@/lib/email-verification"
 
 export async function POST(request: Request) {
     const body = await readJsonObject(request)
@@ -11,10 +12,10 @@ export async function POST(request: Request) {
     // Name is required so emails and the admin schedule can address the
     // customer by name (it was optional before, so older accounts may have
     // none — the profile prompt asks them to add it).
-    const name = requiredText(body.name, TEXT_LIMITS.personName)
+    const name = requiredPersonName(body.name)
     if (name === null) {
         return Response.json(
-            { error: "Your name is required" },
+            { error: personNameError(body.name) },
             { status: 400 }
         )
     }
@@ -57,6 +58,10 @@ export async function POST(request: Request) {
     const user = await prisma.user.create({
         data: { name, email, phone, passwordHash },
     })
+
+    // Anyone can type any address here, so the account can't book (or get
+    // booking emails) until its owner clicks the link this sends.
+    await issueEmailVerification(user.id, email, "signup")
 
     // Scrubbed response — never echo passwordHash back, same reasoning as
     // authorize() in src/auth.ts. Does not sign the user in; that's a

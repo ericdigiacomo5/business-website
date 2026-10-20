@@ -1,6 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@/generated/prisma/client";
-import { SLOT_MINUTES, getGridBounds, timeStringToDate, startOfDay, endOfDay, type ArtistTimeOff, type ArtistWorkingWindow } from "@/lib/schedule-grid";
+import { SLOT_MINUTES, getGridBounds, timeStringToDate, startOfDay, endOfDay, fittingStarts, type ArtistTimeOff, type ArtistWorkingWindow } from "@/lib/schedule-grid";
+import { addDays } from "@/lib/recurring";
+import { toLocalDateKey } from "@/lib/format";
 
 // Re-exported so server-side code can keep importing these from this file —
 // only a Client Component (the schedule grid, RecurringSeriesRow, and the
@@ -45,17 +47,22 @@ function generateSlotsInWindow(date: Date, startTime: string, endTime: string): 
   return slots;
 }
 
-export async function getOpenSlots(
-  artistId: string,
-  date: Date,
-  options?: { allowPast?: boolean; excludeAppointmentId?: string }
-): Promise<Date[]> {
-  const dayOfWeek = date.getDay();
-  const dayStart = startOfDay(date);
-  const dayEnd = endOfDay(date);
+type WindowRow = { startTime: string; endTime: string };
+type TimeOffRow = { date: Date; endDate: Date | null; startTime: string; endTime: string };
 
+// Loads everything open-slot math needs for one artist over [rangeStart,
+// rangeEnd] in three queries — shared by getOpenSlots (one day) and
+// getOpenDays (a window of days), so both apply exactly the same rules.
+async function loadSlotInputs(
+  artistId: string,
+  rangeStart: Date,
+  rangeEnd: Date,
+  options: { dayOfWeek?: number; excludeAppointmentId?: string }
+) {
   const [availability, timeOff, bookedSlots] = await Promise.all([
-    prisma.availability.findMany({ where: { artistId, dayOfWeek } }),
+    prisma.availability.findMany({
+      where: { artistId, ...(options.dayOfWeek !== undefined ? { dayOfWeek: options.dayOfWeek } : {}) },
+    }),
     // A row applies to this artist either directly (artistId matches) or
     // salon-wide (artistId is null — see PLAN_SALON_CLOSURES.md), combined
     // with the shared date-range overlap check.
@@ -63,37 +70,54 @@ export async function getOpenSlots(
       where: {
         AND: [
           { OR: [{ artistId }, { artistId: null }] },
-          timeOffDateRangeOverlap(dayStart, dayEnd),
+          timeOffDateRangeOverlap(rangeStart, rangeEnd),
         ],
       },
     }),
     prisma.appointmentSlot.findMany({
       where: {
         artistId,
-        slotStart: { gte: dayStart, lte: dayEnd },
+        slotStart: { gte: rangeStart, lte: rangeEnd },
         // Lets a reschedule flow treat an appointment's own currently-held
         // slots as open when showing what times are available to move it
         // to — the PATCH route itself already frees these before checking
         // the new time, so hiding them here would just make the picker lie
         // about what a reschedule request would actually be allowed to do.
-        ...(options?.excludeAppointmentId ? { appointmentId: { not: options.excludeAppointmentId } } : {}),
+        ...(options.excludeAppointmentId ? { appointmentId: { not: options.excludeAppointmentId } } : {}),
       },
+      select: { slotStart: true },
     }),
   ]);
 
-  const bookedTimes = new Set(bookedSlots.map((slot) => slot.slotStart.getTime()));
+  return { availability, timeOff, bookedTimes: new Set(bookedSlots.map((slot) => slot.slotStart.getTime())) };
+}
 
+// Does this time-off row cover `date` at all? (Its hours are applied
+// separately.) The JS twin of timeOffDateRangeOverlap, for rows already
+// loaded for a wider range.
+function timeOffAppliesOn(row: TimeOffRow, date: Date): boolean {
+  return row.date.getTime() <= endOfDay(date).getTime() && (row.endDate ?? row.date).getTime() >= startOfDay(date).getTime();
+}
+
+// The pure part of getOpenSlots: `windows` are the artist's availability rows
+// for this weekday and `timeOff` the rows that apply on this date.
+function computeOpenSlots(
+  date: Date,
+  windows: WindowRow[],
+  timeOff: TimeOffRow[],
+  bookedTimes: Set<number>,
+  allowPast: boolean
+): Date[] {
   const timeOffRanges = timeOff.map((entry) => ({
     start: timeStringToDate(date, entry.startTime),
     end: timeStringToDate(date, entry.endTime),
   }));
 
-  const candidateSlots = availability.flatMap((window) =>
+  const candidateSlots = windows.flatMap((window) =>
     generateSlotsInWindow(date, window.startTime, window.endTime)
   );
 
   const now = Date.now();
-  const allowPast = options?.allowPast ?? false;
 
   const openSlots = candidateSlots.filter((slot) => {
     // Skipped only when an admin caller explicitly opts in (see
@@ -112,6 +136,64 @@ export async function getOpenSlots(
   uniqueOpenSlots.sort((a, b) => a.getTime() - b.getTime());
 
   return uniqueOpenSlots;
+}
+
+export async function getOpenSlots(
+  artistId: string,
+  date: Date,
+  options?: { allowPast?: boolean; excludeAppointmentId?: string }
+): Promise<Date[]> {
+  const { availability, timeOff, bookedTimes } = await loadSlotInputs(artistId, startOfDay(date), endOfDay(date), {
+    dayOfWeek: date.getDay(),
+    excludeAppointmentId: options?.excludeAppointmentId,
+  });
+  return computeOpenSlots(date, availability, timeOff, bookedTimes, options?.allowPast ?? false);
+}
+
+// The days among `days` consecutive days from `from` on which this artist
+// has at least one start time where `durationMinutes` fits, each with the
+// first such time — for the booking strip's greyed-out days and "next
+// opening" (FEATURE_GAPS.md U6) and the artist cards (U12). Three queries
+// for the whole window, then the same rules as getOpenSlots per day. Never
+// offers past times (public callers only).
+export async function getOpenDays(
+  artistId: string,
+  from: Date,
+  days: number,
+  durationMinutes: number,
+  options?: { excludeAppointmentId?: string }
+): Promise<{ dateKey: string; firstStart: Date }[]> {
+  const dates = Array.from({ length: days }, (_, i) => addDays(startOfDay(from), i));
+  const { availability, timeOff, bookedTimes } = await loadSlotInputs(
+    artistId,
+    dates[0],
+    endOfDay(dates[dates.length - 1]),
+    { excludeAppointmentId: options?.excludeAppointmentId }
+  );
+
+  return dates.flatMap((date) => {
+    const windows = availability.filter((row) => row.dayOfWeek === date.getDay());
+    if (windows.length === 0) return [];
+    const open = computeOpenSlots(date, windows, timeOff.filter((row) => timeOffAppliesOn(row, date)), bookedTimes, false);
+    const [first] = fittingStarts(open, durationMinutes);
+    return first ? [{ dateKey: toLocalDateKey(date), firstStart: first }] : [];
+  });
+}
+
+// Each artist's next bookable time within the booking window for a visit of
+// `durationMinutes` (the shortest service), or null if fully booked.
+export async function getNextOpenings(
+  artistIds: string[],
+  durationMinutes: number,
+  days: number
+): Promise<Record<string, Date | null>> {
+  const results = await Promise.all(
+    artistIds.map(async (artistId) => {
+      const [first] = await getOpenDays(artistId, new Date(), days, durationMinutes);
+      return [artistId, first?.firstStart ?? null] as const;
+    })
+  );
+  return Object.fromEntries(results);
 }
 
 // One batched query for all requested artists (not N+1 — the schedule grid

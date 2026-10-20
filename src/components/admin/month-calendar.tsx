@@ -67,7 +67,7 @@ export function MonthCalendar({
     ]
 
     return (
-        <div className="rounded-sm border border-border bg-surface p-3">
+        <div className="rounded-lg border border-line bg-surface shadow-sm p-3">
             <div className="flex items-center justify-between">
                 <button
                     type="button"

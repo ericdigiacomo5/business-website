@@ -82,7 +82,7 @@ export function RecurringSeriesRow({
     const skipped = series.skippedOccurrences ?? []
 
     return (
-        <div className="flex flex-col gap-3 rounded-sm border border-border bg-surface p-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex flex-col gap-3 rounded-xl border border-line bg-surface p-4 shadow-card sm:flex-row sm:items-start sm:justify-between">
             <div>
                 <div className="flex items-center gap-2">
                     <span className="font-medium text-surface-foreground">{servicesLabel(series.services)}</span>
@@ -119,7 +119,7 @@ export function RecurringSeriesRow({
 
             {confirming ? (
                 <div className="flex flex-col gap-2 sm:items-end">
-                    <p className="text-sm text-danger sm:max-w-64 sm:text-right">
+                    <p role="alert" className="text-sm text-danger sm:max-w-64 sm:text-right">
                         Cancel this series and free its upcoming appointments?
                     </p>
                     <div className="flex gap-2">
@@ -134,7 +134,8 @@ export function RecurringSeriesRow({
             ) : (
                 series.status === "ACTIVE" && (
                     <div className="flex shrink-0 flex-wrap gap-2">
-                        <Button variant="danger" size="md" onClick={onCancel} disabled={busy}>
+                        {/* Quiet until confirmed — the red is the Confirm step. */}
+                        <Button variant="quiet" size="md" onClick={onCancel} disabled={busy}>
                             Cancel
                         </Button>
                     </div>

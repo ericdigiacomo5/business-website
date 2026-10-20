@@ -1,7 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import { Prisma, RecurringStatus } from "@/generated/prisma/client";
 import type { RecurringAppointment } from "@/generated/prisma/client";
-import { getOpenSlots, timeStringToDate } from "@/lib/availability";
+import { getOpenSlots, startOfDay, timeStringToDate } from "@/lib/availability";
+import { MAX_ACTIVE_STANDING_APPOINTMENTS, MAX_UPCOMING_BOOKINGS } from "@/lib/booking-limits";
 import { generateOccurrenceDates, SKIP_REASON } from "@/lib/recurring";
 import { toLocalDateKey } from "@/lib/format";
 import { SERVICE_LINES_INCLUDE, servicesDurationMinutes } from "@/lib/appointment-services";
@@ -16,6 +17,39 @@ function slotStartsFor(startTime: Date, durationMinutes: number): Date[] {
         slots.push(current);
     }
     return slots;
+}
+
+// Why this customer can't book another visit of this kind online, or null
+// if they can. Callers skip it for admins. A count-then-book check, so two
+// requests sent at the same instant could both pass — accepted: it bounds a
+// determined account to a few extra bookings, not a year of them, and the
+// edge rate limit caps how fast requests arrive.
+export async function customerBookingLimitError(
+    userId: string,
+    kind: "one-off" | "standing"
+): Promise<string | null> {
+    const now = new Date();
+
+    if (kind === "one-off") {
+        const upcoming = await prisma.appointment.count({
+            where: {
+                userId,
+                recurringAppointmentId: null,
+                status: { in: ["PENDING", "CONFIRMED"] },
+                startTime: { gt: now },
+            },
+        });
+        return upcoming >= MAX_UPCOMING_BOOKINGS
+            ? `You can have up to ${MAX_UPCOMING_BOOKINGS} upcoming bookings online. Please contact the salon to book more.`
+            : null;
+    }
+
+    const active = await prisma.recurringAppointment.count({
+        where: { userId, status: RecurringStatus.ACTIVE, seriesEnd: { gte: startOfDay(now) } },
+    });
+    return active >= MAX_ACTIVE_STANDING_APPOINTMENTS
+        ? "You already have a standing appointment. Please contact the salon to set up another."
+        : null;
 }
 
 // Pre-write availability check. The AppointmentSlot unique constraint is

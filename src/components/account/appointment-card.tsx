@@ -50,8 +50,8 @@ export function AppointmentCard({
         <div
             className={
                 upcoming
-                    ? "rounded-sm border-2 border-accent bg-background p-5"
-                    : "rounded-sm border border-foreground bg-surface p-5 opacity-85"
+                    ? "rounded-xl border border-line border-l-4 border-l-lacquer bg-surface p-5 shadow-card"
+                    : "rounded-xl border border-line bg-surface/70 p-5"
             }
         >
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

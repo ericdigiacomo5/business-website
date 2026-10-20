@@ -3,6 +3,9 @@ import { readJsonObject } from "@/lib/request";
 import { prisma } from "@/lib/prisma"
 import { isValidTimeString, isGridAligned, startOfDay, endOfDay, timeOffDateRangeOverlap } from "@/lib/availability"
 import { parseLocalDate } from "@/lib/format"
+import { after } from "next/server"
+import { conflictsResponse, parseApprovedIds, saveTimeOffChecked } from "@/lib/time-off-conflicts"
+import { sendCancellationNotice } from "@/lib/appointment-emails"
 
 export async function POST(request: Request) {
     const forbidden = await requireAdmin()
@@ -12,6 +15,16 @@ export async function POST(request: Request) {
     if (body instanceof Response) return body
 
     const { artistId, date, endDate, startTime, endTime } = body
+
+    // Bookings already in this time off that the admin has seen and agreed
+    // to cancel (see src/lib/time-off-conflicts.ts). Omitted = none.
+    const approvedIds = parseApprovedIds(body.cancelConflictingAppointmentIds)
+    if (approvedIds === null) {
+        return Response.json(
+            { error: 'Appointments to cancel must be a list of ids' },
+            { status: 400 }
+        )
+    }
 
     // artistId is optional — omitted (or explicitly null) means salon-wide,
     // blocking every artist including ones created after this row (see
@@ -149,15 +162,28 @@ export async function POST(request: Request) {
         )
     }
 
-    const timeOff = await prisma.timeOff.create({
-        data: {
-            artistId: targetArtistId,
-            date: parsedDate,
-            endDate: parsedEndDate,
-            startTime: startTime,
-            endTime: endTime
-        }
-    })
+    const result = await saveTimeOffChecked(
+        { artistId: targetArtistId, date: parsedDate, endDate: parsedEndDate, startTime, endTime },
+        approvedIds,
+        (tx) => tx.timeOff.create({
+            data: {
+                artistId: targetArtistId,
+                date: parsedDate,
+                endDate: parsedEndDate,
+                startTime: startTime,
+                endTime: endTime
+            }
+        })
+    )
 
-    return Response.json({ data: timeOff }, { status: 201 })
+    if (!result.ok) return conflictsResponse(result.conflicts)
+
+    for (const id of result.cancelledIds) {
+        after(() => sendCancellationNotice(id, "salon"))
+    }
+
+    return Response.json(
+        { data: { ...result.timeOff, cancelledAppointmentIds: result.cancelledIds } },
+        { status: 201 }
+    )
 }

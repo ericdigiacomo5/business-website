@@ -11,7 +11,7 @@ export default async function ResetPasswordPage({
     return (
         <div className="mx-auto flex min-h-[70vh] max-w-sm flex-col items-center justify-center px-4 py-12">
             <div className="w-full text-center">
-                <span className="font-script text-2xl text-accent">Choose a New</span>
+                <span className="font-script text-2xl text-lacquer">Choose a New</span>
                 <h1 className="mt-1 font-serif text-4xl font-extrabold text-foreground">Password</h1>
             </div>
             <div className="mt-8 w-full">
@@ -23,9 +23,9 @@ export default async function ResetPasswordPage({
                     // validation still catches a garbage/expired/used token
                     // once submitted; this is just the zero-token case, which
                     // has nothing to submit.
-                    <div className="flex flex-col gap-4 border border-foreground bg-surface p-8 text-center">
+                    <div className="flex flex-col gap-4 rounded-xl border border-line bg-surface p-8 shadow-raised text-center">
                         <p className="text-sm text-danger">This link is invalid or has expired.</p>
-                        <Link href="/forgot-password" className="text-sm font-semibold text-accent hover:text-primary">
+                        <Link href="/forgot-password" className="text-sm font-semibold text-accent hover:text-primary-strong">
                             Request a new link
                         </Link>
                     </div>

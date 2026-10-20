@@ -1,6 +1,7 @@
 import type { Service } from "@/generated/prisma/client"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { ConfirmAction } from "@/components/ui/confirm-action"
 import { formatDuration, formatPrice } from "@/lib/format"
 import { SERVICE_CATEGORY_LABEL } from "@/lib/service-category"
 import { ServiceForm, type ServiceFormValues } from "./service-form"
@@ -43,7 +44,7 @@ export function AdminServiceCard({
     }
 
     return (
-        <div className="flex flex-col gap-3 rounded-sm border border-border bg-surface p-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-3 rounded-lg border border-line bg-surface p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
             <div>
                 <div className="flex items-center gap-2">
                     <span className="font-medium text-surface-foreground">{service.name}</span>
@@ -69,9 +70,18 @@ export function AdminServiceCard({
                 <Button variant="secondary" size="md" onClick={onEdit}>
                     Edit
                 </Button>
-                <Button variant={service.active ? "danger" : "secondary"} size="md" onClick={onToggleActive}>
-                    {service.active ? "Deactivate" : "Reactivate"}
-                </Button>
+                {service.active ? (
+                    <ConfirmAction
+                        label="Deactivate"
+                        prompt={`Take ${service.name} off the menu?`}
+                        confirmLabel="Yes, Deactivate"
+                        onConfirm={onToggleActive}
+                    />
+                ) : (
+                    <Button variant="secondary" size="md" onClick={onToggleActive}>
+                        Reactivate
+                    </Button>
+                )}
             </div>
         </div>
     )

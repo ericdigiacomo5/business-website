@@ -14,6 +14,8 @@ import { toLocalDateKey, parseLocalDate } from "@/lib/format"
 import { getPolicySettings, isBookingEnabled } from "@/lib/settings"
 import { SERVICE_LINES_INCLUDE } from "@/lib/appointment-services"
 import { SAFE_USER_SELECT_BASIC } from "@/lib/user-select"
+import { requireAdminPage } from "@/lib/require-admin-page"
+import { ARTIST_SERVICES_INCLUDE, offeredServiceIdsOf } from "@/lib/artist-services"
 
 export default async function AdminBookingsPage({
     searchParams,
@@ -27,6 +29,8 @@ export default async function AdminBookingsPage({
         view?: string
     }>
 }) {
+    await requireAdminPage("/admin")
+
     const params = await searchParams
     const statusParam = params.status ?? ""
     const view = parseScheduleView(params.view)
@@ -38,7 +42,11 @@ export default async function AdminBookingsPage({
     // they can be reactivated) — this dashboard, its filters, and the
     // schedule grid should never surface one. Read before the redirect
     // below, since the week view needs an artist to fall back to.
-    const allArtists = await prisma.artist.findMany({ where: { active: true }, orderBy: { createdAt: "asc" } })
+    const allArtists = await prisma.artist.findMany({
+        where: { active: true },
+        include: ARTIST_SERVICES_INCLUDE,
+        orderBy: { createdAt: "asc" },
+    })
 
     // The week view is one artist at a time: with none (or an unknown one)
     // chosen, it shows the first.
@@ -120,6 +128,21 @@ export default async function AdminBookingsPage({
     // fetched.
     const artists = artistIdParam ? allArtists.filter((a) => a.id === artistIdParam) : allArtists
     const artistIds = artists.map((a) => a.id)
+
+    // For the booking sheet's "not done by this artist" warning (Gap 23).
+    const offeredServiceIds = Object.fromEntries(allArtists.map((a) => [a.id, offeredServiceIdsOf(a)]))
+
+    // Lifetime no-shows for each customer on the page, for the detail
+    // sheet's repeat no-show flag (Gap 28). One grouped query.
+    const customerIds = [...new Set(appointments.map((a) => a.userId))]
+    const noShowRows = customerIds.length
+        ? await prisma.appointment.groupBy({
+              by: ["userId"],
+              where: { userId: { in: customerIds }, status: AppointmentStatus.NO_SHOW },
+              _count: { _all: true },
+          })
+        : []
+    const noShowCounts = Object.fromEntries(noShowRows.map((row) => [row.userId, row._count._all]))
     // One batched query per day (two in the day view, fourteen in the week
     // view — every artist's rows for a day come back in one query).
     const [workingWindowsByDay, timeOffByDay] = await Promise.all([
@@ -218,6 +241,8 @@ export default async function AdminBookingsPage({
                         view={view}
                         columns={columns}
                         services={services}
+                        offeredServiceIds={offeredServiceIds}
+                        noShowCounts={noShowCounts}
                         gridBounds={gridBounds}
                         maxSeriesWeeks={policy.maxSeriesWeeks}
                     />

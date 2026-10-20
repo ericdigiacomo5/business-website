@@ -5,12 +5,15 @@ import { AdminRecurringList } from "@/components/admin/recurring/admin-recurring
 import { SAFE_USER_SELECT_BASIC } from "@/lib/user-select"
 import { upcomingSkipsInclude } from "@/lib/booking"
 import { SERVICE_LINES_INCLUDE } from "@/lib/appointment-services"
+import { requireAdminPage } from "@/lib/require-admin-page"
 
 export default async function AdminRecurringPage({
     searchParams,
 }: {
     searchParams: Promise<{ status?: string; artistId?: string }>
 }) {
+    await requireAdminPage("/admin/recurring")
+
     const params = await searchParams
     const statusParam = params.status ?? ""
     const artistIdParam = params.artistId ?? ""

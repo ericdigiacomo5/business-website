@@ -23,17 +23,20 @@ export function Header() {
     const [isOpen, setIsOpen] = useState(false)
 
     const closeMenu = () => setIsOpen(false)
+    const onBookPage = pathname === "/book"
 
     const navLinkClass = (active: boolean) =>
         active
             ? "font-jost text-sm font-semibold uppercase tracking-wide text-accent"
-            : "font-jost text-sm font-semibold uppercase tracking-wide text-black hover:text-primary"
+            : "font-jost text-sm font-semibold uppercase tracking-wide text-black hover:text-primary-strong"
 
     const mobileNavLinkClass = "flex h-11 items-center font-jost text-base font-semibold uppercase tracking-wide text-foreground"
 
     return (
-        <header className="sticky top-0 z-30 border-b-2 border-foreground bg-background/95 backdrop-blur print:hidden">
-            <div className="mx-auto flex h-20 max-w-6xl items-center justify-between px-4">
+        // A soft shadow under the sticky header instead of the heavy navy
+        // rule, so the page scrolls beneath it rather than butting up.
+        <header className="sticky top-0 z-30 border-b border-line bg-background/95 shadow-card backdrop-blur print:hidden">
+            <div className="mx-auto flex h-20 max-w-6xl items-center justify-between gap-2 px-4 sm:gap-3">
                 <Link href="/" onClick={closeMenu} className="flex min-w-0 items-center gap-3">
                     <Image
                         src="/nail-image.jpg"
@@ -43,7 +46,10 @@ export function Header() {
                         className="h-11 w-11 flex-none rounded-full border-2 border-accent object-cover"
                     />
                     <span className="flex min-w-0 flex-col leading-tight">
-                        <span className="truncate font-serif text-lg font-extrabold tracking-wide text-foreground">
+                        {/* 15px and normal tracking on phones: measured, the
+                            full name then fits beside the Book button and
+                            menu at 375px (it was cut to "NAIL IMAG…"). */}
+                        <span className="truncate font-serif text-[15px] font-extrabold tracking-normal text-foreground sm:text-lg sm:tracking-wide">
                             {SITE_NAME.toUpperCase()}
                         </span>
                         <span className="truncate font-script text-sm text-accent">Amityville, N.Y.</span>
@@ -77,14 +83,14 @@ export function Header() {
                     {status === "authenticated" ? (
                         <button
                             onClick={() => signOut({ callbackUrl: "/" })}
-                            className="cursor-pointer font-jost text-sm font-semibold uppercase tracking-wide text-muted-foreground hover:text-primary"
+                            className="cursor-pointer font-jost text-sm font-semibold uppercase tracking-wide text-muted-foreground hover:text-primary-strong"
                         >
                             Sign Out
                         </button>
                     ) : (
                         <Link
                             href="/login"
-                            className="font-jost text-sm font-semibold uppercase tracking-wide text-muted-foreground hover:text-primary"
+                            className="font-jost text-sm font-semibold uppercase tracking-wide text-muted-foreground hover:text-primary-strong"
                         >
                             Sign In
                         </Link>
@@ -94,14 +100,28 @@ export function Header() {
                     </Link>
                 </nav>
 
-                <button
-                    onClick={() => setIsOpen((open) => !open)}
-                    className="flex h-11 w-11 cursor-pointer items-center justify-center lg:hidden"
-                    aria-label={isOpen ? "Close menu" : "Open menu"}
-                    aria-expanded={isOpen}
-                >
-                    {isOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
-                </button>
+                {/* Below lg the nav (and its Book Now) is in the menu, so the
+                    site's main action gets its own button here — not on
+                    /book itself, where it would only restart the wizard. */}
+                <div className="flex shrink-0 items-center gap-1 lg:hidden">
+                    {!onBookPage && (
+                        <Link
+                            href="/book"
+                            onClick={closeMenu}
+                            className={buttonVariants({ size: "md", className: "px-3 text-white!" })}
+                        >
+                            Book
+                        </Link>
+                    )}
+                    <button
+                        onClick={() => setIsOpen((open) => !open)}
+                        className="flex h-11 w-11 cursor-pointer items-center justify-center"
+                        aria-label={isOpen ? "Close menu" : "Open menu"}
+                        aria-expanded={isOpen}
+                    >
+                        {isOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
+                    </button>
+                </div>
             </div>
 
             {isOpen && (

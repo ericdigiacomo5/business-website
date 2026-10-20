@@ -61,7 +61,7 @@ export function ServiceForm({
     }
 
     return (
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4 rounded-sm border border-border bg-surface p-4">
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4 rounded-lg border border-line bg-surface shadow-sm p-4">
             <div>
                 <label htmlFor="service-name" className="block text-xs font-medium text-muted-foreground">
                     Name

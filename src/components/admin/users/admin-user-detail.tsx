@@ -15,6 +15,9 @@ import { AdminRecurringAppointments } from "./admin-recurring-appointments"
 import { AdminCreditPanel } from "./admin-credit-panel"
 import type { CreditEntryRow } from "@/lib/credit-shared"
 import type { AdminUser } from "./admin-user-row"
+import { CustomerSummaryPanel } from "./customer-summary-panel"
+import { summarizeCustomer } from "@/lib/customer-summary"
+import { useToast } from "@/components/ui/toast"
 
 type UserAppointment = Appointment & { artist: Artist; services: ServiceLine[] }
 
@@ -28,9 +31,35 @@ export function AdminUserDetail({
     creditEntries: CreditEntryRow[]
 }) {
     const [current, setCurrent] = useState(user)
+    const toast = useToast()
     const [editing, setEditing] = useState(false)
     const [error, setError] = useState<string | null>(null)
     const [saving, setSaving] = useState(false)
+    // "confirming" swaps the button for an in-page yes/no, the same pattern
+    // as the other destructive actions (not window.confirm, which looks
+    // like a browser warning and can't be styled or announced consistently).
+    const [signOutStatus, setSignOutStatus] = useState<"idle" | "confirming" | "pending" | "done">("idle")
+
+    // e.g. the customer lost their phone, or thinks someone got into their
+    // account. Ends every session they have on its next request.
+    async function handleSignOutEverywhere() {
+        setError(null)
+        setSignOutStatus("pending")
+        try {
+            const res = await fetch(`/api/admin/users/${current.id}/sign-out`, { method: "POST" })
+            if (!res.ok) {
+                const body = await res.json().catch(() => null)
+                setError(body?.error ?? "Couldn't sign them out. Please try again.")
+                setSignOutStatus("idle")
+                return
+            }
+            setSignOutStatus("done")
+            toast(`${current.name || current.email} is signed out on every device.`)
+        } catch {
+            setError("Network error. Please try again.")
+            setSignOutStatus("idle")
+        }
+    }
 
     async function handleSave(values: ProfileFormValues) {
         setError(null)
@@ -52,6 +81,7 @@ export function AdminUserDetail({
             const body = await res.json()
             setCurrent(body.data)
             setEditing(false)
+            toast("Customer details saved.")
         } catch {
             setError("Network error. Please try again.")
         } finally {
@@ -75,7 +105,7 @@ export function AdminUserDetail({
                     onCancel={() => setEditing(false)}
                 />
             ) : (
-                <div className="flex flex-col gap-3 rounded-sm border border-border bg-surface p-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex flex-col gap-3 rounded-lg border border-line bg-surface shadow-sm p-4 sm:flex-row sm:items-center sm:justify-between">
                     <div>
                         <div className="flex items-center gap-2">
                             <span className="font-medium text-surface-foreground">{current.name || "(no name)"}</span>
@@ -85,11 +115,37 @@ export function AdminUserDetail({
                         <p className="mt-1 text-sm text-muted-foreground">{current.phone}</p>
                     </div>
 
-                    <Button variant="secondary" size="md" onClick={() => setEditing(true)}>
-                        Edit
-                    </Button>
+                    <div className="flex flex-wrap gap-2">
+                        <Button variant="secondary" size="md" onClick={() => setEditing(true)}>
+                            Edit
+                        </Button>
+                        {signOutStatus === "confirming" ? (
+                            <div role="group" aria-label="Confirm sign out everywhere" className="flex flex-wrap items-center gap-2">
+                                <span className="text-sm text-foreground">
+                                    {`Sign ${current.name || current.email} out on every device?`}
+                                </span>
+                                <Button variant="danger" size="md" onClick={handleSignOutEverywhere}>
+                                    Yes, Sign Out
+                                </Button>
+                                <Button variant="secondary" size="md" onClick={() => setSignOutStatus("idle")}>
+                                    Keep Signed In
+                                </Button>
+                            </div>
+                        ) : (
+                            <Button
+                                variant="ghost"
+                                size="md"
+                                onClick={() => setSignOutStatus("confirming")}
+                                disabled={signOutStatus !== "idle"}
+                            >
+                                {signOutStatus === "done" ? "Signed Out Everywhere" : signOutStatus === "pending" ? "Signing Out..." : "Sign Out Everywhere"}
+                            </Button>
+                        )}
+                    </div>
                 </div>
             )}
+
+            <CustomerSummaryPanel summary={summarizeCustomer(appointments)} />
 
             <h3 className="mt-8 text-base font-semibold text-foreground">Store Credit</h3>
             <AdminCreditPanel

@@ -1,10 +1,13 @@
 import { BookingToggle } from "@/components/admin/booking-toggle"
 import { PolicySettingsForm } from "@/components/admin/policy-settings"
 import { getPolicySettings, isBookingEnabled } from "@/lib/settings"
+import { requireAdminPage } from "@/lib/require-admin-page"
 
 // Salon-wide settings (AppSettings): the online booking switch and the
 // booking policies. Both cards save through PATCH /api/admin/settings.
 export default async function AdminSettingsPage() {
+    await requireAdminPage("/admin/settings")
+
     const [bookingEnabled, policy] = await Promise.all([isBookingEnabled(), getPolicySettings()])
 
     return (

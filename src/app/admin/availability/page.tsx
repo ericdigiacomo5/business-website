@@ -2,12 +2,15 @@ import { redirect } from "next/navigation"
 import { prisma } from "@/lib/prisma"
 import { ArtistSelector } from "@/components/admin/availability/artist-selector"
 import { AdminAvailabilityManager } from "@/components/admin/availability/admin-availability-manager"
+import { requireAdminPage } from "@/lib/require-admin-page"
 
 export default async function AdminAvailabilityPage({
     searchParams,
 }: {
     searchParams: Promise<{ artistId?: string }>
 }) {
+    await requireAdminPage("/admin/availability")
+
     const params = await searchParams
     // Inactive artists are hidden everywhere except admin/artists (where
     // they can be reactivated) — including from this selector.

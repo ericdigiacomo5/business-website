@@ -1,10 +1,15 @@
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@/generated/prisma/client";
 import { requireAdmin } from "@/lib/require-admin";
-import { isCloudinaryUrl, optionalText, requiredText, TEXT_LIMITS } from "@/lib/validation";
+import { optionalText, requiredText, TEXT_LIMITS } from "@/lib/validation";
+import { isOwnCloudinaryUrl } from "@/lib/cloudinary-url";
 import { readJsonObject } from "@/lib/request";
 import { isBasisPoints } from "@/lib/pay-report";
 import { ARTIST_PAY_TERMS_INCLUDE, setArtistCommission } from "@/lib/pay-terms";
+import { ARTIST_SERVICES_INCLUDE } from "@/lib/artist-services";
+import { parseArtistServiceIds, setArtistServices } from "@/lib/artist-services-data";
+
+class UnknownServiceError extends Error {}
 
 export async function PATCH(
     request: Request,
@@ -62,6 +67,16 @@ export async function PATCH(
         )
     }
 
+    // Optional: undefined = don't touch; null or [] = every service; a list
+    // = only those (see src/lib/artist-services.ts).
+    const serviceIds = body.serviceIds === undefined ? undefined : parseArtistServiceIds(body.serviceIds)
+    if (typeof serviceIds === 'string') {
+        return Response.json(
+            { error: serviceIds },
+            { status: 400 }
+        )
+    }
+
     const artist = await prisma.artist.findUnique({
         where: { id }
     })
@@ -80,7 +95,7 @@ export async function PATCH(
     if (
         photoUrl !== undefined && photoUrl !== null && photoUrl !== '' &&
         photoUrl !== artist.photoUrl &&
-        !isCloudinaryUrl(photoUrl, process.env.CLOUDINARY_CLOUD_NAME)
+        !isOwnCloudinaryUrl(photoUrl)
     ) {
         return Response.json(
             { error: 'Photo must be an uploaded image' },
@@ -103,11 +118,24 @@ export async function PATCH(
             if (commissionBasisPoints !== undefined) {
                 await setArtistCommission(tx, artist.id, commissionBasisPoints as number | null)
             }
-            return tx.artist.findUniqueOrThrow({ where: { id: artist.id }, include: ARTIST_PAY_TERMS_INCLUDE })
+            if (serviceIds !== undefined && !(await setArtistServices(tx, artist.id, serviceIds))) {
+                throw new UnknownServiceError()
+            }
+            return tx.artist.findUniqueOrThrow({
+                where: { id: artist.id },
+                include: { ...ARTIST_PAY_TERMS_INCLUDE, ...ARTIST_SERVICES_INCLUDE },
+            })
         })
 
         return Response.json({ data: updatedArtist }, { status: 200 })
     } catch (error) {
+        if (error instanceof UnknownServiceError) {
+            return Response.json(
+                { error: 'Service not found' },
+                { status: 404 }
+            )
+        }
+
         // Race between the findUnique above and this update — e.g. the row
         // was removed in between. Same pattern as admin/services.
         if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025') {

@@ -6,7 +6,7 @@ import { buttonVariants } from "@/components/ui/button"
 export default function NotFound() {
     return (
         <div className="mx-auto max-w-3xl px-4 py-14">
-            <span className="font-script text-2xl text-accent">Page not found</span>
+            <span className="font-script text-2xl text-lacquer">Page not found</span>
             <h1 className="mt-1 font-serif text-4xl font-extrabold leading-tight text-foreground">
                 We couldn&apos;t find that page
             </h1>

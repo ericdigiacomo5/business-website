@@ -1,7 +1,10 @@
 'use client'
 
 import { useState } from "react"
+import { Sparkles } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { EmptyState } from "@/components/ui/empty-state"
+import { useToast } from "@/components/ui/toast"
 import { AdminServiceCard, type AdminService } from "./admin-service-card"
 import { ServiceForm, type ServiceFormValues } from "./service-form"
 
@@ -10,6 +13,7 @@ export function AdminServicesManager({ initialServices }: { initialServices: Adm
     const [isCreating, setIsCreating] = useState(false)
     const [editingId, setEditingId] = useState<string | null>(null)
     const [error, setError] = useState<string | null>(null)
+    const toast = useToast()
 
     async function handleCreate(values: ServiceFormValues) {
         setError(null)
@@ -30,6 +34,7 @@ export function AdminServicesManager({ initialServices }: { initialServices: Adm
             const body = await res.json()
             setServices((prev) => [...prev, body.data])
             setIsCreating(false)
+            toast(`${body.data.name} added to the menu.`)
         } catch {
             setError("Network error. Please try again.")
         }
@@ -54,6 +59,7 @@ export function AdminServicesManager({ initialServices }: { initialServices: Adm
             const body = await res.json()
             setServices((prev) => prev.map((s) => (s.id === id ? body.data : s)))
             setEditingId(null)
+            toast(`${body.data.name} saved.`)
         } catch {
             setError("Network error. Please try again.")
         }
@@ -114,7 +120,9 @@ export function AdminServicesManager({ initialServices }: { initialServices: Adm
             )}
 
             {services.length === 0 ? (
-                <p className="mt-8 text-muted-foreground">No services yet.</p>
+                <EmptyState icon={Sparkles} title="No services yet" className="mt-8">
+                    Add the first one with New Service — it appears on the menu and in booking right away.
+                </EmptyState>
             ) : (
                 <div className="mt-6 flex flex-col gap-3">
                     {services.map((service) => (

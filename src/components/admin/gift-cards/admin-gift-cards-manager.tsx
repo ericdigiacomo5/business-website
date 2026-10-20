@@ -111,7 +111,7 @@ function IssueGiftCardForm({ onIssued }: { onIssued: (card: GiftCardRow, code: s
     const inputClass = "mt-1 h-11 w-full rounded-sm border border-border bg-background px-3 text-sm text-foreground"
 
     return (
-        <form onSubmit={handleSubmit} className="flex flex-col gap-3 rounded-sm border border-border bg-surface p-4">
+        <form onSubmit={handleSubmit} className="flex flex-col gap-3 rounded-lg border border-line bg-surface shadow-sm p-4">
             <p className="text-sm text-muted-foreground">
                 Ring up the sale on the POS first, then record the card here to get its code.
             </p>
@@ -242,7 +242,7 @@ function GiftCardListRow({ card, onUpdated }: { card: GiftCardRow; onUpdated: (c
                 </p>
             )}
             {card.status === "VOID" && card.voidedAt && (
-                <p className="text-muted-foreground">{`Voided ${formatDate(card.voidedAt)}: ${card.voidReason ?? ""}`}</p>
+                <p className="text-muted-foreground">{`Voided ${formatDate(card.voidedAt)}${card.voidedBy ? ` by ${card.voidedBy.name ?? card.voidedBy.email}` : ""}: ${card.voidReason ?? ""}`}</p>
             )}
             {voiding && (
                 <form onSubmit={handleVoid} className="flex flex-col gap-2 sm:flex-row sm:items-end">
@@ -306,14 +306,16 @@ export function AdminGiftCardsManager({
     return (
         <div className="flex flex-col gap-6">
             <dl className="grid gap-3 sm:grid-cols-3">
+                {/* Tinted tiles with a coloured edge, so the money owed reads
+                    at a glance; the total gets the lacquer accent. */}
                 {[
-                    ["Store credit on accounts", formatPrice(customerCreditCents)],
-                    [`Unredeemed cards (${unredeemed.length})`, formatPrice(unredeemedCents)],
-                    ["Total owed to customers", formatPrice(customerCreditCents + unredeemedCents)],
-                ].map(([label, value]) => (
-                    <div key={label} className="rounded-sm border border-border bg-surface p-4">
+                    ["Store credit on accounts", formatPrice(customerCreditCents), "border-l-accent bg-accent/5"],
+                    [`Unredeemed cards (${unredeemed.length})`, formatPrice(unredeemedCents), "border-l-primary bg-primary/10"],
+                    ["Total owed to customers", formatPrice(customerCreditCents + unredeemedCents), "border-l-lacquer bg-lacquer/5"],
+                ].map(([label, value, tone]) => (
+                    <div key={label} className={`rounded-lg border border-line border-l-4 p-4 shadow-sm ${tone}`}>
                         <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</dt>
-                        <dd className="mt-1 text-xl font-semibold text-surface-foreground">{value}</dd>
+                        <dd className="mt-1 font-serif text-2xl font-bold text-surface-foreground">{value}</dd>
                     </div>
                 ))}
             </dl>

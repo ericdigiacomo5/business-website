@@ -7,6 +7,9 @@ import { ServiceStep } from "@/components/booking/steps/service-step"
 import { ReviewStep } from "@/components/booking/steps/review-step"
 import type { BookedAppointment, RecurringBookingResult, SelectedUser } from "@/components/booking/wizard-state"
 import type { AdminAppointment } from "./appointment-shared"
+import { servicesNotOffered } from "@/lib/artist-services"
+import { isNoShowFlagged, noShowLabel } from "@/lib/customer-summary"
+import { Badge } from "@/components/ui/badge"
 
 // Booking from the schedule grid: the clicked cell already fixes the artist,
 // date and time, so only the customer and the services are left to choose.
@@ -17,6 +20,7 @@ export function ScheduleBookSheet({
     artist,
     startTime,
     services,
+    offeredServiceIds,
     maxSeriesWeeks,
     onBooked,
     onClose,
@@ -24,6 +28,9 @@ export function ScheduleBookSheet({
     artist: Artist
     startTime: Date
     services: Service[]
+    // The services this artist performs ([] = every service). Others are
+    // marked but still bookable: an admin may override (Gap 23).
+    offeredServiceIds: string[]
     maxSeriesWeeks: number
     // `appointments` are the new rows in the grid's own shape (relations
     // attached); `notice` is set when there's more to say than the new block
@@ -93,6 +100,12 @@ export function ScheduleBookSheet({
                         <p className="mt-0.5 text-sm text-muted-foreground">
                             {artist.name} &middot; {when}
                         </p>
+                        {user && isNoShowFlagged(user.noShowCount ?? 0) && (
+                            <p className="mt-1 text-sm text-foreground">
+                                <Badge tone="danger">{noShowLabel(user.noShowCount ?? 0)}</Badge>{" "}
+                                Consider calling to confirm.
+                            </p>
+                        )}
                     </div>
                     <button
                         type="button"
@@ -113,6 +126,8 @@ export function ScheduleBookSheet({
                                 services={services}
                                 selectedIds={serviceIds}
                                 subtitle={null}
+                                notOfferedIds={servicesNotOffered(offeredServiceIds, services.map((s) => s.id))}
+                                notOfferedLabel={`Not usually done by ${artist.name}`}
                                 onToggle={toggleService}
                             />
                             <div className="flex gap-2">

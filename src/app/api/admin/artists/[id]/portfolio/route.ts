@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/require-admin";
-import { isCloudinaryUrl, optionalText, TEXT_LIMITS } from "@/lib/validation";
+import { optionalText, TEXT_LIMITS } from "@/lib/validation";
+import { isOwnCloudinaryUrl } from "@/lib/cloudinary-url";
 import { readJsonObject } from "@/lib/request";
 
 export async function POST(
@@ -28,7 +29,7 @@ export async function POST(
 
     // Portfolio images only ever come from the signed Cloudinary upload.
     const { imageUrl } = body
-    if (!isCloudinaryUrl(imageUrl, process.env.CLOUDINARY_CLOUD_NAME)) {
+    if (!isOwnCloudinaryUrl(imageUrl)) {
         return Response.json(
             { error: 'Image must be an uploaded image' },
             { status: 400 }

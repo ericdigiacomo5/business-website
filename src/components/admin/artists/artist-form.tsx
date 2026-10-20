@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react"
+import { useId, useState, type FormEvent } from "react"
 import { Button } from "@/components/ui/button"
 import { PhotoUploadField } from "@/components/admin/photo-upload-field"
 import { CloudinaryImage } from "@/components/ui/cloudinary-image"
@@ -11,22 +11,30 @@ export type ArtistFormValues = {
     photoUrl: string
     // 4500 = 45%; null = not set.
     commissionBasisPoints: number | null
+    // The services they perform; [] = every service.
+    serviceIds: string[]
 }
+
+// A service as the "services they do" picker lists it.
+export type PickableService = { id: string; name: string; active: boolean }
 
 const emptyValues: ArtistFormValues = {
     name: "",
     bio: "",
     photoUrl: "",
     commissionBasisPoints: null,
+    serviceIds: [],
 }
 
 export function ArtistForm({
     initial,
+    services,
     submitLabel,
     onSubmit,
     onCancel,
 }: {
     initial?: ArtistFormValues
+    services: PickableService[]
     submitLabel: string
     onSubmit: (values: ArtistFormValues) => void
     onCancel: () => void
@@ -39,15 +47,27 @@ export function ArtistForm({
     const [commission, setCommission] = useState(initialRate === null ? "" : String(initialRate / 100))
     const commissionBasisPoints = commission.trim() === "" ? null : percentToBasisPoints(commission)
     const commissionInvalid = commission.trim() !== "" && commissionBasisPoints === null
+    // "Only some" with nothing ticked would save as "every service" (an
+    // empty list), the opposite of what was meant — so it's refused.
+    const initialServiceIds = initial?.serviceIds ?? emptyValues.serviceIds
+    const [onlySome, setOnlySome] = useState(initialServiceIds.length > 0)
+    const [serviceIds, setServiceIds] = useState<string[]>(initialServiceIds)
+    const servicesInvalid = onlySome && serviceIds.length === 0
+    // Unique per form: the create form and an edit form can be open at once.
+    const servicesModeName = useId()
+
+    function toggleService(id: string) {
+        setServiceIds((prev) => (prev.includes(id) ? prev.filter((other) => other !== id) : [...prev, id]))
+    }
 
     function handleSubmit(e: FormEvent) {
         e.preventDefault()
-        if (commissionInvalid) return
-        onSubmit({ name, bio, photoUrl, commissionBasisPoints })
+        if (commissionInvalid || servicesInvalid) return
+        onSubmit({ name, bio, photoUrl, commissionBasisPoints, serviceIds: onlySome ? serviceIds : [] })
     }
 
     return (
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4 rounded-sm border border-border bg-surface p-4">
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4 rounded-lg border border-line bg-surface shadow-sm p-4">
             <div>
                 <label htmlFor="artist-name" className="block text-xs font-medium text-muted-foreground">
                     Name
@@ -99,6 +119,56 @@ export function ArtistForm({
                         : "Share of service sales (after discounts) paid to the artist. Only visits checked out from now on use a new rate. Leave blank if not agreed yet."}
                 </p>
             </div>
+
+            <fieldset>
+                <legend className="block text-xs font-medium text-muted-foreground">Services They Do</legend>
+                <div className="mt-1 flex flex-col sm:flex-row sm:gap-6">
+                    <label className="flex min-h-11 items-center gap-2 text-sm text-foreground">
+                        <input
+                            type="radio"
+                            name={servicesModeName}
+                            checked={!onlySome}
+                            onChange={() => setOnlySome(false)}
+                            className="h-4 w-4"
+                        />
+                        Every service
+                    </label>
+                    <label className="flex min-h-11 items-center gap-2 text-sm text-foreground">
+                        <input
+                            type="radio"
+                            name={servicesModeName}
+                            checked={onlySome}
+                            onChange={() => setOnlySome(true)}
+                            className="h-4 w-4"
+                        />
+                        Only some
+                    </label>
+                </div>
+
+                {onlySome && (
+                    <div className="mt-1 grid grid-cols-1 sm:grid-cols-2">
+                        {services.map((service) => (
+                            <label key={service.id} className="flex min-h-11 items-center gap-2 text-sm text-foreground">
+                                <input
+                                    type="checkbox"
+                                    checked={serviceIds.includes(service.id)}
+                                    onChange={() => toggleService(service.id)}
+                                    className="h-4 w-4"
+                                />
+                                {service.active ? service.name : `${service.name} (retired)`}
+                            </label>
+                        ))}
+                    </div>
+                )}
+                <p
+                    role={servicesInvalid ? "alert" : undefined}
+                    className={"mt-1 text-xs " + (servicesInvalid ? "text-danger" : "text-muted-foreground")}
+                >
+                    {servicesInvalid
+                        ? "Tick at least one service, or choose Every service."
+                        : "Customers can only book this artist for these services. Services added later are included only for artists set to Every service."}
+                </p>
+            </fieldset>
 
             <div>
                 <span className="block text-xs font-medium text-muted-foreground">Photo</span>

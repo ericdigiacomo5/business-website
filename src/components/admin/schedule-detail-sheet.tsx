@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react"
+import Link from "next/link"
 import { X } from "lucide-react"
+import { isNoShowFlagged, noShowLabel } from "@/lib/customer-summary"
 import type { DiscountType, PaymentMethod, Service } from "@/generated/prisma/client"
 import {
     MAX_SERVICES_PER_APPOINTMENT,
@@ -98,7 +100,7 @@ function CheckoutForm({
                     type="button"
                     onClick={onDiscount}
                     disabled={busy}
-                    className="min-h-11 cursor-pointer text-sm font-medium text-primary disabled:cursor-not-allowed"
+                    className="min-h-11 cursor-pointer text-sm font-medium text-primary-strong disabled:cursor-not-allowed"
                 >
                     {discount ? "Change discount" : "Add discount"}
                 </button>
@@ -662,6 +664,7 @@ function RebookForm({
 // propagation so clicking the card contents doesn't also close it.
 export function ScheduleDetailSheet({
     appointment,
+    customerNoShows,
     busy,
     error,
     onConfirm,
@@ -678,6 +681,9 @@ export function ScheduleDetailSheet({
     onClose,
 }: {
     appointment: AdminAppointment | null
+    // The customer's lifetime no-shows — flagged from NO_SHOW_FLAG_THRESHOLD
+    // up, so the front desk can call ahead (FEATURE_GAPS.md Gap 28).
+    customerNoShows: number
     busy: boolean
     // Why the last action on this appointment failed (e.g. no room to make
     // it longer). Shown here because the page behind is under the overlay.
@@ -707,6 +713,8 @@ export function ScheduleDetailSheet({
     const [editingServices, setEditingServices] = useState(false)
     const [rebooking, setRebooking] = useState(false)
     const [returningCredit, setReturningCredit] = useState(false)
+    // Cancel / No-Show waiting for their confirm step.
+    const [ending, setEnding] = useState<"cancel" | "noShow" | null>(null)
 
     if (!appointment) return null
 
@@ -766,8 +774,13 @@ export function ScheduleDetailSheet({
                     </div>
                     <div className="flex justify-between">
                         <dt className="text-muted-foreground">Client</dt>
-                        <dd className="font-medium text-foreground">
-                            {appointment.user.name ?? appointment.user.email}
+                        <dd className="flex flex-wrap items-center justify-end gap-2 font-medium text-foreground">
+                            <Link href={`/admin/users/${appointment.userId}`}>
+                                {appointment.user.name ?? appointment.user.email}
+                            </Link>
+                            {isNoShowFlagged(customerNoShows) && (
+                                <Badge tone="danger">{noShowLabel(customerNoShows)}</Badge>
+                            )}
                         </dd>
                     </div>
                     <div className="flex justify-between">
@@ -851,7 +864,7 @@ export function ScheduleDetailSheet({
                             type="button"
                             onClick={() => setEditingServices(true)}
                             disabled={busy}
-                            className="min-h-11 cursor-pointer text-sm font-medium text-primary disabled:cursor-not-allowed"
+                            className="min-h-11 cursor-pointer text-sm font-medium text-primary-strong disabled:cursor-not-allowed"
                         >
                             Edit services
                         </button>
@@ -859,7 +872,7 @@ export function ScheduleDetailSheet({
                             type="button"
                             onClick={() => setChangingLength(true)}
                             disabled={busy}
-                            className="min-h-11 cursor-pointer text-sm font-medium text-primary disabled:cursor-not-allowed"
+                            className="min-h-11 cursor-pointer text-sm font-medium text-primary-strong disabled:cursor-not-allowed"
                         >
                             Change length
                         </button>
@@ -948,6 +961,34 @@ export function ScheduleDetailSheet({
                                     Back
                                 </Button>
                             </div>
+                        ) : ending ? (
+                            // Cancelling emails the customer and both free the
+                            // slot, so they ask first; the red is this step.
+                            <div role="group" aria-label="Confirm" className="flex flex-col gap-2 rounded-lg bg-danger/5 p-3">
+                                <p className="text-sm font-medium text-foreground">
+                                    {ending === "cancel"
+                                        ? "Cancel this appointment? The customer is emailed and the time opens up."
+                                        : "Mark as a no-show? The time opens up; no email is sent."}
+                                </p>
+                                <div className="flex gap-2">
+                                    <Button
+                                        variant="danger"
+                                        size="md"
+                                        disabled={busy}
+                                        className="flex-1"
+                                        onClick={() => {
+                                            setEnding(null)
+                                            if (ending === "cancel") onCancel()
+                                            else onNoShow()
+                                        }}
+                                    >
+                                        {ending === "cancel" ? "Yes, Cancel" : "Yes, No-Show"}
+                                    </Button>
+                                    <Button variant="secondary" size="md" disabled={busy} className="flex-1" onClick={() => setEnding(null)}>
+                                        Keep
+                                    </Button>
+                                </div>
+                            </div>
                         ) : (
                             <div className="flex gap-2">
                                 {appointment.status === "PENDING" && (
@@ -976,11 +1017,11 @@ export function ScheduleDetailSheet({
                                     Reschedule
                                 </Button>
                                 {appointment.status === "CONFIRMED" && (
-                                    <Button variant="danger" size="md" onClick={onNoShow} disabled={busy} className="flex-1">
+                                    <Button variant="quiet" size="md" onClick={() => setEnding("noShow")} disabled={busy} className="flex-1">
                                         No-Show
                                     </Button>
                                 )}
-                                <Button variant="danger" size="md" onClick={onCancel} disabled={busy} className="flex-1">
+                                <Button variant="quiet" size="md" onClick={() => setEnding("cancel")} disabled={busy} className="flex-1">
                                     Cancel
                                 </Button>
                             </div>
@@ -1025,7 +1066,7 @@ export function ScheduleDetailSheet({
                                         type="button"
                                         onClick={() => setReturningCredit(true)}
                                         disabled={busy}
-                                        className="mt-1 min-h-11 cursor-pointer text-sm font-medium text-primary disabled:cursor-not-allowed"
+                                        className="mt-1 min-h-11 cursor-pointer text-sm font-medium text-primary-strong disabled:cursor-not-allowed"
                                     >
                                         Return store credit
                                     </button>

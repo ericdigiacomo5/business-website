@@ -64,6 +64,7 @@ export const GIFT_CARD_SELECT = {
     voidReason: true,
     issuedBy: { select: { name: true, email: true } },
     redeemedBy: { select: { id: true, name: true, email: true } },
+    voidedBy: { select: { name: true, email: true } },
 } as const
 
 export type GiftCardRow = {
@@ -79,6 +80,8 @@ export type GiftCardRow = {
     voidReason: string | null
     issuedBy: { name: string | null; email: string }
     redeemedBy: { id: string; name: string | null; email: string } | null
+    // Null for cards voided before this was recorded (2026-10-19).
+    voidedBy: { name: string | null; email: string } | null
 }
 
 // Longest note an admin can attach to an adjustment, a return or a void.

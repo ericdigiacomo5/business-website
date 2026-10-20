@@ -4,6 +4,7 @@ import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { useSession } from "next-auth/react"
 import { ProfileForm, type ProfileFormValues } from "./profile-form"
+import { useToast } from "@/components/ui/toast"
 
 export function MyProfileForm({
     initial,
@@ -20,10 +21,17 @@ export function MyProfileForm({
     const [values, setValues] = useState(initial)
     const [error, setError] = useState<string | null>(null)
     const [success, setSuccess] = useState(false)
+    const toast = useToast()
+    // A new address waiting for its confirmation link to be clicked.
+    const [pendingEmail, setPendingEmail] = useState<string | null>(null)
+    // Bumped after a save so the form re-mounts from the saved values (and
+    // drops a typed password).
+    const [formKey, setFormKey] = useState(0)
 
     async function handleSave(next: ProfileFormValues) {
         setError(null)
         setSuccess(false)
+        setPendingEmail(null)
 
         try {
             const res = await fetch("/api/users/me", {
@@ -39,8 +47,14 @@ export function MyProfileForm({
             }
 
             const body = await res.json()
+            // email is still the old address until the new one is confirmed.
             setValues({ name: body.data.name ?? "", email: body.data.email, phone: body.data.phone })
+            setPendingEmail(body.data.pendingEmail ?? null)
+            setFormKey((key) => key + 1)
             setSuccess(true)
+            // An email change stays on screen (it says to check the inbox);
+            // a plain save is just a toast.
+            if (!body.data.pendingEmail) toast("Profile updated.")
 
             // Re-runs the jwt callback in src/auth.ts, which re-reads the
             // user from the database — refreshing the cached name/email and
@@ -59,7 +73,7 @@ export function MyProfileForm({
 
     return (
         <div>
-            <h2 className="mb-5 border-b-2 border-foreground pb-3 font-serif text-xl font-bold text-foreground">
+            <h2 className="mb-5 font-serif text-2xl font-extrabold text-foreground">
                 Profile Details
             </h2>
             {returnTo && (
@@ -72,15 +86,17 @@ export function MyProfileForm({
                     {error}
                 </p>
             )}
-            {success && !error && (
+            {success && !error && pendingEmail && (
                 <p role="status" className="mb-3 text-sm text-accent">
-                    Profile updated.
+                    {`Saved. We sent a link to ${pendingEmail} — your email changes once you click it.`}
                 </p>
             )}
             <ProfileForm
+                key={formKey}
                 initial={values}
                 submitLabel={returnTo ? "Save and Continue Booking" : "Save Changes"}
                 onSubmit={handleSave}
+                askPasswordOnEmailChange
             />
         </div>
     )

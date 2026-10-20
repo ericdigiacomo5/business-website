@@ -24,51 +24,58 @@ enum ServiceType {
 }
 
 model Service {
-  id              String   @id @default(cuid())
+  id              String      @id @default(cuid())
   name            String
   description     String?
   category        ServiceType
   durationMinutes Int
   priceCents      Int
-  active          Boolean  @default(true)
-  createdAt       DateTime @default(now())
+  active          Boolean     @default(true)
+  createdAt       DateTime    @default(now())
 
   appointmentServices          AppointmentService[]
   recurringAppointmentServices RecurringAppointmentService[]
   payTerms                     ServicePayTerms?
+  artists                      ArtistService[]
 }
 
 model User {
-  id                String    @id @default(cuid())
-  name              String?
-  email             String    @unique
-  emailVerified     DateTime?
-  image             String?
-  phone             String
-  passwordHash      String?
+  id                 String    @id @default(cuid())
+  name               String?
+  email              String    @unique
+  emailVerified      DateTime?
+  image              String?
+  phone              String
+  passwordHash       String?
   // Stamped on every successful password reset. Compared against a JWT
   // session's `iat` claim in src/auth.ts so a reset invalidates any session
   // that predates it — the JWT strategy has no server-side session row to
   // delete, so this is the substitute revocation mechanism. Null means
   // "never reset," which correctly invalidates nothing.
-  passwordChangedAt DateTime?
-  role              Role      @default(CUSTOMER)
-  createdAt         DateTime  @default(now())
+  passwordChangedAt  DateTime?
+  // Stamped by "Sign out of all devices" (the customer's own, or an admin's
+  // for a customer). Checked the same way as passwordChangedAt: any session
+  // issued before it is rejected on its next request.
+  sessionsRevokedAt  DateTime?
+  role               Role      @default(CUSTOMER)
+  createdAt          DateTime  @default(now())
   // Store credit (from redeemed gift cards), in cents. A cache of
   // SUM(CreditEntry.amountCents) for this user, written only by
   // src/lib/credit.ts in the same transaction as the ledger row. A CHECK
   // constraint (hand-written in the migration) keeps it from going below 0.
-  creditBalanceCents Int    @default(0)
+  creditBalanceCents Int       @default(0)
 
-  appointments          Appointment[]
-  accounts              Account[]
-  sessions              Session[]
-  recurringAppointments RecurringAppointment[]
-  passwordResetTokens   PasswordResetToken[]
-  creditEntries         CreditEntry[]          @relation("CreditEntryUser")
-  creditEntriesCreated  CreditEntry[]          @relation("CreditEntryCreatedBy")
-  giftCardsIssued       GiftCard[]             @relation("GiftCardIssuedBy")
-  giftCardsRedeemed     GiftCard[]             @relation("GiftCardRedeemedBy")
+  appointments            Appointment[]
+  accounts                Account[]
+  sessions                Session[]
+  recurringAppointments   RecurringAppointment[]
+  passwordResetTokens     PasswordResetToken[]
+  emailVerificationTokens EmailVerificationToken[]
+  creditEntries           CreditEntry[]            @relation("CreditEntryUser")
+  creditEntriesCreated    CreditEntry[]            @relation("CreditEntryCreatedBy")
+  giftCardsIssued         GiftCard[]               @relation("GiftCardIssuedBy")
+  giftCardsRedeemed       GiftCard[]               @relation("GiftCardRedeemedBy")
+  giftCardsVoided         GiftCard[]               @relation("GiftCardVoidedBy")
 }
 
 model Account {
@@ -136,6 +143,27 @@ model PasswordResetToken {
   @@index([userId])
 }
 
+// Proof that someone controls an email address: sent at registration (email
+// = the account's own address) and when a signed-in user changes their
+// address (email = the new one, which only replaces User.email once the link
+// is used). Same storage rules as PasswordResetToken — only the SHA-256 of
+// the token, single use, short expiry.
+model EmailVerificationToken {
+  id        String    @id @default(cuid())
+  userId    String
+  // The address this token proves. Lowercased like User.email.
+  email     String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  // Cascade, same as PasswordResetToken: meaningless without its user.
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
 model Artist {
   id        String   @id @default(cuid())
   name      String
@@ -151,6 +179,25 @@ model Artist {
   slots                 AppointmentSlot[]
   recurringAppointments RecurringAppointment[]
   payTerms              ArtistPayTerms?
+  // The services this artist performs. No rows = every service (the
+  // default, so an artist added before this existed, or one who does it
+  // all, needs no setup) — see src/lib/artist-services.ts.
+  services              ArtistService[]
+}
+
+// One service an artist performs (FEATURE_GAPS.md Gap 23). Customers can
+// only book an artist for services they perform; admins are warned but may
+// override. Artists and services are never hard-deleted (they deactivate),
+// so the cascades only matter for test data.
+model ArtistService {
+  artistId  String
+  serviceId String
+
+  artist  Artist  @relation(fields: [artistId], references: [id], onDelete: Cascade)
+  service Service @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  @@id([artistId, serviceId])
+  @@index([serviceId])
 }
 
 model PortfolioImage {
@@ -213,8 +260,8 @@ model RecurringAppointment {
   status        RecurringStatus @default(ACTIVE)
   createdAt     DateTime        @default(now())
 
-  user               User                         @relation(fields: [userId], references: [id])
-  artist             Artist                       @relation(fields: [artistId], references: [id])
+  user               User                          @relation(fields: [userId], references: [id])
+  artist             Artist                        @relation(fields: [artistId], references: [id])
   // One or more services, in order — every visit of the series is booked
   // with all of them.
   services           RecurringAppointmentService[]
@@ -382,9 +429,9 @@ model TimeOff {
 // change goes through src/lib/credit.ts — see PLAN_GIFT_CARDS_AND_VOUCHERS.md.
 
 enum CreditEntryKind {
-  GIFT_CARD  // + a gift card's value moved onto the account
-  SPENT      // − applied to an appointment at checkout
-  REVERSED   // + credit spent on an appointment, given back
+  GIFT_CARD // + a gift card's value moved onto the account
+  SPENT // − applied to an appointment at checkout
+  REVERSED // + credit spent on an appointment, given back
   ADJUSTMENT // ± manual correction by an admin; note required
 }
 
@@ -441,9 +488,12 @@ model GiftCard {
   redeemedAt       DateTime?
   voidedAt         DateTime?
   voidReason       String?
+  // The admin who voided it. Null on cards voided before this was recorded.
+  voidedById       String?
 
   issuedBy      User          @relation("GiftCardIssuedBy", fields: [issuedById], references: [id])
   redeemedBy    User?         @relation("GiftCardRedeemedBy", fields: [redeemedByUserId], references: [id], onDelete: Restrict)
+  voidedBy      User?         @relation("GiftCardVoidedBy", fields: [voidedById], references: [id], onDelete: Restrict)
   creditEntries CreditEntry[]
 
   @@index([issuedAt])
@@ -506,12 +556,12 @@ model AppointmentServicePay {
 }
 
 model AppSettings {
-  id             Int     @id @default(1)
-  bookingEnabled Boolean @default(true)
+  id                      Int     @id @default(1)
+  bookingEnabled          Boolean @default(true)
   // How many hours before an appointment a customer can still cancel or
   // reschedule it online (admins are never limited).
-  cancellationNoticeHours Int @default(24)
+  cancellationNoticeHours Int     @default(24)
   // Longest a standing appointment may run, in weeks — every week is booked
   // at creation, so this also bounds how much of a calendar one request claims.
-  maxSeriesWeeks          Int @default(52)
+  maxSeriesWeeks          Int     @default(52)
 }

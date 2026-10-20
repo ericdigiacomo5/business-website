@@ -1,4 +1,5 @@
 import { requireAdmin } from "@/lib/require-admin";
+import { rejectCrossOrigin } from "@/lib/request";
 
 // Cloudinary's signature recipe: take every parameter that will be part of
 // the upload request (except file, api_key, and the secret itself), sort
@@ -22,9 +23,12 @@ async function signParams(params: Record<string, string | number>, apiSecret: st
     return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-export async function POST() {
+export async function POST(request: Request) {
     const forbidden = await requireAdmin();
     if (forbidden) return forbidden;
+
+    const crossOrigin = rejectCrossOrigin(request);
+    if (crossOrigin) return crossOrigin;
 
     const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
     const apiKey = process.env.CLOUDINARY_API_KEY;

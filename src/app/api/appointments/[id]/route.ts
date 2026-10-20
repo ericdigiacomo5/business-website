@@ -3,7 +3,7 @@ import { sendCancellationNotice, sendRescheduleNotice } from "@/lib/appointment-
 import { prisma } from "@/lib/prisma"
 import { Prisma, type Appointment } from "@/generated/prisma/client"
 import { requireUser } from "@/lib/require-user"
-import { readJsonObject } from "@/lib/request"
+import { readJsonObject, rejectCrossOrigin } from "@/lib/request"
 import { getPolicySettings, isBookingEnabled } from "@/lib/settings"
 import { BOOKING_WINDOW_DAYS, bookingWindowEnd, customerChangeDeadline, describeNoticeWindow } from "@/lib/recurring"
 import { durationMinutesOf } from "@/lib/schedule-grid"
@@ -71,6 +71,9 @@ export async function DELETE(
 ) {
     const userId = await requireUser()
     if (userId instanceof Response) return userId
+
+    const crossOrigin = rejectCrossOrigin(request)
+    if (crossOrigin) return crossOrigin
 
     const { id: appointmentId } = await params
 

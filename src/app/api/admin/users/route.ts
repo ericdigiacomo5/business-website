@@ -1,9 +1,10 @@
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/require-admin";
-import { normalizeEmail, normalizePhone, requiredText, TEXT_LIMITS } from "@/lib/validation";
+import { normalizeEmail, normalizePhone, personNameError, requiredPersonName } from "@/lib/validation";
 import { SAFE_USER_SELECT } from "@/lib/user-select";
 import { readJsonObject } from "@/lib/request";
 import { NextRequest } from "next/server";
+import { AppointmentStatus } from "@/generated/prisma/client";
 
 export async function GET(request: NextRequest) {
     const forbidden = await requireAdmin()
@@ -23,12 +24,19 @@ export async function GET(request: NextRequest) {
             : undefined,
         // Explicit select, never a bare/include'd query — this is what
         // guarantees passwordHash can never leak through this endpoint.
-        select: SAFE_USER_SELECT,
+        // Plus each customer's no-show count, for the booking sheet's
+        // repeat no-show flag (FEATURE_GAPS.md Gap 28).
+        select: {
+            ...SAFE_USER_SELECT,
+            _count: { select: { appointments: { where: { status: AppointmentStatus.NO_SHOW } } } },
+        },
         orderBy: { createdAt: "desc" },
         take: 20,
     })
 
-    return Response.json({ data: users })
+    return Response.json({
+        data: users.map(({ _count, ...user }) => ({ ...user, noShowCount: _count.appointments })),
+    })
 }
 
 export async function POST(request: Request) {
@@ -38,10 +46,10 @@ export async function POST(request: Request) {
     const body = await readJsonObject(request)
     if (body instanceof Response) return body
 
-    const name = requiredText(body.name, TEXT_LIMITS.personName)
+    const name = requiredPersonName(body.name)
     if (name === null) {
         return Response.json(
-            { error: "Name is required" },
+            { error: personNameError(body.name) },
             { status: 400 }
         )
     }

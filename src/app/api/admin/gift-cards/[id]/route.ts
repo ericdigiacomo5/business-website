@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma"
-import { requireAdmin } from "@/lib/require-admin"
+import { requireAdminId } from "@/lib/require-admin"
 import { readJsonObject } from "@/lib/request"
 import { requiredText } from "@/lib/validation"
 import { CREDIT_NOTE_MAX, GIFT_CARD_SELECT } from "@/lib/credit-shared"
@@ -12,8 +12,9 @@ export async function PATCH(
     request: Request,
     { params }: { params: Promise<{ id: string }> }
 ) {
-    const forbidden = await requireAdmin()
-    if (forbidden) return forbidden
+    // The admin's id is recorded on the card as who voided it.
+    const adminId = await requireAdminId()
+    if (adminId instanceof Response) return adminId
 
     const { id } = await params
 
@@ -42,7 +43,7 @@ export async function PATCH(
     // wins and the other matches nothing.
     const { count } = await prisma.giftCard.updateMany({
         where: { id, status: "ISSUED" },
-        data: { status: "VOID", voidedAt: new Date(), voidReason },
+        data: { status: "VOID", voidedAt: new Date(), voidReason, voidedById: adminId },
     })
     if (count === 0) {
         return Response.json(

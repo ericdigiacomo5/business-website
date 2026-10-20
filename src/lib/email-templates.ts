@@ -1,4 +1,4 @@
-import { SITE_NAME } from "@/lib/site"
+import { SALON_CONTACT, SITE_NAME, formatPhone } from "@/lib/site"
 import { formatDuration, formatPrice } from "@/lib/format"
 import { amountDueCents, describeDiscount, discountCents, totalCents, type Discount } from "@/lib/discount"
 import { describeNoticeWindow } from "@/lib/recurring"
@@ -51,43 +51,94 @@ type LayoutArgs = {
     details?: [label: string, value: string][]
     list?: string[]
     button?: { label: string; url: string }
+    // A quieter text link under the button (the receipt's review link).
+    secondaryLink?: { label: string; url: string }
     footer: string
 }
 
-function renderHtml({ heading, paragraphs, details, list, button, footer }: LayoutArgs): string {
+// The salon's theme, as literal hex: mail clients don't support CSS
+// variables. Same values as src/app/globals.css (and the same AA-checked
+// pairs: navy on gold 5.1:1, grey on cream 5.5:1).
+const EMAIL = {
+    page: "#f6ead9",
+    card: "#fbf3e7",
+    navy: "#16212c",
+    gold: "#b8863b",
+    goldText: "#8a5f1e",
+    text: "#16212c",
+    muted: "#52606c",
+    onNavy: "#d8e2ea",
+    border: "#e6c8a4",
+    // Web fonts don't load reliably in mail clients, so a serif stack for
+    // headings (the site's Bodoni Moda look) and a system sans for the rest.
+    serif: "Georgia, 'Times New Roman', serif",
+    sans: "-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif",
+}
+
+// The salon's address and phone, from SALON_CONTACT — each shown once set.
+function contactLines(): string[] {
+    return [SALON_CONTACT.address, SALON_CONTACT.phone ? formatPhone(SALON_CONTACT.phone) : null].filter(
+        (line): line is string => line !== null,
+    )
+}
+
+// Table-based and inline-styled throughout — what Outlook and Gmail render
+// consistently (FEATURE_GAPS.md U10). No images, so it reads the same with
+// images blocked; the "logo" is the salon name in the header band.
+function renderHtml({ heading, paragraphs, details, list, button, secondaryLink, footer }: LayoutArgs): string {
     const paragraphHtml = paragraphs
-        .map((p) => `<p style="font-size: 15px; line-height: 1.5;">${escapeHtml(p)}</p>`)
+        .map((p) => `<p style="margin: 0 0 14px; font-size: 15px; line-height: 1.55; color: ${EMAIL.text};">${escapeHtml(p)}</p>`)
         .join("")
 
     const detailsHtml = details
-        ? `<table style="font-size: 15px; line-height: 1.6; margin: 16px 0; border-collapse: collapse;">${details
+        ? `<table role="presentation" cellpadding="0" cellspacing="0" style="width: 100%; font-size: 15px; line-height: 1.6; margin: 8px 0 18px; border-collapse: collapse; border-top: 1px solid ${EMAIL.border};">${details
               .map(
                   ([label, value]) =>
-                      `<tr><td style="color: #666666; padding-right: 16px; vertical-align: top;">${escapeHtml(label)}</td><td>${escapeHtml(value)}</td></tr>`,
+                      `<tr><td style="color: ${EMAIL.muted}; padding: 8px 16px 8px 0; vertical-align: top; border-bottom: 1px solid ${EMAIL.border}; white-space: nowrap;">${escapeHtml(label)}</td><td style="color: ${EMAIL.text}; padding: 8px 0; border-bottom: 1px solid ${EMAIL.border};">${escapeHtml(value)}</td></tr>`,
               )
               .join("")}</table>`
         : ""
 
     const listHtml = list
-        ? `<ul style="font-size: 15px; line-height: 1.6; padding-left: 20px;">${list
+        ? `<ul style="margin: 0 0 18px; font-size: 15px; line-height: 1.6; padding-left: 20px; color: ${EMAIL.text};">${list
               .map((item) => `<li>${escapeHtml(item)}</li>`)
               .join("")}</ul>`
         : ""
 
     const buttonHtml = button
-        ? `<p style="margin: 24px 0;"><a href="${escapeHtml(button.url)}" style="background: #2a2a2a; color: #ffffff; padding: 12px 20px; text-decoration: none; border-radius: 4px; font-size: 15px; display: inline-block;">${escapeHtml(button.label)}</a></p>`
+        ? `<p style="margin: 24px 0 8px;"><a href="${escapeHtml(button.url)}" style="background: ${EMAIL.gold}; color: ${EMAIL.navy}; border: 1px solid ${EMAIL.navy}; padding: 13px 22px; text-decoration: none; border-radius: 3px; font-family: ${EMAIL.sans}; font-size: 14px; font-weight: bold; letter-spacing: 0.06em; text-transform: uppercase; display: inline-block;">${escapeHtml(button.label)}</a></p>`
         : ""
 
+    const secondaryHtml = secondaryLink
+        ? `<p style="margin: 16px 0 0; font-size: 14px;"><a href="${escapeHtml(secondaryLink.url)}" style="color: ${EMAIL.goldText}; font-weight: bold;">${escapeHtml(secondaryLink.label)} &rarr;</a></p>`
+        : ""
+
+    const contactHtml = contactLines()
+        .map((line) => `${escapeHtml(line)}<br>`)
+        .join("")
+
     return `
-        <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto; color: #2a2a2a;">
-            <h1 style="font-size: 20px; margin-bottom: 16px;">${escapeHtml(heading)}</h1>
-            ${paragraphHtml}${detailsHtml}${listHtml}${buttonHtml}
-            <p style="font-size: 13px; color: #666666; line-height: 1.5;">${escapeHtml(footer)}</p>
-        </div>
+<div style="margin: 0; padding: 24px 12px; background: ${EMAIL.page};">
+  <table role="presentation" cellpadding="0" cellspacing="0" align="center" style="width: 100%; max-width: 520px; margin: 0 auto; border-collapse: collapse; font-family: ${EMAIL.sans};">
+    <tr><td style="background: ${EMAIL.navy}; padding: 20px 28px; border-bottom: 3px solid ${EMAIL.gold};">
+      <div style="font-family: ${EMAIL.serif}; font-size: 22px; font-weight: bold; letter-spacing: 0.08em; color: #ffffff;">${escapeHtml(SITE_NAME.toUpperCase())}</div>
+      <div style="font-family: ${EMAIL.serif}; font-style: italic; font-size: 14px; color: ${EMAIL.gold};">Amityville, N.Y.</div>
+    </td></tr>
+    <tr><td style="background: ${EMAIL.card}; padding: 28px; border: 1px solid ${EMAIL.border}; border-top: 0;">
+      <h1 style="margin: 0 0 16px; font-family: ${EMAIL.serif}; font-size: 24px; line-height: 1.25; color: ${EMAIL.navy};">${escapeHtml(heading)}</h1>
+      ${paragraphHtml}${detailsHtml}${listHtml}${buttonHtml}${secondaryHtml}
+    </td></tr>
+    <tr><td style="padding: 18px 28px; font-size: 13px; line-height: 1.55; color: ${EMAIL.muted};">
+      ${escapeHtml(footer)}<br><br>
+      <strong style="color: ${EMAIL.navy};">${escapeHtml(SITE_NAME)}</strong><br>
+      ${contactHtml}
+    </td></tr>
+  </table>
+</div>
     `.trim()
 }
 
-function renderText({ heading, paragraphs, details, list, button, footer }: LayoutArgs): string {
+function renderText({ heading, paragraphs, details, list, button, secondaryLink, footer }: LayoutArgs): string {
     const lines: string[] = [heading, ""]
     for (const p of paragraphs) lines.push(p, "")
     if (details) {
@@ -99,7 +150,8 @@ function renderText({ heading, paragraphs, details, list, button, footer }: Layo
         lines.push("")
     }
     if (button) lines.push(`${button.label}: ${button.url}`, "")
-    lines.push(footer)
+    if (secondaryLink) lines.push(`${secondaryLink.label}: ${secondaryLink.url}`, "")
+    lines.push(footer, "", SITE_NAME, ...contactLines())
     return lines.join("\n")
 }
 
@@ -109,7 +161,7 @@ function render(subject: string, layout: LayoutArgs): RenderedEmail {
 
 // Everything an appointment email needs to describe one booking.
 // `manageUrl`/`bookUrl` are null for a customer who can't sign in (an
-// admin-created walk-in has no password and no OAuth account), since a link
+// admin-created walk-in has no password), since a link
 // to a page they can't use would be worse than none.
 export type AppointmentEmailDetails = {
     customerName: string | null
@@ -234,6 +286,10 @@ export function receiptEmail(
             ["Paid by", a.paymentMethodLabel ?? "Store credit"],
             ["Checked out", formatAppointmentWhen(a.checkedOutAt)],
         ],
+        // Shown only once the salon's review link is set (SALON_CONTACT).
+        secondaryLink: SALON_CONTACT.reviewUrl
+            ? { label: "Loved your nails? Leave us a review", url: SALON_CONTACT.reviewUrl }
+            : undefined,
         footer: "Payment was taken in the salon. This email is for your records only.",
     })
 }
@@ -344,5 +400,42 @@ export function passwordResetEmail({ resetUrl }: PasswordResetEmailArgs): Render
         paragraphs: [`We received a request to reset your ${SITE_NAME} password.`],
         button: { label: "Reset Password", url: resetUrl },
         footer: "This link expires in 15 minutes. If you didn't request this, you can ignore this email — your password hasn't been changed.",
+    })
+}
+
+// Neither email below includes anything the account holder typed (no name,
+// no greeting). Anyone can enter any address at registration, so these are
+// the only emails an unverified address ever gets, and they must not be a
+// way to deliver someone's own text from the salon's domain.
+type EmailVerificationEmailArgs = {
+    verifyUrl: string
+    // "signup": confirming a new account's address. "change": confirming a
+    // new address before it replaces the old one.
+    purpose: "signup" | "change"
+}
+
+export function emailVerificationEmail({ verifyUrl, purpose }: EmailVerificationEmailArgs): RenderedEmail {
+    return render(`Confirm your email for ${SITE_NAME}`, {
+        heading: "Confirm your email",
+        paragraphs: [
+            purpose === "signup"
+                ? `Please confirm this is your email address to finish setting up your ${SITE_NAME} account.`
+                : `Please confirm this is your email address. Your ${SITE_NAME} account will switch to it once you do.`,
+        ],
+        button: { label: "Confirm Email", url: verifyUrl },
+        footer: "This link expires in 24 hours. If you didn't request this, you can ignore this email — nothing will change.",
+    })
+}
+
+// Sent to the OLD address once an email change is confirmed, so a change the
+// owner didn't make (a stolen session) doesn't go unnoticed.
+export function emailChangedEmail({ newEmail }: { newEmail: string }): RenderedEmail {
+    return render(`Your ${SITE_NAME} email was changed`, {
+        heading: "Your email was changed",
+        paragraphs: [
+            `The email address on your ${SITE_NAME} account was just changed to ${newEmail}. Sign-in and booking emails will go there from now on.`,
+            "If you didn't make this change, contact the salon right away.",
+        ],
+        footer: "You're receiving this because this address was on the account until now.",
     })
 }

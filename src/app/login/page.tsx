@@ -15,12 +15,13 @@ export default async function LoginPage({
     return (
         <div className="mx-auto flex min-h-[70vh] max-w-sm flex-col items-center justify-center px-4 py-12">
             <div className="w-full text-center">
-                <span className="font-script text-2xl text-accent">Welcome Back,</span>
+                <span className="font-script text-2xl text-lacquer">Welcome Back,</span>
                 <h1 className="mt-1 font-serif text-4xl font-extrabold text-foreground">Sign In</h1>
             </div>
             {params.registered && (
                 <p className="mt-4 w-full rounded-sm bg-success/10 px-3 py-2 text-center text-sm text-success">
-                    Account created — sign in to continue.
+                    Account created — sign in to continue. We&apos;ve also emailed you a link to confirm your
+                    address, which you&apos;ll need before booking.
                 </p>
             )}
             {params.reset && (
@@ -33,7 +34,7 @@ export default async function LoginPage({
             </div>
             <p className="mt-6 text-sm text-muted-foreground">
                 Don&apos;t have an account?{" "}
-                <Link href="/register" className="font-semibold text-accent hover:text-primary">
+                <Link href="/register" className="font-semibold text-accent hover:text-primary-strong">
                     Create one
                 </Link>
             </p>

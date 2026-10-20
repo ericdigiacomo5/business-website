@@ -19,6 +19,7 @@ import {
 } from "@/lib/pay-report"
 import { addDays } from "@/lib/recurring"
 import { endOfDay, startOfDay } from "@/lib/schedule-grid"
+import { requireAdminPage } from "@/lib/require-admin-page"
 
 function money(cents: number | null): string {
     return cents === null ? "Unknown" : formatPrice(cents)
@@ -27,12 +28,14 @@ function money(cents: number | null): string {
 // Artist pay report (PLAN_ARTIST_PAY_REPORT.md, steps 1-3): for any date
 // range, one artist's sheet or every artist's, each organized by service
 // category and then service, printable one artist per page. Calculated
-// live from completed visits. Admin-only via admin/layout.tsx.
+// live from completed visits. Admin-only (requireAdminPage below).
 export default async function PayReportPage({
     searchParams,
 }: {
     searchParams: Promise<{ from?: string; to?: string; artistId?: string; visits?: string }>
 }) {
+    await requireAdminPage("/admin/reports/pay")
+
     const params = await searchParams
     const today = startOfDay(new Date())
     const artists = await loadPayReportArtists()
@@ -118,7 +121,7 @@ export default async function PayReportPage({
                     {!artistId && figures.length > 0 && <SalonTotals figures={figures} sheets={sheetsWithVisits} periodLabel={periodLabel} />}
 
                     {sheetsWithVisits.length === 0 ? (
-                        <p className="rounded-sm border border-border bg-surface p-6 text-center text-muted-foreground">
+                        <p className="rounded-lg border border-line bg-surface shadow-sm p-6 text-center text-muted-foreground">
                             {`No completed visits ${artistId ? `for ${sheets[0]?.artist.name ?? "this artist"} ` : ""}in ${periodLabel}.`}
                         </p>
                     ) : (
@@ -161,7 +164,7 @@ function SalonTotals({
     const salon = paySummary(figures)
 
     return (
-        <section aria-labelledby="salon-totals" className="rounded-sm border border-border bg-surface p-4 sm:p-6 print:hidden">
+        <section aria-labelledby="salon-totals" className="rounded-lg border border-line bg-surface shadow-sm p-4 sm:p-6 print:hidden">
             <h3 id="salon-totals" className="font-serif text-xl font-semibold text-foreground">
                 Salon totals
             </h3>

@@ -1,34 +1,62 @@
+import Image from "next/image"
 import Link from "next/link"
 import { prisma } from "@/lib/prisma"
 import { buttonVariants } from "@/components/ui/button"
 import { ServiceCard } from "@/components/services/service-card"
 import { ArtistCard } from "@/components/artists/artist-card"
+import { CloudinaryImage } from "@/components/ui/cloudinary-image"
+import { Reveal } from "@/components/ui/reveal"
+import { SectionHeading } from "@/components/ui/section-heading"
+import { DecoDivider, DecoFrame } from "@/components/ui/deco"
+import { loadArtistCards } from "@/lib/artist-cards"
+import { isCloudinaryUrl } from "@/lib/validation"
+
+// How many recent portfolio photos the "Fresh From the Studio" strip shows.
+const FRESH_WORK = 8
 
 export default async function Home() {
-    const [services, artists] = await Promise.all([
+    const [services, artists, recentWork] = await Promise.all([
         prisma.service.findMany({ where: { active: true }, take: 3, orderBy: { createdAt: "asc" } }),
-        prisma.artist.findMany({ where: { active: true }, take: 3, orderBy: { createdAt: "asc" } }),
+        loadArtistCards({ take: 3 }),
+        // The salon's newest uploads across active artists — the hero photo
+        // and the strip below it. Nail work sells itself; until now it was
+        // only visible on each artist's own page (FEATURE_GAPS.md U1).
+        prisma.portfolioImage.findMany({
+            where: { artist: { active: true } },
+            include: { artist: { select: { id: true, name: true } } },
+            orderBy: { createdAt: "desc" },
+            take: FRESH_WORK * 2,
+        }),
     ])
+    const work = recentWork.filter((image) => isCloudinaryUrl(image.imageUrl)).slice(0, FRESH_WORK)
+    const heroImage = work[0] ?? null
 
     return (
         <div className="flex flex-col">
-            <section
-                className="relative overflow-hidden"
-                style={{
-                    backgroundImage:
-                        "repeating-linear-gradient(135deg, #e6c8a4, #e6c8a4 14px, #dcb392 14px, #dcb392 28px)",
-                }}
-            >
-                <div
-                    className="absolute inset-0"
-                    style={{
-                        backgroundImage:
-                            "linear-gradient(100deg, rgba(22,33,44,0.94) 0%, rgba(22,33,44,0.82) 40%, rgba(22,33,44,0.18) 78%)",
-                    }}
-                />
-                
-                <div className="relative z-1 mx-auto w-full max-w-6xl px-4 py-20 sm:py-32">
+            <section className="hero-stripes relative overflow-hidden">
+                {/* The newest photo behind the wash; the stripes remain the
+                    fallback (no photos yet) and show while it loads. */}
+                {heroImage && (
+                    <Image
+                        src={heroImage.imageUrl}
+                        alt=""
+                        fill
+                        priority
+                        sizes="100vw"
+                        className="object-cover"
+                    />
+                )}
+                <div className="hero-wash absolute inset-0" />
+                {/* The deco inset frame, gold, just inside the hero's edges. */}
+                <span className="text-primary">
+                    <DecoFrame className="inset-3 sm:inset-6" />
+                </span>
+
+                {/* Padded clear of the deco frame (inset-3 / sm:inset-6). */}
+                <div className="relative z-1 mx-auto w-full max-w-6xl px-8 py-20 sm:px-12 sm:py-32">
                     <div className="max-w-xl">
+                        {/* "Est. 2014" is the client's copy — confirm the
+                            year with them before launch. */}
                         <span className="inline-block -rotate-3 font-script text-2xl text-primary sm:text-3xl">
                             Est. 2014
                         </span>
@@ -42,7 +70,9 @@ export default async function Home() {
                             Hand &amp; gel nail care with old-Hollywood polish. Walk out feeling like the pin-up on
                             our sign — book in a minute, glow for weeks.
                         </p>
-                        <div className="mt-5 text-sm tracking-[8px] text-primary">&#9733; &#9733; &#9733;</div>
+                        <div className="twinkle mt-5 text-sm tracking-[8px] text-primary" aria-hidden>
+                            <span>&#9733;</span> <span>&#9733;</span> <span>&#9733;</span>
+                        </div>
                         <div className="mt-7 flex w-full flex-col gap-3.5 sm:w-auto sm:flex-row">
                             <Link
                                 href="/book"
@@ -61,49 +91,68 @@ export default async function Home() {
                 </div>
             </section>
 
+            {work.length > 0 && (
+                <Reveal>
+                    <section aria-labelledby="fresh-work" className="mx-auto w-full max-w-6xl px-4 py-16">
+                        <SectionHeading id="fresh-work" kicker="Fresh from" title="The Studio" link={{ href: "/artists", label: "All artists" }} />
+                        {/* A swipeable row on phones, a grid from md up. */}
+                        <ul className="-mx-4 mt-10 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-2 md:mx-0 md:grid md:grid-cols-4 md:overflow-visible md:px-0">
+                            {work.map((image) => (
+                                <li key={image.id} className="w-[70%] shrink-0 snap-start sm:w-[40%] md:w-auto">
+                                    <Link href={`/artists/${image.artist.id}`} className="group block">
+                                        <CloudinaryImage
+                                            src={image.imageUrl}
+                                            alt={image.caption ?? `Nails by ${image.artist.name}`}
+                                            sizes="(min-width: 768px) 25vw, 70vw"
+                                            className="aspect-square w-full rounded-xl shadow-card transition duration-300 motion-safe:group-hover:scale-[1.02] group-hover:shadow-raised"
+                                        />
+                                        <span className="mt-2 block text-sm text-muted-foreground group-hover:text-primary-strong">
+                                            by {image.artist.name}
+                                        </span>
+                                    </Link>
+                                </li>
+                            ))}
+                        </ul>
+                    </section>
+                </Reveal>
+            )}
+
+            {/* A full-width tan band, so the page alternates cream / band /
+                cream instead of being one beige sheet. */}
             {services.length > 0 && (
-                <section className="mx-auto w-full max-w-6xl px-4 py-14">
-                    <div className="flex items-end justify-between gap-3 border-b-2 border-foreground pb-4">
-                        <h2 className="font-serif text-3xl font-extrabold text-foreground">Popular Services</h2>
-                        <Link
-                            href="/services"
-                            className="font-jost text-sm font-semibold uppercase tracking-wide text-foreground hover:text-primary"
-                        >
-                            View All &rarr;
-                        </Link>
-                    </div>
-                    <div className="mt-9 grid grid-cols-1 gap-6 sm:grid-cols-2 md:grid-cols-3">
-                        {services.map((service) => (
-                            <ServiceCard key={service.id} service={service} />
-                        ))}
-                    </div>
-                </section>
+                <div className="band border-y border-line">
+                    <Reveal>
+                        <section className="mx-auto w-full max-w-6xl px-4 py-16">
+                            <SectionHeading kicker="Our most-loved" title="Services" link={{ href: "/services", label: "Full menu" }} />
+                            <div className="mt-12 grid grid-cols-1 gap-8 sm:grid-cols-2 md:grid-cols-3">
+                                {services.map((service) => (
+                                    <ServiceCard key={service.id} service={service} />
+                                ))}
+                            </div>
+                        </section>
+                    </Reveal>
+                </div>
             )}
 
             {artists.length > 0 && (
-                <section className="mx-auto w-full max-w-6xl px-4 py-14">
-                    <div className="flex items-end justify-between gap-3 border-b-2 border-foreground pb-4">
-                        <h2 className="font-serif text-3xl font-extrabold text-foreground">Meet the Artists</h2>
-                        <Link
-                            href="/artists"
-                            className="font-jost text-sm font-semibold uppercase tracking-wide text-foreground hover:text-primary"
-                        >
-                            View All &rarr;
-                        </Link>
-                    </div>
-                    <div className="mt-9 grid grid-cols-1 gap-6 sm:grid-cols-2 md:grid-cols-3">
-                        {artists.map((artist) => (
-                            <ArtistCard key={artist.id} artist={artist} />
-                        ))}
-                    </div>
-                </section>
+                <Reveal>
+                    <section className="mx-auto w-full max-w-6xl px-4 py-16">
+                        <SectionHeading kicker="The talent" title="Meet the Artists" link={{ href: "/artists", label: "All artists" }} />
+                        <div className="mt-10 grid grid-cols-1 gap-8 sm:grid-cols-2 md:grid-cols-3">
+                            {artists.map((artist) => (
+                                <ArtistCard key={artist.id} artist={artist} />
+                            ))}
+                        </div>
+                    </section>
+                </Reveal>
             )}
 
             <section className="bg-primary px-4 py-16 text-center">
+                <DecoDivider align="center" className="mb-5 text-foreground" />
                 <h2 className="font-serif text-3xl font-extrabold text-foreground">
                     Ready for that old-Hollywood shine?
                 </h2>
-                <p className="mt-3 font-script text-2xl text-accent">Book your appointment in under a minute.</p>
+                <p className="mt-3 font-script text-2xl text-foreground">Book your appointment in under a minute.</p>
                 <Link href="/book" className={buttonVariants({ variant: "inverse", size: "lg", className: "mt-7" })}>
                     Book Now
                 </Link>

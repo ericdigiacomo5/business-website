@@ -4,12 +4,14 @@ import { auth } from "@/auth";
 import { sendRecurringConfirmation } from "@/lib/appointment-emails";
 import { isGridAligned, isValidTimeString, timeStringToDate } from "@/lib/availability";
 import { BOOKING_WINDOW_DAYS, bookingWindowEnd, maxSeriesEnd } from "@/lib/recurring";
-import { loadServicesToBook, materializeSeries } from "@/lib/booking";
+import { customerBookingLimitError, loadServicesToBook, materializeSeries } from "@/lib/booking";
+import { customerMaxSeriesWeeks } from "@/lib/booking-limits";
 import { parseServiceIds, SERVICE_LINES_INCLUDE, servicesFitOneAppointment } from "@/lib/appointment-services";
 import { parseLocalDate } from "@/lib/format";
 import { getPolicySettings, isBookingEnabled } from "@/lib/settings";
 import { readJsonObject } from "@/lib/request";
-import { PROFILE_INCOMPLETE_MESSAGE } from "@/lib/validation";
+import { EMAIL_UNVERIFIED_MESSAGE, PROFILE_INCOMPLETE_MESSAGE } from "@/lib/validation";
+import { artistServicesError } from "@/lib/artist-services-data";
 
 export async function POST(request: Request) {
     const session = await auth()
@@ -27,9 +29,21 @@ export async function POST(request: Request) {
         )
     }
 
-    // Same rule as the one-off booking route.
+    // Same rules as the one-off booking route.
     if (!isAdmin && session.user.profileIncomplete) {
         return Response.json({ error: PROFILE_INCOMPLETE_MESSAGE }, { status: 403 })
+    }
+
+    if (!isAdmin && session.user.emailUnverified) {
+        return Response.json({ error: EMAIL_UNVERIFIED_MESSAGE }, { status: 403 })
+    }
+
+    // One standing appointment per customer online (src/lib/booking-limits.ts).
+    if (!isAdmin) {
+        const limitError = await customerBookingLimitError(session.user.id, "standing")
+        if (limitError) {
+            return Response.json({ error: limitError }, { status: 403 })
+        }
     }
 
     const body = await readJsonObject(request)
@@ -129,8 +143,11 @@ export async function POST(request: Request) {
     }
 
     // Applies to admins too: one request books every week, so this bounds
-    // how much of a calendar it can claim. Set by the salon in admin settings.
-    const { maxSeriesWeeks } = await getPolicySettings()
+    // how much of a calendar it can claim. Set by the salon in admin
+    // settings; customers booking for themselves get a shorter cap on top
+    // (CUSTOMER_MAX_SERIES_WEEKS).
+    const policy = await getPolicySettings()
+    const maxSeriesWeeks = isAdmin ? policy.maxSeriesWeeks : customerMaxSeriesWeeks(policy.maxSeriesWeeks)
     if (parsedSeriesEnd.getTime() > maxSeriesEnd(parsedSeriesStart, maxSeriesWeeks).getTime()) {
         return Response.json(
             { error: `A standing appointment can run for at most ${maxSeriesWeeks} weeks` },
@@ -188,6 +205,18 @@ export async function POST(request: Request) {
             { error: "Service not found" },
             { status: 404 }
         )
+    }
+
+    // Same rule as the one-off booking route: customers only, admins may
+    // override.
+    if (!isAdmin) {
+        const notOffered = await artistServicesError(artist, serviceIds)
+        if (notOffered) {
+            return Response.json(
+                { error: notOffered },
+                { status: 400 }
+            )
+        }
     }
 
     if (!servicesFitOneAppointment(services)) {

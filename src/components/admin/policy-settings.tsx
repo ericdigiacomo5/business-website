@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
+import { useToast } from "@/components/ui/toast"
 import { POLICY_LIMITS, describeNoticeWindow, type PolicySettings } from "@/lib/recurring"
 
 // The two salon policies that used to be hardcoded: how close to an
@@ -13,7 +14,7 @@ export function PolicySettingsForm({ initial }: { initial: PolicySettings }) {
     const [seriesWeeks, setSeriesWeeks] = useState(String(initial.maxSeriesWeeks))
     const [pending, setPending] = useState(false)
     const [error, setError] = useState<string | null>(null)
-    const [message, setMessage] = useState<string | null>(null)
+    const toast = useToast()
 
     const dirty =
         noticeHours !== String(saved.cancellationNoticeHours) || seriesWeeks !== String(saved.maxSeriesWeeks)
@@ -21,7 +22,6 @@ export function PolicySettingsForm({ initial }: { initial: PolicySettings }) {
     async function handleSave(e: React.FormEvent) {
         e.preventDefault()
         setError(null)
-        setMessage(null)
         setPending(true)
 
         try {
@@ -48,7 +48,7 @@ export function PolicySettingsForm({ initial }: { initial: PolicySettings }) {
             setSaved(next)
             setNoticeHours(String(next.cancellationNoticeHours))
             setSeriesWeeks(String(next.maxSeriesWeeks))
-            setMessage("Saved.")
+            toast("Booking policies saved.")
         } catch {
             setError("Network error. Please try again.")
         } finally {
@@ -61,7 +61,7 @@ export function PolicySettingsForm({ initial }: { initial: PolicySettings }) {
     return (
         <form
             onSubmit={handleSave}
-            className="flex flex-col gap-4 rounded-sm border border-border bg-surface p-4"
+            className="flex flex-col gap-4 rounded-lg border border-line bg-surface shadow-sm p-4"
         >
             <div>
                 <span className="font-medium text-surface-foreground">Booking Policies</span>
@@ -109,11 +109,6 @@ export function PolicySettingsForm({ initial }: { initial: PolicySettings }) {
             {error && (
                 <p role="alert" className="text-sm text-danger">
                     {error}
-                </p>
-            )}
-            {message && !dirty && (
-                <p role="status" className="text-sm text-success">
-                    {message}
                 </p>
             )}
         </form>

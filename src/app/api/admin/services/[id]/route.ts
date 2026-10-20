@@ -3,7 +3,7 @@ import { Prisma } from "@/generated/prisma/client"
 import { requireAdmin } from "@/lib/require-admin"
 import { isServiceCategory } from "@/lib/service-category"
 import { optionalText, requiredText, TEXT_LIMITS } from "@/lib/validation"
-import { readJsonObject } from "@/lib/request"
+import { readJsonObject, rejectCrossOrigin } from "@/lib/request"
 import { isFeeCents, MAX_SERVICE_FEE_CENTS } from "@/lib/pay-report"
 import { formatPrice } from "@/lib/format"
 import { SERVICE_PAY_TERMS_INCLUDE, setServiceFee } from "@/lib/pay-terms"
@@ -126,6 +126,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
     const forbidden = await requireAdmin()
     if (forbidden) return forbidden
+
+    const crossOrigin = rejectCrossOrigin(request)
+    if (crossOrigin) return crossOrigin
 
     const { id } = await params
 

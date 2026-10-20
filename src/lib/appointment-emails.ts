@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import { sendEmail } from "@/lib/email"
+import { errorMessage, reportError } from "@/lib/report-error"
 import {
     appointmentCancelledEmail,
     appointmentReminderEmail,
@@ -31,8 +32,8 @@ const REMINDER_WINDOW_MS = 24 * 60 * 60 * 1000
 const CUSTOMER_SELECT = {
     name: true,
     email: true,
+    emailVerified: true,
     passwordHash: true,
-    accounts: { select: { provider: true }, take: 1 },
 } as const
 
 const APPOINTMENT_INCLUDE = {
@@ -43,16 +44,32 @@ const APPOINTMENT_INCLUDE = {
 
 type CustomerRow = {
     name: string | null
+    emailVerified: Date | null
     passwordHash: string | null
-    accounts: { provider: string }[]
 }
 
-// A walk-in created by an admin has neither a password nor a linked OAuth
-// account, so it can never sign in — links into the signed-in parts of the
-// site are dropped for them rather than sent as dead ends.
+// Email and password is the only way to sign in, so an account without a
+// password is a walk-in created by staff.
+function canSignIn(user: CustomerRow): boolean {
+    return user.passwordHash !== null
+}
+
+// Whether this customer's address may get the salon's emails. A
+// self-registered account's address is whatever the person typed, so until
+// its owner clicks the verification link, nothing is sent to it — otherwise
+// signing up with a stranger's address (and a "name" containing a message)
+// would deliver that message from the salon's own domain. Walk-ins (no
+// password) were entered by staff, who vouch for them.
+// Checked here, centrally, so no single route can forget it.
+function mayEmail(user: CustomerRow): boolean {
+    return user.emailVerified !== null || !canSignIn(user)
+}
+
+// A walk-in created by an admin has no password, so it can never sign in —
+// links into the signed-in parts of the site are dropped for them rather
+// than sent as dead ends.
 function customerLinks(user: CustomerRow): { manageUrl: string | null; bookUrl: string | null } {
-    const canSignIn = user.passwordHash !== null || user.accounts.length > 0
-    if (!canSignIn) return { manageUrl: null, bookUrl: null }
+    if (!canSignIn(user)) return { manageUrl: null, bookUrl: null }
 
     const appUrl = process.env.NEXT_PUBLIC_APP_URL
     return { manageUrl: `${appUrl}/appointments`, bookUrl: `${appUrl}/book` }
@@ -115,7 +132,7 @@ async function safely(label: string, fn: () => Promise<void>) {
     try {
         await fn()
     } catch (error) {
-        console.error(`[email] ${label} failed:`, error)
+        await reportError({ event: "email_failed", message: `${label}: ${errorMessage(error)}` })
     }
 }
 
@@ -125,7 +142,7 @@ export function sendBookingConfirmation(appointmentId: string) {
         // An admin entering a walk-in after the fact (FEATURE_GAPS.md Gap 3)
         // books a time that's already over — "you're booked for an hour
         // ago" would only confuse the customer.
-        if (!appointment || isInPast(appointment.startTime)) return
+        if (!appointment || isInPast(appointment.startTime) || !mayEmail(appointment.user)) return
 
         const { ok } = await sendEmail({ to: appointment.user.email, ...bookingConfirmationEmail(toDetails(appointment, await noticeHours())) })
         if (ok) await markReminderCoveredIfImminent(appointment.id, appointment.startTime)
@@ -135,7 +152,7 @@ export function sendBookingConfirmation(appointmentId: string) {
 export function sendRescheduleNotice(appointmentId: string, previousStartTime: Date) {
     return safely("reschedule notice", async () => {
         const appointment = await loadAppointment(appointmentId)
-        if (!appointment || isInPast(appointment.startTime)) return
+        if (!appointment || isInPast(appointment.startTime) || !mayEmail(appointment.user)) return
 
         const { ok } = await sendEmail({
             to: appointment.user.email,
@@ -150,7 +167,7 @@ export function sendCancellationNotice(appointmentId: string, cancelledBy: "cust
         const appointment = await loadAppointment(appointmentId)
         // Cancelling something that already happened is admin record-keeping
         // (fixing a mistake), not news the customer needs.
-        if (!appointment || isInPast(appointment.startTime)) return
+        if (!appointment || isInPast(appointment.startTime) || !mayEmail(appointment.user)) return
 
         await sendEmail({
             to: appointment.user.email,
@@ -163,7 +180,7 @@ export function sendReceipt(appointmentId: string) {
     return safely("receipt", async () => {
         const appointment = await loadAppointment(appointmentId)
         // No payment method is normal when store credit covered everything.
-        if (!appointment || !appointment.checkedOutAt) return
+        if (!appointment || !appointment.checkedOutAt || !mayEmail(appointment.user)) return
 
         await sendEmail({
             to: appointment.user.email,
@@ -185,7 +202,7 @@ export function sendCreditAdded(userId: string, addedCents: number) {
             where: { id: userId },
             select: { ...CUSTOMER_SELECT, creditBalanceCents: true },
         })
-        if (!user) return
+        if (!user || !mayEmail(user)) return
 
         const { manageUrl } = customerLinks(user)
         await sendEmail({
@@ -217,7 +234,7 @@ export function sendRecurringConfirmation(
                 orderBy: { startTime: "asc" },
             }),
         ])
-        if (!series) return
+        if (!series || !mayEmail(series.user)) return
 
         // Same reasoning as the one-off confirmation: an admin backdating a
         // series shouldn't email the customer a list of dates that are
@@ -253,7 +270,7 @@ export function sendRecurringCancelledNotice(
                 orderBy: { startTime: "asc" },
             }),
         ])
-        if (!series) return
+        if (!series || !mayEmail(series.user)) return
 
         await sendEmail({
             to: series.user.email,
@@ -318,6 +335,10 @@ export async function sendDueReminders(): Promise<ReminderRunResult> {
     const cancellationNoticeHours = await noticeHours()
 
     for (const appointment of due) {
+        // Not claimed, so the reminder still goes out if the address is
+        // confirmed before the appointment.
+        if (!mayEmail(appointment.user)) continue
+
         const claimed = await prisma.appointment.updateMany({
             where: { id: appointment.id, reminderSentAt: null },
             data: { reminderSentAt: now },

@@ -14,7 +14,7 @@ export function AdminUserRow({ user }: { user: AdminUser }) {
     return (
         <Link
             href={`/admin/users/${user.id}`}
-            className="flex flex-col gap-3 rounded-sm border border-border bg-surface p-4 hover:bg-muted sm:flex-row sm:items-center sm:justify-between"
+            className="flex flex-col gap-3 rounded-lg border border-line bg-surface shadow-sm p-4 hover:bg-muted sm:flex-row sm:items-center sm:justify-between"
         >
             <div>
                 <div className="flex items-center gap-2">

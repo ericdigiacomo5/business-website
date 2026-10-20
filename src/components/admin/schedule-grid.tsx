@@ -11,7 +11,9 @@ import { ScheduleDetailSheet, type Checkout, type Rebooking } from "./schedule-d
 import { servicesLabel } from "@/lib/appointment-services"
 import { ScheduleBookSheet } from "./schedule-book-sheet"
 import { SERVICE_CATEGORIES, SERVICE_CATEGORY_LABEL } from "@/lib/service-category"
-import { CATEGORY_BLOCK_COLOR, type AdminAppointment } from "./appointment-shared"
+import { CATEGORY_BLOCK_COLOR, STATUS_BAR_COLOR, STATUS_LABEL, type AdminAppointment } from "./appointment-shared"
+import { useToast } from "@/components/ui/toast"
+import { ScheduleNowLine } from "./schedule-now-line"
 
 // One 15-minute row. A CSS variable rather than a constant: globals.css sets
 // it to 24px for a mouse and 44px on touch screens (pointer: coarse), so
@@ -19,11 +21,23 @@ import { CATEGORY_BLOCK_COLOR, type AdminAppointment } from "./appointment-share
 // on phones and tablets without making the desktop grid three times taller.
 const ROW_HEIGHT = "var(--schedule-row-height)"
 
+// The toast after a status change (FEATURE_GAPS.md U4). Customer-facing
+// emails go out for cancellations and checkouts (receipts), not the others.
+const STATUS_TOAST: Record<AppointmentStatus, string> = {
+    PENDING: "Marked pending.",
+    CONFIRMED: "Confirmed.",
+    COMPLETED: "Checked out — receipt sent.",
+    CANCELLED: "Cancelled — the customer has been emailed.",
+    NO_SHOW: "Marked as a no-show.",
+}
+
 export function ScheduleGrid({
     initialAppointments,
     view,
     columns,
     services,
+    offeredServiceIds,
+    noShowCounts,
     gridBounds,
     maxSeriesWeeks,
 }: {
@@ -34,6 +48,12 @@ export function ScheduleGrid({
     columns: ScheduleColumn[]
     // Active services, for booking from an empty cell.
     services: Service[]
+    // artistId → the services they perform ([] = every service), for the
+    // booking sheet's warning.
+    offeredServiceIds: Record<string, string[]>
+    // userId → lifetime no-shows, for the detail sheet's flag. Customers
+    // with none are absent.
+    noShowCounts: Record<string, number>
     gridBounds: { start: string; end: string }
     // The salon's standing-appointment cap, for the booking dialog.
     maxSeriesWeeks: number
@@ -46,6 +66,7 @@ export function ScheduleGrid({
     // admin creates an appointment (there is no separate booking page).
     const [bookingSlot, setBookingSlot] = useState<{ artistId: string; startTime: Date } | null>(null)
     const [notice, setNotice] = useState<string | null>(null)
+    const toast = useToast()
 
     const columnKey = (artistId: string, dateKey: string) => `${artistId}|${dateKey}`
     const displayedColumnKeys = new Set(columns.map((c) => columnKey(c.artist.id, toLocalDateKey(c.date))))
@@ -104,6 +125,7 @@ export function ScheduleGrid({
 
             const body = await res.json()
             applyUpdate(id, body.data)
+            toast(STATUS_TOAST[status])
         } catch {
             setError("Network error. Please try again.")
         } finally {
@@ -130,6 +152,7 @@ export function ScheduleGrid({
 
             const body = await res.json()
             applyUpdate(id, body.data)
+            toast(discount ? "Discount applied." : "Discount removed.")
         } catch {
             setError("Network error. Please try again.")
         } finally {
@@ -156,6 +179,7 @@ export function ScheduleGrid({
 
             const body = await res.json()
             applyUpdate(id, body.data)
+            toast("Services updated.")
         } catch {
             setError("Network error. Please try again.")
         } finally {
@@ -182,6 +206,7 @@ export function ScheduleGrid({
 
             const body = await res.json()
             applyUpdate(id, body.data)
+            toast("Length updated.")
         } catch {
             setError("Network error. Please try again.")
         } finally {
@@ -209,6 +234,7 @@ export function ScheduleGrid({
 
             const body = await res.json()
             applyUpdate(id, body.data)
+            toast("Store credit returned to the customer.")
         } catch {
             setError("Network error. Please try again.")
         } finally {
@@ -235,6 +261,7 @@ export function ScheduleGrid({
 
             const body = await res.json()
             applyUpdate(id, body.data)
+            toast("Rescheduled — the customer has been emailed.")
             setSelectedId(null)
         } catch {
             setError("Network error. Please try again.")
@@ -305,6 +332,9 @@ export function ScheduleGrid({
     const gridEndMinutes = endHours * 60 + endMinutesPart
     const totalRows = (gridEndMinutes - gridStartMinutes) / SLOT_MINUTES
 
+    const todayKey = toLocalDateKey(new Date())
+    const todayColumns = columns.flatMap((c, i) => (toLocalDateKey(c.date) === todayKey ? [i] : []))
+
     const selectedAppointment = appointments.find((a) => a.id === selectedId) ?? null
     const bookingArtist = bookingSlot
         ? (columns.find((c) => c.artist.id === bookingSlot.artistId)?.artist ?? null)
@@ -333,17 +363,36 @@ export function ScheduleGrid({
 
             <p className="mb-3 text-sm text-muted-foreground">Click an open time to book an appointment.</p>
 
-            <ul className="mb-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground" aria-label="Service categories">
-                {SERVICE_CATEGORIES.map((category) => (
-                    <li key={category} className="flex items-center gap-1.5">
-                        <span
-                            className={`h-3 w-3 rounded-sm border ${CATEGORY_BLOCK_COLOR[category].block} ${CATEGORY_BLOCK_COLOR[category].blockBorder}`}
-                            aria-hidden
-                        />
-                        {SERVICE_CATEGORY_LABEL[category]}
-                    </li>
-                ))}
-            </ul>
+            {/* Legend (FEATURE_GAPS.md U13): a block's fill is its first
+                service's category, its left-edge bar its status, and the red
+                line is the current time. */}
+            <div className="mb-3 flex flex-col gap-1.5 text-xs text-muted-foreground sm:flex-row sm:flex-wrap sm:gap-x-6">
+                <ul className="flex flex-wrap gap-x-4 gap-y-1" aria-label="Service categories">
+                    {SERVICE_CATEGORIES.map((category) => (
+                        <li key={category} className="flex items-center gap-1.5">
+                            <span
+                                className={`h-3 w-3 rounded-sm border ${CATEGORY_BLOCK_COLOR[category].block} ${CATEGORY_BLOCK_COLOR[category].blockBorder}`}
+                                aria-hidden
+                            />
+                            {SERVICE_CATEGORY_LABEL[category]}
+                        </li>
+                    ))}
+                </ul>
+                <ul className="flex flex-wrap gap-x-4 gap-y-1" aria-label="Statuses">
+                    {(["PENDING", "CONFIRMED", "COMPLETED"] as const).map((status) => (
+                        <li key={status} className="flex items-center gap-1.5">
+                            <span className={`h-3 w-1 rounded-sm ${STATUS_BAR_COLOR[status]}`} aria-hidden />
+                            {STATUS_LABEL[status].charAt(0) + STATUS_LABEL[status].slice(1).toLowerCase()}
+                        </li>
+                    ))}
+                    {todayColumns.length > 0 && (
+                        <li className="flex items-center gap-1.5">
+                            <span className="h-0.5 w-4 bg-danger" aria-hidden />
+                            Now
+                        </li>
+                    )}
+                </ul>
+            </div>
 
             <div className="-mx-4 overflow-x-auto px-4">
                 <div
@@ -357,6 +406,18 @@ export function ScheduleGrid({
                     }}
                 >
                     <ScheduleTimeAxis gridStartMinutes={gridStartMinutes} totalRows={totalRows} />
+
+                    {/* Today's columns are contiguous: all of them in the day
+                        view, one in the week view. +2: the time axis is
+                        column 1 and grid lines are 1-based. */}
+                    {todayColumns.length > 0 && (
+                        <ScheduleNowLine
+                            gridStartMinutes={gridStartMinutes}
+                            gridEndMinutes={gridEndMinutes}
+                            firstColumn={todayColumns[0] + 2}
+                            lastColumn={todayColumns[todayColumns.length - 1] + 2}
+                        />
+                    )}
 
                     {columns.map((scheduleColumn, index) => {
                         const key = columnKey(scheduleColumn.artist.id, toLocalDateKey(scheduleColumn.date))
@@ -385,6 +446,7 @@ export function ScheduleGrid({
             <ScheduleDetailSheet
                 key={selectedId}
                 appointment={selectedAppointment}
+                customerNoShows={selectedAppointment ? (noShowCounts[selectedAppointment.userId] ?? 0) : 0}
                 busy={busyId === selectedId}
                 error={error}
                 onConfirm={() => selectedId && updateStatus(selectedId, "CONFIRMED")}
@@ -411,6 +473,7 @@ export function ScheduleGrid({
                     artist={bookingArtist}
                     startTime={bookingSlot.startTime}
                     services={services}
+                    offeredServiceIds={offeredServiceIds[bookingArtist.id] ?? []}
                     maxSeriesWeeks={maxSeriesWeeks}
                     onBooked={handleBooked}
                     onClose={() => setBookingSlot(null)}

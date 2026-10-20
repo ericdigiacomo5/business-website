@@ -1,5 +1,6 @@
 import { sendDueReminders } from "@/lib/appointment-emails"
 import { requireJobSecret } from "@/lib/job-auth"
+import { reportError } from "@/lib/report-error"
 
 // Sends the 24h reminder email for every appointment that's due one. Meant to
 // be hit on a schedule (hourly is plenty — a reminder then lands 23–24h
@@ -17,5 +18,22 @@ export async function POST(request: Request) {
     if (denied) return denied
 
     const result = await sendDueReminders()
+
+    if (result.failed > 0) {
+        await reportError({
+            event: "reminders_failed",
+            message: `${result.failed} of ${result.considered} reminder emails failed to send`,
+            path: "/api/jobs/send-reminders",
+        })
+    }
+
+    // Dead man's switch (docs/DEPLOY_RUNBOOK.md §11): a monitor such as
+    // Healthchecks.io alerts when this ping stops arriving, which catches the
+    // failure nothing above can — the scheduler itself never calling.
+    const heartbeat = process.env.CRON_HEARTBEAT_URL
+    if (heartbeat) {
+        await fetch(heartbeat, { method: "POST" }).catch(() => undefined)
+    }
+
     return Response.json({ data: result })
 }

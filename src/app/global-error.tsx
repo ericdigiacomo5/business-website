@@ -27,7 +27,7 @@ export default function GlobalError({ retry }: { error: unknown; retry: () => vo
                     <h1 style={{ fontFamily: "Georgia, 'Times New Roman', serif", fontSize: "1.9rem", margin: "0 0 8px" }}>
                         Something went wrong
                     </h1>
-                    <p style={{ color: "#5f6f7d", lineHeight: 1.5, margin: "0 0 24px" }}>
+                    <p style={{ color: "#52606c", lineHeight: 1.5, margin: "0 0 24px" }}>
                         The site couldn&apos;t load. Please try again — if it keeps happening, contact the salon
                         directly.
                     </p>

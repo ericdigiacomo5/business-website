@@ -110,6 +110,30 @@ export function timeStringToDate(date: Date, time: string): Date {
   return result;
 }
 
+// Of a day's open 15-minute slots, the ones a visit of `durationMinutes` can
+// start at: every slot it needs must itself be open, so it can't run past
+// the artist's hours, into time off or into another booking. The same rule
+// the booking routes apply (isFullyOpen in booking.ts) — shared by the
+// booking wizard's time grid and getOpenDays().
+export function fittingStarts(openSlots: Date[], durationMinutes: number): Date[] {
+  const open = new Set(openSlots.map((slot) => slot.getTime()));
+  const slotsNeeded = Math.ceil(durationMinutes / SLOT_MINUTES);
+
+  return openSlots.filter((slot) => {
+    for (let i = 0; i < slotsNeeded; i++) {
+      if (!open.has(slot.getTime() + i * SLOT_MINUTES * 60_000)) return false;
+    }
+    return true;
+  });
+}
+
+// "Morning" before noon, "Afternoon" until 5pm, "Evening" after — for
+// grouping a long list of times (the booking wizard's slot grid).
+export function partOfDay(date: Date): "Morning" | "Afternoon" | "Evening" {
+  const hour = date.getHours();
+  return hour < 12 ? "Morning" : hour < 17 ? "Afternoon" : "Evening";
+}
+
 // Default range used only when NO artist has any Availability configured for
 // the requested day — the schedule grid must always be renderable, never a
 // hard empty state just because nobody has set up hours yet.

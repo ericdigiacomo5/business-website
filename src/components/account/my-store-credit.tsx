@@ -34,7 +34,7 @@ export function MyStoreCredit({
     return (
         <section className="mt-12">
             <h2 className="font-serif text-2xl font-bold text-foreground">Gift Cards &amp; Store Credit</h2>
-            <div className="mt-4 rounded-sm border border-border bg-surface p-4">
+            <div className="mt-4 rounded-xl border border-line bg-surface p-4 shadow-card">
                 <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Your balance</p>
                 <p className="mt-0.5 text-2xl font-semibold text-surface-foreground">{formatPrice(balanceCents)}</p>
                 <p className="mt-1 text-sm text-muted-foreground">

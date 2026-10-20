@@ -1,3 +1,5 @@
+import { errorMessage, reportError } from "@/lib/report-error"
+
 const RESEND_API_URL = "https://api.resend.com/emails"
 
 type SendEmailArgs = {
@@ -22,7 +24,18 @@ export async function sendEmail({ to, subject, html, text }: SendEmailArgs): Pro
     // is what makes the whole email-dependent feature set (password reset
     // now, booking confirmations later) testable locally with zero setup
     // and zero risk of accidentally emailing a real address in dev.
+    //
+    // Only outside production, though. In a production build a missing key
+    // is a misconfiguration, not a dev setup — and printing the body there
+    // would write live password-reset and verification links into the host's
+    // logs (Workers Logs, `wrangler tail`, any log export), readable by anyone
+    // with dashboard access. So production logs only that the key is missing
+    // and reports the send as failed.
     if (!apiKey) {
+        if (process.env.NODE_ENV === "production") {
+            await reportError({ event: "email_failed", message: "RESEND_API_KEY is not set — email not sent" })
+            return { ok: false }
+        }
         console.log("[email:dev] would send:", { to, subject, text })
         return { ok: true }
     }
@@ -43,14 +56,17 @@ export async function sendEmail({ to, subject, html, text }: SendEmailArgs): Pro
             }),
         })
 
+        // The report isn't given the recipient or subject (the subject can
+        // name the customer's booking); Resend's own error text is kept,
+        // truncated, because it's what says what went wrong.
         if (!res.ok) {
-            console.error("[email] Resend send failed:", res.status, await res.text())
+            await reportError({ event: "email_failed", message: `Resend returned ${res.status}: ${await res.text()}` })
             return { ok: false }
         }
 
         return { ok: true }
     } catch (error) {
-        console.error("[email] Resend send threw:", error)
+        await reportError({ event: "email_failed", message: `Resend request threw: ${errorMessage(error)}` })
         return { ok: false }
     }
 }

@@ -27,6 +27,25 @@ export function toLocalTimeKey(date: Date): string {
     return `${hours}:${minutes}`
 }
 
+// "09:00" → "9 AM", "17:30" → "5:30 PM" — for opening hours.
+export function formatTimeOfDay(time: string): string {
+    const [hours, minutes] = time.split(":").map(Number)
+    const period = hours >= 12 ? "PM" : "AM"
+    const hour = hours % 12 === 0 ? 12 : hours % 12
+    return minutes === 0 ? `${hour} ${period}` : `${hour}:${String(minutes).padStart(2, "0")} ${period}`
+}
+
+// "Today 3:15 PM" / "Tomorrow 10 AM" / "Thu, Oct 23, 10 AM" — when the next
+// opening is (artist cards, the booking strip). `now` for tests.
+export function formatOpening(date: Date, now: Date = new Date()): string {
+    const time = formatTimeOfDay(toLocalTimeKey(date))
+    const tomorrow = new Date(now)
+    tomorrow.setDate(tomorrow.getDate() + 1)
+    if (toLocalDateKey(date) === toLocalDateKey(now)) return `Today ${time}`
+    if (toLocalDateKey(date) === toLocalDateKey(tomorrow)) return `Tomorrow ${time}`
+    return `${date.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}, ${time}`
+}
+
 // Inverse of toLocalDateKey(): 'YYYY-MM-DD' (local time) -> Date, via the
 // multi-arg Date constructor rather than `new Date(dateString)` — a bare
 // date-only string is parsed as UTC midnight per the JS spec, which can land

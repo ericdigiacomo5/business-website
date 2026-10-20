@@ -3,12 +3,15 @@ import { prisma } from "@/lib/prisma"
 import { ArtistSelector } from "@/components/admin/availability/artist-selector"
 import { AdminTimeOffManager } from "@/components/admin/time-off/admin-time-off-manager"
 import { SALON_WIDE_VALUE } from "@/lib/time-off"
+import { requireAdminPage } from "@/lib/require-admin-page"
 
 export default async function AdminTimeOffPage({
     searchParams,
 }: {
     searchParams: Promise<{ artistId?: string }>
 }) {
+    await requireAdminPage("/admin/time-off")
+
     const params = await searchParams
     // Inactive artists are hidden everywhere except admin/artists (where
     // they can be reactivated) — including from this selector.

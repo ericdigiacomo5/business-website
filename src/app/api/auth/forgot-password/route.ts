@@ -10,7 +10,7 @@ const RESET_TOKEN_TTL_MS = 15 * 60 * 1000 // 15 minutes
 const RESEND_COOLDOWN_MS = 60 * 1000 // 60 seconds
 
 // Always returns the same 200 + body, whether or not the email exists,
-// belongs to a walk-in/OAuth-only account, or a token was already just
+// belongs to a walk-in (no password), or a token was already just
 // issued. This is deliberate — see the branches below for why each case is
 // silently absorbed rather than surfaced. Built once so every return site is
 // byte-identical, not just worded the same.
@@ -30,11 +30,10 @@ export async function POST(request: Request) {
     const user = await prisma.user.findUnique({ where: { email } })
 
     // No account, or an account with no password (a walk-in created by an
-    // admin, or a Google-only sign-up) — silently do nothing. Sending a
-    // reset link to a passwordless account would let someone set a password
-    // on it, and for the Google case would create a second credential path
-    // onto an OAuth-only account. The identical response either way is what
-    // keeps this from being an email-enumeration oracle.
+    // admin) — silently do nothing. Sending a reset link to a passwordless
+    // account would let whoever holds that inbox turn a staff-entered
+    // booking record into a sign-in account. The identical response either
+    // way is what keeps this from being an email-enumeration oracle.
     if (!user || !user.passwordHash) {
         return Response.json(GENERIC_RESPONSE_BODY)
     }

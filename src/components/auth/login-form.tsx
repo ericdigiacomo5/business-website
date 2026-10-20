@@ -36,7 +36,7 @@ export function LoginForm({ callbackUrl }: { callbackUrl: string }) {
     }
 
     return (
-        <form onSubmit={handleSubmit} className="flex flex-col gap-5 border border-foreground bg-surface p-8">
+        <form onSubmit={handleSubmit} className="flex flex-col gap-5 rounded-xl border border-line bg-surface p-8 shadow-raised">
             <div>
                 <label htmlFor="email" className="block font-jost text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                     Email
@@ -58,7 +58,7 @@ export function LoginForm({ callbackUrl }: { callbackUrl: string }) {
                     <label htmlFor="password" className="block font-jost text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                         Password
                     </label>
-                    <Link href="/forgot-password" className="text-xs font-semibold text-accent hover:text-primary">
+                    <Link href="/forgot-password" className="text-xs font-semibold text-accent hover:text-primary-strong">
                         Forgot password?
                     </Link>
                 </div>

@@ -2,6 +2,8 @@ import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
 import { BookingWizard } from "@/components/booking/booking-wizard"
 import { getPolicySettings, isBookingEnabled } from "@/lib/settings"
+import { customerMaxSeriesWeeks } from "@/lib/booking-limits"
+import { ARTIST_SERVICES_INCLUDE, artistOffersAll, offeredServiceIdsOf } from "@/lib/artist-services"
 
 export default async function BookPage({
     searchParams,
@@ -15,8 +17,16 @@ export default async function BookPage({
         isBookingEnabled(),
         getPolicySettings(),
         prisma.service.findMany({ where: { active: true }, orderBy: { createdAt: "asc" } }),
-        prisma.artist.findMany({ where: { active: true }, orderBy: { createdAt: "asc" } }),
+        prisma.artist.findMany({
+            where: { active: true },
+            include: ARTIST_SERVICES_INCLUDE,
+            orderBy: { createdAt: "asc" },
+        }),
     ])
+
+    // artistId → the services they perform ([] = every service), as a plain
+    // lookup for the wizard.
+    const offeredServiceIds = Object.fromEntries(artists.map((artist) => [artist.id, offeredServiceIdsOf(artist)]))
 
     // Mirrors the exact bypass rule POST /api/appointments enforces server-side
     // — an admin browsing the plain customer /book page (as opposed to
@@ -39,15 +49,24 @@ export default async function BookPage({
     // Only trust deep-linked ids that actually exist — a stale/bad link
     // shouldn't silently break the wizard's step logic.
     const initialServiceId = services.some((s) => s.id === params.serviceId) ? params.serviceId! : null
-    const initialArtistId = artists.some((a) => a.id === params.artistId) ? params.artistId! : null
+    // A link naming both (rare) skips the artist step, so drop an artist who
+    // doesn't do that service — the customer then picks from those who do.
+    const linkedArtistOk =
+        artists.some((a) => a.id === params.artistId) &&
+        (!initialServiceId || artistOffersAll(offeredServiceIds[params.artistId!], [initialServiceId]))
+    const initialArtistId = linkedArtistOk ? params.artistId! : null
 
     return (
         <BookingWizard
             initialServices={services}
             initialArtists={artists}
+            offeredServiceIds={offeredServiceIds}
             initialServiceId={initialServiceId}
             initialArtistId={initialArtistId}
-            maxSeriesWeeks={policy.maxSeriesWeeks}
+            // The same cap POST /api/appointments/recurring applies: customers
+            // get the shorter of the salon's cap and CUSTOMER_MAX_SERIES_WEEKS.
+            maxSeriesWeeks={isAdmin ? policy.maxSeriesWeeks : customerMaxSeriesWeeks(policy.maxSeriesWeeks)}
+            cancellationNoticeHours={policy.cancellationNoticeHours}
         />
     )
 }

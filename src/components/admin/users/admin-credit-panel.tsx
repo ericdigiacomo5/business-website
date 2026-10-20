@@ -161,7 +161,7 @@ export function AdminCreditPanel({
 
     return (
         <div className="mt-3 flex flex-col gap-4">
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded-sm border border-border bg-surface p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-line bg-surface shadow-sm p-4">
                 <div>
                     <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Balance</p>
                     <p className="mt-0.5 text-2xl font-semibold text-surface-foreground">{formatPrice(balanceCents)}</p>

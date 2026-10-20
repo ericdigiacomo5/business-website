@@ -1,11 +1,13 @@
 'use client'
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
+import { removeTokenFromAddressBar } from "@/lib/url-token"
 
 export function ResetPasswordForm({ token }: { token: string }) {
     const router = useRouter()
+    useEffect(removeTokenFromAddressBar, [])
     const [password, setPassword] = useState("")
     const [confirmPassword, setConfirmPassword] = useState("")
     const [error, setError] = useState<string | null>(null)
@@ -40,7 +42,7 @@ export function ResetPasswordForm({ token }: { token: string }) {
     }
 
     return (
-        <form onSubmit={handleSubmit} className="flex flex-col gap-5 border border-foreground bg-surface p-8">
+        <form onSubmit={handleSubmit} className="flex flex-col gap-5 rounded-xl border border-line bg-surface p-8 shadow-raised">
             <div>
                 <label htmlFor="password" className="block font-jost text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                     New Password

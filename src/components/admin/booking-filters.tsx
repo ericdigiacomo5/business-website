@@ -78,7 +78,7 @@ export function BookingFilters({
 
             <button
                 type="submit"
-                className="h-11 cursor-pointer rounded-sm border border-border bg-surface px-4 text-sm font-medium text-surface-foreground hover:bg-muted"
+                className="h-11 cursor-pointer rounded-md border border-foreground/25 bg-cream px-4 shadow-sm text-sm font-medium text-surface-foreground hover:bg-muted"
             >
                 Filter
             </button>

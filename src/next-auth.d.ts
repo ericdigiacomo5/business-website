@@ -4,15 +4,18 @@ import type { Role } from "@/generated/prisma/client"
 // field. Augmenting `User` here is enough — `AdapterUser` extends `User`, and
 // `Session.user` is typed as `User`, so both pick up `role` through the same
 // declaration merge. Still needed even under JWT strategy: `user` is what
-// authorize()/the OAuth profile callback returns on sign-in, before it's
-// copied into the token by the `jwt` callback in auth.ts.
+// authorize() returns on sign-in, before it's copied into the token by the
+// `jwt` callback in auth.ts.
 declare module "@auth/core/types" {
   interface User {
     role: Role
     // Set on Session.user by the session callback (see auth.ts) — true when
     // the account has no name or the placeholder phone. Optional because
-    // authorize()/OAuth sign-in return a User without it.
+    // authorize() returns a User without it.
     profileIncomplete?: boolean
+    // Also set by the session callback: the account's email isn't confirmed
+    // yet.
+    emailUnverified?: boolean
   }
 }
 
@@ -27,5 +30,9 @@ declare module "@auth/core/jwt" {
     id: string
     role: Role
     profileIncomplete?: boolean
+    emailUnverified?: boolean
+    // Seconds since epoch of the sign-in itself (iat is re-stamped on every
+    // re-issue, so it can't bound a session's total length).
+    authTime?: number
   }
 }

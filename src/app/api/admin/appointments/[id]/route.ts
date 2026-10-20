@@ -17,6 +17,10 @@ import {
     servicesPriceCents,
 } from "@/lib/appointment-services";
 
+// Thrown inside the checkout transaction when the appointment changed after
+// this request read it, rolling everything back.
+class StaleCheckoutError extends Error {}
+
 export async function PATCH(
     request: Request,
     { params }: { params: Promise<{ id: string }> }
@@ -329,6 +333,19 @@ export async function PATCH(
             }
 
             if (status === AppointmentStatus.COMPLETED) {
+                // The "no more credit than is owed" check above used the
+                // appointment as this request read it. Two checkouts sent
+                // at once (a double click, two devices) would both pass it,
+                // and both spend credit — up to twice the bill. Re-check
+                // here, conditional on nothing having changed since the
+                // read: the row lock makes a concurrent second checkout wait
+                // for the first, then match nothing and roll back.
+                const unchanged = await tx.appointment.updateMany({
+                    where: { id, status: appointment.status, creditAppliedCents: appointment.creditAppliedCents },
+                    data: { status: appointment.status },
+                })
+                if (unchanged.count === 0) throw new StaleCheckoutError()
+
                 data.paymentMethod = (paymentMethod as PaymentMethod | null | undefined) ?? null
                 data.checkedOutAt = new Date()
 
@@ -436,6 +453,13 @@ export async function PATCH(
 
         return Response.json({ data: updated }, { status: 200 })
     } catch (error) {
+        if (error instanceof StaleCheckoutError) {
+            return Response.json(
+                { error: "This appointment was just changed (checked out on another screen?). Close this and check again." },
+                { status: 409 }
+            )
+        }
+
         if (error instanceof InsufficientCreditError) {
             return Response.json(
                 { error: "The customer's store credit balance has changed. Close this and check out again." },

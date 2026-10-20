@@ -1,5 +1,6 @@
 import type { Availability } from "@/generated/prisma/client"
 import { Button } from "@/components/ui/button"
+import { ConfirmAction } from "@/components/ui/confirm-action"
 import { AvailabilityForm, DAY_NAMES, type AvailabilityFormValues } from "./availability-form"
 
 export function AdminAvailabilityRow({
@@ -33,7 +34,7 @@ export function AdminAvailabilityRow({
     }
 
     return (
-        <div className="flex flex-col gap-3 rounded-sm border border-border bg-surface p-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-3 rounded-lg border border-line bg-surface shadow-sm p-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
                 <span className="font-medium text-surface-foreground">{DAY_NAMES[availability.dayOfWeek]}</span>
                 <p className="mt-1 text-sm text-muted-foreground">
@@ -45,9 +46,7 @@ export function AdminAvailabilityRow({
                 <Button variant="secondary" size="md" onClick={onEdit}>
                     Edit
                 </Button>
-                <Button variant="danger" size="md" onClick={onDelete}>
-                    Delete
-                </Button>
+                <ConfirmAction label="Delete" prompt="Remove these hours?" confirmLabel="Yes, Delete" onConfirm={onDelete} />
             </div>
         </div>
     )

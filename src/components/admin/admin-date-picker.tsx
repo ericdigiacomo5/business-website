@@ -38,7 +38,7 @@ export function DatePicker({
     return (
         <form
             method="get"
-            className="mt-4 flex items-center justify-center gap-4 rounded-sm border border-border bg-surface p-3"
+            className="mt-4 flex items-center justify-center gap-4 rounded-lg border border-line bg-surface shadow-sm p-3"
         >
             <input type="hidden" name="dateString" value={toLocalDateKey(date)} />
             <input type="hidden" name="status" value={status} />

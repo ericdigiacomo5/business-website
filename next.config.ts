@@ -3,11 +3,12 @@ import type { NextConfig } from "next";
 // Next ships none of these by default, and this project has no proxy.ts /
 // middleware.ts to set them in, so they're configured here.
 //
+// Strict-Transport-Security is sent only when AUTH_URL (the site's public
+// URL) is https:// — i.e. the deployed site, never a local http:// server,
+// where it would do nothing, and never by accident on a domain that isn't
+// HTTPS yet (a max-age there can lock users out).
+//
 // Deliberately omitted for now:
-// - Strict-Transport-Security: only meaningful once the app is served over
-//   HTTPS end-to-end. Add it during the Cloudflare Workers deploy, not before
-//   — setting it against a local http:// dev server does nothing, and a
-//   too-early max-age on a domain that isn't fully HTTPS can lock users out.
 // - A strict script-src: Next's App Router injects inline hydration scripts,
 //   so a nonce-based policy requires wiring through a proxy — which this
 //   project deliberately avoids. The directives below are the high-value
@@ -22,7 +23,14 @@ const scriptSrc =
     ? "script-src 'self' 'unsafe-inline' 'unsafe-eval'"
     : "script-src 'self' 'unsafe-inline'";
 
+const servedOverHttps = process.env.AUTH_URL?.startsWith("https://") ?? false;
+
 const securityHeaders = [
+  // One year. No `preload`: submitting the domain to browsers' preload list
+  // is hard to undo, so that's a separate, deliberate step (runbook §3).
+  ...(servedOverHttps
+    ? [{ key: "Strict-Transport-Security", value: "max-age=31536000; includeSubDomains" }]
+    : []),
   // Clickjacking. The concrete risk here is the admin dashboard's
   // status-change buttons being framed and click-hijacked.
   { key: "X-Frame-Options", value: "DENY" },
@@ -61,12 +69,29 @@ const securityHeaders = [
 // same rule isCloudinaryUrl() applies on the way in.
 const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
 
+// Both are read at BUILD time: cloudName scopes images.remotePatterns below,
+// and NEXT_PUBLIC_* values are inlined into the build. Missing from a
+// production build, they fail silently — next/image would resize images
+// from ANY Cloudinary account (a free image proxy on the salon's bill), and
+// every email link would start with "undefined". So a production build
+// refuses to start without them. (`next dev` doesn't need them.)
+if (process.env.NODE_ENV === "production") {
+  const missing = ["CLOUDINARY_CLOUD_NAME", "NEXT_PUBLIC_APP_URL"].filter((name) => !process.env[name]);
+  if (missing.length > 0) {
+    throw new Error(`Production build: set ${missing.join(" and ")} in the build environment (see docs/DEPLOY_RUNBOOK.md).`);
+  }
+}
+
 const nextConfig: NextConfig = {
+  // Don't advertise the framework in every response.
+  poweredByHeader: false,
   images: {
     remotePatterns: [
       {
         protocol: "https",
         hostname: "res.cloudinary.com",
+        // "/**" only in dev without Cloudinary configured; production
+        // builds can't get here without a cloud name (checked above).
         pathname: cloudName ? `/${cloudName}/**` : "/**",
       },
     ],

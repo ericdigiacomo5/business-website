@@ -2,7 +2,10 @@
 
 import { useState } from "react"
 import type { Availability } from "@/generated/prisma/client"
+import { Clock } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { EmptyState } from "@/components/ui/empty-state"
+import { useToast } from "@/components/ui/toast"
 import { AdminAvailabilityRow } from "./admin-availability-row"
 import { AvailabilityForm, type AvailabilityFormValues } from "./availability-form"
 
@@ -16,6 +19,7 @@ export function AdminAvailabilityManager({
     initialWindows: Availability[]
 }) {
     const [error, setError] = useState<string | null>(null)
+    const toast = useToast()
     const [windows, setWindows] = useState<Availability[] | null>(initialWindows)
     const [isCreating, setIsCreating] = useState(false)
     const [editingId, setEditingId] = useState<string | null>(null)
@@ -39,6 +43,7 @@ export function AdminAvailabilityManager({
             const body = await res.json()
             setWindows((prev) => [...(prev ?? []), body.data])
             setIsCreating(false)
+            toast("Hours added.")
         } catch {
             setError("Network error. Please try again.")
         }
@@ -63,6 +68,7 @@ export function AdminAvailabilityManager({
             const body = await res.json()
             setWindows((prev) => (prev ?? []).map((w) => (w.id === id ? body.data : w)))
             setEditingId(null)
+            toast("Hours saved.")
         } catch {
             setError("Network error. Please try again.")
         }
@@ -83,6 +89,7 @@ export function AdminAvailabilityManager({
             }
 
             setWindows((prev) => (prev ?? []).filter((w) => w.id !== id))
+            toast("Hours removed.")
         } catch {
             setError("Network error. Please try again.")
         }
@@ -116,7 +123,9 @@ export function AdminAvailabilityManager({
             )}
 
             {!windows || windows.length === 0 ? (
-                <p className="mt-8 text-muted-foreground">No availability windows set for this artist yet.</p>
+                <EmptyState icon={Clock} title="No hours set yet" className="mt-8">
+                    Customers can&apos;t book this artist until they have weekly hours. Add them with New Window.
+                </EmptyState>
             ) : (
                 <div className="mt-6 flex flex-col gap-3">
                     {windows.map((availability) => (
