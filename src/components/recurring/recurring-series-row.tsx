@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { parseLocalDate } from "@/lib/format"
 import { timeStringToDate } from "@/lib/schedule-grid"
+import { formatSalonDate, formatSalonTime } from "@/lib/salon-time"
 
 // Deliberately a Pick, not the full `User` — this crosses a Server→Client
 // boundary in the admin salon-wide page. Keep in sync with
@@ -31,19 +32,16 @@ const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Frid
 function formatTime(time: string): string {
     // Reuses the same HH:mm -> Date parser the availability engine already
     // uses (the date part is irrelevant here, only the time-of-day matters).
-    return timeStringToDate(new Date(), time).toLocaleTimeString("en-US", {
-        hour: "numeric",
-        minute: "2-digit",
-    })
+    return formatSalonTime(timeStringToDate(new Date(), time))
 }
 
 function formatShortDate(date: Date): string {
-    return date.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })
+    return formatSalonDate(date, { weekday: "short", month: "short", day: "numeric" })
 }
 
 // With the year: a series can run up to a year, so "Oct 12" alone is ambiguous.
 function formatEndDate(date: Date): string {
-    return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+    return formatSalonDate(date, { month: "short", day: "numeric", year: "numeric" })
 }
 
 function seriesLabel(series: Pick<RecurringAppointment, "dayOfWeek" | "startTime" | "intervalWeeks">): string {

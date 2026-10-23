@@ -1,6 +1,6 @@
 # Deploy Runbook (Cloudflare Workers)
 
-Steps to apply when the site first goes live. Nothing here is done yet; the deploy itself is Roadmap item 1 in `PROJECT_STATUS.md`. Blockers that must be solved first, in this order: the **salon timezone fix** (§6 — Workers run in UTC) and choosing and trial-building the **Next.js adapter** (vinext vs OpenNext). Security items that are still open are tracked in `SECURITY_AUDIT.md` (local only); the IDs in brackets below refer to it.
+Steps to apply when the site first goes live. Nothing here is done yet; the deploy itself is Roadmap item 1 in `PROJECT_STATUS.md`. The **salon timezone fix** (§6) is done (2026-10-22). The remaining blocker is choosing and trial-building the **Next.js adapter** (vinext vs OpenNext). Texting has its own guide, `docs/SMS_10DLC.md`; the deploy-side steps are in §12. Security items that are still open are tracked in `SECURITY_AUDIT.md` (local only); the IDs in brackets below refer to it.
 
 ## 1. Environment and secrets
 
@@ -13,6 +13,7 @@ Every value goes in as a **Wrangler secret** (`wrangler secret put NAME`, or the
 - **`AUTH_URL`** — the real `https://` domain. Required: in a production build, Auth.js rejects every sign-in with `UntrustedHost` without it. It also switches on the HSTS header (§5) and is one of the origins the app's CSRF check accepts. **Do not** set `AUTH_TRUST_HOST=true` instead — that trusts whatever `Host` header arrives.
 - `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`.
 - `ERROR_ALERT_WEBHOOK_URL`, `CRON_HEARTBEAT_URL` — optional, for alerts (§11).
+- `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_MESSAGING_SERVICE_SID`. Set them **only after the 10DLC campaign is approved** (§12). Until then, leaving them unset keeps texting quietly off.
 - `RESEND_API_KEY`, `EMAIL_FROM` (on the salon's domain, verified in Resend). In a production build a missing key **fails closed**: nothing is sent, nothing but "RESEND_API_KEY is not set" is logged — so the smoke test's "emails arrive" check (§9) is what catches it.
 
 **Build time** (inlined into the build — set them in the **build** environment, e.g. Workers Builds settings or the CI job, not only as runtime secrets). `next.config.ts` refuses to build in production without them:
@@ -86,6 +87,7 @@ Notes:
 - Forgot-password and the verification emails already have a per-account 60-second cooldown in the app; the edge rules add the per-IP limit.
 - Gift card codes carry 80 random bits, so guessing one is hopeless even unlimited; the redeem rule is defense in depth. Staff redeeming at the desk use `/api/admin/gift-cards/redeem`, which this rule doesn't touch.
 - Front-desk staff share the salon's IP. If the booking limit trips during a busy day, raise it or exclude admin traffic.
+- **Leave `/api/sms/*` out of every rule here, and out of Bot Fight Mode and managed challenges** (WAF → custom rule: skip for `starts_with(http.request.uri.path, "/api/sms/")`). Those are Twilio's webhooks. A challenged request never reaches the app, so a customer's STOP reply would be silently lost. They're protected by Twilio's signature check instead.
 - Keep Cloudflare's default of **not caching HTML**. Never add a "Cache Everything" rule: signed-in pages and `/api/*` carry personal data.
 
 ## 5. Security headers and email authentication
@@ -93,18 +95,21 @@ Notes:
 - **HSTS** is automatic: `next.config.ts` sends `Strict-Transport-Security: max-age=31536000; includeSubDomains` when `AUTH_URL` starts with `https://` (build-time, §1). Before go-live, make sure **every subdomain** of the domain serves HTTPS (`includeSubDomains`). Submitting to the browser preload list (`preload`) is optional, slow to undo, and deliberately not done.
 - **DMARC** next to Resend's SPF/DKIM, so nobody else can send mail as the salon's domain: a DNS TXT record at `_dmarc.<domain>` with `v=DMARC1; p=quarantine; rua=mailto:<owner inbox>`. Move to `p=reject` once the reports show only Resend sending.
 
-## 6. Timezone fix (blocker) [L6]
+## 6. Timezone fix [L6] — done 2026-10-22
 
-All date math assumes the server clock is the salon's clock. Workers run in UTC, so as built: availability windows and time off apply 4–5 hours early (a salon-wide closure entered as 09:00–18:00 blocks 04:00–13:00 New York time, leaving the **afternoon of a closed day bookable**), and "today", the 14-day window and day boundaries shift too. Online cancel/reschedule windows are unaffected (pure millisecond arithmetic).
+**The problem:** before the fix, all date math assumed the server clock was the salon's clock. Workers run in UTC, so availability windows and time off would have applied 4–5 hours early. A salon-wide closure entered as 09:00–18:00 would have blocked 04:00–13:00 New York time, leaving the afternoon of a closed day bookable. Day boundaries would have shifted too.
 
-**Approach (no library, per the project's no-timezone-library decision):**
+**What was built** (no library):
+- `src/lib/salon-time.ts` sets `SALON_TIME_ZONE = "America/New_York"` and provides two `Intl.DateTimeFormat` primitives, `zonedParts()` and `zonedToInstant()`. The second re-reads the offset once, which handles the daylight-saving days.
+- On top of those it adds calendar helpers and the display formatters `formatSalonDate`, `formatSalonTime` and `formatSalonDateTime`.
+- The existing helpers (`startOfDay`, `endOfDay`, `startOfWeek`, `startOfMonth`, `timeStringToDate`, `toLocalDateKey`, `toLocalTimeKey`, `parseLocalDate`, `addDays`, `partOfDay`, new `isOnSlotBoundary`) are rebuilt on these primitives, with unchanged signatures.
+- Every date shown to anyone now uses the salon's zone, in the browser too, so server and hydrated HTML match.
 
-1. Add `SALON_TIME_ZONE = "America/New_York"` in one plain module.
-2. Re-implement the date helpers listed in `PROJECT_STATUS.md` (`startOfDay`, `endOfDay`, `startOfWeek`, `timeStringToDate`, `toLocalDateKey`, `parseLocalDate`, `addDays`, `generateOccurrenceDates`, plus `Date#getDay`/`getMinutes` uses in the booking routes) on top of two primitives built from `Intl.DateTimeFormat`:
-   - `zonedParts(instant)` → `{ year, month, day, hour, minute, weekday }` in the salon's zone (`formatToParts` with `timeZone: SALON_TIME_ZONE`);
-   - `zonedToInstant(dateKey, "HH:mm")` → the UTC instant for that wall-clock time: guess `Date.UTC(...)`, read the zone's offset at that instant from `zonedParts`, correct, and re-check once (this handles the DST changeover days).
-3. Keep every caller on the helpers — the existing rule "no inline `getHours`/`setDate`/`getDay` math" is what makes this a contained change.
-4. **Tests that must pass with `TZ=UTC npm test` and with `TZ=America/New_York npm test`:** a salon-wide closure blocks exactly its New York hours; slot generation for a window on the DST start and end Sundays; `toLocalDateKey` at 23:30 New York time; the 14-day window boundary.
+**Tests:**
+- `src/lib/salon-time.test.ts` runs every check under five process time zones: UTC, New York, Los Angeles, Tokyo and UTC+14. It covers the closure hours, both DST Sundays, 23:30 New York time, the 14-day window and weekly series across DST.
+- `src/lib/salon-time-rules.test.ts` fails the build if code outside `salon-time.ts` reads a Date's local fields or calls `toLocale*String()`.
+
+**Existing data needs no migration.** Stored dates were written on a New York machine, so they are already New York midnights and times.
 
 ## 7. Runtime checks on the adapter trial build
 
@@ -120,6 +125,7 @@ All date math assumes the server clock is the salon's clock. Workers run in UTC,
 ## 9. Scheduled job
 
 - Call `POST /api/jobs/send-reminders` hourly with `Authorization: Bearer <CRON_SECRET>`, via a Workers Cron Trigger (`0 * * * *`), a GitHub Actions cron, or a cron-pinger service.
+- The same run does the texting side's hourly work: reminder texts, and any "Reply YES" texts still owed. It sends only from 8 AM to 9 PM salon time. The response's `sms.skipped` is `"quiet_hours"` outside that window, and `"not_configured"` before Twilio is set up.
 - Set `CRON_HEARTBEAT_URL` (§11) so a scheduler that silently stops calling is noticed.
 
 ## 10. Smoke test after deploy
@@ -133,6 +139,8 @@ Security (each must hold):
 - `curl -sI https://<domain>/` shows `Strict-Transport-Security` and `Content-Security-Policy`, and no `X-Powered-By`.
 - `curl -s -X POST https://<domain>/api/auth/forgot-password -H 'Content-Type: text/plain' -d '{"email":"x@y.zz"}'` returns **415**; the same with `-H 'Origin: https://evil.example' -H 'Content-Type: application/json'` returns **403**.
 - `SELECT email FROM "User" WHERE role='ADMIN'` lists only the owner; no `admin@example.com`.
+- `curl -s https://<domain>/privacy` and `/terms` don't contain "To be written" (placeholders left in the legal pages).
+- `curl -s -X POST https://<domain>/api/sms/inbound -H 'Content-Type: application/x-www-form-urlencoded' -d 'From=%2B16315550143&Body=STOP'` returns **403** (no Twilio signature). Before Twilio is configured it returns **503**.
 
 Monitoring (§11): `curl -s https://<domain>/api/health` returns `{"data":{"status":"ok"}}`; the uptime monitor shows the site up; the cron heartbeat check shows a ping after the first hourly run; a test message reaches the alert channel.
 
@@ -154,3 +162,15 @@ What to set up at deploy:
 5. **Who gets alerted.** Decide this with the client before launch: someone has to act when the site is down on a Saturday morning.
 
 Not done (yet): no error tracking with stack traces grouped across releases (Sentry and similar). The JSON logs plus `digest` are enough at this size; revisit if errors become frequent enough that grouping matters. Sentry's Cloudflare SDK would go in `register()` in `src/instrumentation.ts`, and its CPU cost needs checking against the plan (§7).
+
+Texting adds two error events: `sms_failed` (Twilio refused or couldn't be reached; the number and message body are never logged) and `sms_reminders_failed` (a job run had reminder texts fail).
+
+## 12. Texting (SMS) — after the site is live
+
+Full guide: `docs/SMS_10DLC.md`. In order:
+
+1. **Before registering:** the site is live on the salon's domain. `SALON_CONTACT` is filled in. `/privacy` and `/terms` are finished and approved: no "To be written", `PRIVACY_LAST_UPDATED` / `TERMS_LAST_UPDATED` set. The opt-in box is visible on `/register`.
+2. **Register** the brand and campaign in the **salon's** Twilio account (guide §4–6). Review has taken 10–15 business days.
+3. **Exclude `/api/sms/*`** from Cloudflare challenges and rate limits (§4).
+4. **After approval:** set the three `TWILIO_*` runtime secrets (§1). Set `SALON_CONTACT.smsNumber` and deploy. Point the Messaging Service's incoming-message webhook at `https://<domain>/api/sms/inbound`.
+5. **Live test** on your own phone (guide §7). Opt-ins made before step 4 get their "Reply YES" text on the next hourly job run within texting hours.

@@ -3,7 +3,8 @@ import Link from "next/link"
 import { prisma } from "@/lib/prisma"
 import { buttonVariants } from "@/components/ui/button"
 import { ServiceCard } from "@/components/services/service-card"
-import { ArtistCard } from "@/components/artists/artist-card"
+import { ArtistCarousel } from "@/components/artists/artist-carousel"
+import { formatOpening } from "@/lib/format"
 import { CloudinaryImage } from "@/components/ui/cloudinary-image"
 import { Reveal } from "@/components/ui/reveal"
 import { SectionHeading } from "@/components/ui/section-heading"
@@ -17,7 +18,8 @@ const FRESH_WORK = 8
 export default async function Home() {
     const [services, artists, recentWork] = await Promise.all([
         prisma.service.findMany({ where: { active: true }, take: 3, orderBy: { createdAt: "asc" } }),
-        loadArtistCards({ take: 3 }),
+        // Every active artist: the carousel has room for all of them.
+        loadArtistCards(),
         // The salon's newest uploads across active artists — the hero photo
         // and the strip below it. Nail work sells itself; until now it was
         // only visible on each artist's own page (FEATURE_GAPS.md U1).
@@ -138,10 +140,19 @@ export default async function Home() {
                 <Reveal>
                     <section className="mx-auto w-full max-w-6xl px-4 py-16">
                         <SectionHeading kicker="The talent" title="Meet the Artists" link={{ href: "/artists", label: "All artists" }} />
-                        <div className="mt-10 grid grid-cols-1 gap-8 sm:grid-cols-2 md:grid-cols-3">
-                            {artists.map((artist) => (
-                                <ArtistCard key={artist.id} artist={artist} />
-                            ))}
+                        <div className="mt-10">
+                            <ArtistCarousel
+                                artists={artists.map((artist) => ({
+                                    id: artist.id,
+                                    name: artist.name,
+                                    bio: artist.bio,
+                                    photoUrl: artist.photoUrl,
+                                    specialties: artist.specialties,
+                                    nextOpeningLabel: artist.nextOpening
+                                        ? `Next opening: ${formatOpening(artist.nextOpening)}`
+                                        : "Fully booked for the next two weeks",
+                                }))}
+                            />
                         </div>
                     </section>
                 </Reveal>

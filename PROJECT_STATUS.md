@@ -34,7 +34,20 @@ A nail salon booking platform for a real local salon ("Nail Image Inc.", Amityvi
 - **Rate limiting happens at Cloudflare's edge, not in the app** — rules are in the deploy runbook.
 - **Mobile-first is a hard requirement** (375px first, 44px tap targets — the schedule grid's rows grow to 44px on touch screens). A native app is deferred.
 - **Out of scope unless Eric reopens it:** payments, AI receptionist (Twilio + Claude), native app.
-- **Timezone — known blocker:** no timezone library; all date math assumes server clock = salon clock and goes through the helpers in `src/lib/schedule-grid.ts` / `src/lib/format.ts` / `src/lib/recurring.ts` (`startOfDay`, `startOfWeek`, `endOfDay`, `timeStringToDate`, `toLocalDateKey`, `parseLocalDate`, `addDays`, `generateOccurrenceDates`). **Workers run in UTC, so this must be fixed before deploy.** New code must use these helpers — no inline `getHours`/`setDate`/`getDay` math.
+- **Timezone: the salon's clock, whatever the server's** (fixed 2026-10-22, no library).
+  - `src/lib/salon-time.ts` holds `SALON_TIME_ZONE = "America/New_York"` and two `Intl` primitives, `zonedParts()` and `zonedToInstant()`.
+  - The usual helpers are built on them: `startOfDay`, `startOfWeek`, `endOfDay`, `timeStringToDate`, `isOnSlotBoundary` (`schedule-grid.ts`); `toLocalDateKey`, `toLocalTimeKey`, `parseLocalDate` (`format.ts`); `addDays`, `generateOccurrenceDates` (`recurring.ts`). So are the display formatters `formatSalonDate` / `formatSalonTime` / `formatSalonDateTime`, used in the browser too.
+  - A "date" is the instant of the salon's midnight.
+  - **Only `salon-time.ts` may touch a Date's local fields or call `toLocale*String()`.** `salon-time-rules.test.ts` fails otherwise. `salon-time.test.ts` runs every check under five process time zones.
+- **Texting (SMS) is opt-in, double opt-in, and per number** (built 2026-10-22, not yet live; guide in `docs/SMS_10DLC.md`).
+  - The box on `/register` and My Account is never pre-checked and never required to book. Ticking it records consent for the profile phone (US numbers only, `toUsE164()`) and sends one "Reply YES" text. Appointment texts start only after the YES reply arrives through Twilio's webhook.
+  - Every consent change goes through `src/lib/sms-consent-data.ts`, which writes an append-only `SmsConsentEvent` (proof of consent).
+  - Staff can't opt anyone in. A phone change turns texts off. STOP keeps the number, so a later START turns texts back on.
+  - Texts are sent from the email functions in `appointment-emails.ts`, via `appointment-sms.ts`, so every booking email has its text.
+  - Reminders use their own claim column, `smsReminderSentAt`. Texts the app sends on its own go out only 8 AM–9 PM salon time.
+  - Messages are GSM-7 only, one segment each (`sms-templates.ts`, tested).
+  - `/api/sms/inbound` and `/api/sms/status` are Twilio webhooks checked by `X-Twilio-Signature`, not JSON/Origin. `route-guards.test.ts` checks the signature comes first.
+  - With no `TWILIO_*` set, dev prints texts to the console and production sends nothing.
 - **Seed scripts are idempotent** (`upsert` with fixed ids). Run `npx prisma db seed`, not `tsx prisma/seed.ts` directly (the latter skips `.env` loading). With nothing set it creates only `AppSettings`; demo rows and the default dev admin need `SEED_DEV_DATA=1` (refused under `NODE_ENV=production`). The first production admin comes from `npm run promote-admin`, which only promotes a verified email after a typed confirmation.
 - **Customer booking caps** (`src/lib/booking-limits.ts`, enforced in both booking routes, admins exempt): at most 4 upcoming one-off bookings, 1 active standing appointment, and customer-created standing appointments of at most 12 weeks (or the salon's `maxSeriesWeeks` if shorter).
 - **Which artist does which service** is `ArtistService` rows, and **no rows = every service** (so new services need no setup for those artists). Customers can't book an artist outside their list (both booking routes, `artistServicesError()`); admins may override and are warned. Rules: `src/lib/artist-services.ts` (pure) / `artist-services-data.ts` (writes).
@@ -45,7 +58,7 @@ A nail salon booking platform for a real local salon ("Nail Image Inc.", Amityvi
 
 Every item was verified live when built; details are in `docs/PROJECT_HISTORY.md` and `AUDIT_2026-10-16.md`.
 
-**Customer site:** home, about, services (grouped by category), artists + portfolio pages, a multi-step booking wizard (multi-service, `useReducer` state machine; sign-in is required only at review, and picks survive the login and complete-profile redirects via `sessionStorage`), standing (recurring) appointment booking with a mandatory end date, login/register (name, email, phone and password), forgot/reset password, and My Bookings — **reschedule** (same artist, same services and length, new time within the 14-day window) or **cancel**, both online only outside the notice window — plus the standing-appointment list (cancel only) and profile edit (an email change asks for the current password and is confirmed by a link to the new address). My Account also shows the store-credit balance and history, takes a printed gift card's code, and has "Sign out of all devices". Signed-in users with an unconfirmed email (banner with a resend link; the booking review step offers "I've Confirmed") or missing a name or real phone (a "complete your profile" banner) can't self-book until they fix it. Installable to a phone's home screen, with an offline page.
+**Customer site:** home, about, services (grouped by category), artists + portfolio pages, a multi-step booking wizard (multi-service, `useReducer` state machine; sign-in is required only at review, and picks survive the login and complete-profile redirects via `sessionStorage`), standing (recurring) appointment booking with a mandatory end date, login/register (name, email, phone and password), forgot/reset password, and My Bookings — **reschedule** (same artist, same services and length, new time within the 14-day window) or **cancel**, both online only outside the notice window — plus the standing-appointment list (cancel only) and profile edit (an email change asks for the current password and is confirmed by a link to the new address). My Account also shows the store-credit balance and history, takes a printed gift card's code, has a Text Messages opt-in (status: off / waiting for YES / on / stopped), and has "Sign out of all devices". `/privacy` and `/terms` exist, with their SMS sections written and the rest as marked placeholders (Gap 25). Signed-in users with an unconfirmed email (banner with a resend link; the booking review step offers "I've Confirmed") or missing a name or real phone (a "complete your profile" banner) can't self-book until they fix it. Installable to a phone's home screen, with an offline page.
 
 **Admin (`/admin` — every page calls `requireAdminPage()`; the layout's check is UI only):**
 
@@ -68,15 +81,24 @@ Every item was verified live when built; details are in `docs/PROJECT_HISTORY.md
 
 **Emails sent:** booking confirmation, standing-appointment summary, cancellation (customer- vs salon-worded; salon-worded also when time off cancels a booking), reschedule (admin or customer), checkout receipt (with store-credit lines when used), standing-appointment cancelled, gift card added to account, password reset, email confirmation (signup / new address — no user-entered text in either), email-changed notice to the old address, and a 24h reminder via `POST /api/jobs/send-reminders` (`Authorization: Bearer $CRON_SECRET`). **Nothing calls the reminder job on a schedule yet.**
 
+**Texts (to opted-in, confirmed customers):** booking confirmation, standing-appointment summary, reschedule, cancellation, standing appointment cancelled, and the 24h reminder (same job). Plus the opt-in "Reply YES" text. Not live until the migration is applied, the site is deployed and the 10DLC campaign is approved.
+
 ## Roadmap / open work
 
 In rough priority order:
 
-1. **Deploy to Cloudflare Workers** — blocked on: (a) the **timezone fix** above (approach in runbook §6); (b) choosing an adapter (vinext vs OpenNext — OpenNext doesn't support Turbopack; run a real trial build first); (c) confirming `pg` + `@prisma/adapter-pg`, Next's image optimizer and bcrypt's CPU cost work under Workers (runbook §7). Everything else (build-time vs runtime env vars incl. **`AUTH_URL`**, `workers_dev = false`, least-privilege DB role, first-admin procedure, rate-limit rules, DMARC, cron, smoke tests) is in `docs/DEPLOY_RUNBOOK.md`.
-2. **Testing** — `npm test` (Node's built-in runner via `tsx`, no extra dependency) covers the pay report, validation helpers, artist services, the customer summary, and the route/page guard rules (`route-guards.test.ts`) — 28 tests. Still needed: unit tests for `getOpenSlots`, `reclaimSlots`/booking transactions and discount math; integration tests for the API routes against a test database. The scratch verification scripts from the 2026-10-16 and 2026-10-19 work are a good starting checklist.
+1. **Deploy to Cloudflare Workers** — blocked on: (a) ~~the timezone fix~~ (done 2026-10-22); (b) choosing an adapter (vinext vs OpenNext — OpenNext doesn't support Turbopack; run a real trial build first); (c) confirming `pg` + `@prisma/adapter-pg`, Next's image optimizer and bcrypt's CPU cost work under Workers (runbook §7). Everything else (build-time vs runtime env vars incl. **`AUTH_URL`**, `workers_dev = false`, least-privilege DB role, first-admin procedure, rate-limit rules, DMARC, cron, smoke tests) is in `docs/DEPLOY_RUNBOOK.md`.
+2. **Testing** — `npm test` (Node's built-in runner via `tsx`, no extra dependency) covers the pay report, validation helpers, artist services, the customer summary, the calendar links, the timezone helpers and their usage rule, the SMS templates, keywords and Twilio signatures, and the route/page guard rules (`route-guards.test.ts`). 55 tests in all. Not yet tested: the SMS database flows (opt-in, YES, STOP, reminders) against a real database. Still needed: unit tests for `getOpenSlots`, `reclaimSlots`/booking transactions and discount math; integration tests for the API routes against a test database. The scratch verification scripts from the 2026-10-16 and 2026-10-19 work are a good starting checklist.
 3. **CI** — GitHub Actions: lint, typecheck, `prettier --check`, test, and build on every push.
 4. **Reporting** (`FEATURE_GAPS.md` Gap 7) — the artist pay report is built (steps 1–3 of `PLAN_ARTIST_PAY_REPORT.md`, local only). Next from that plan: insights (4), tips at checkout (5), adjustments + locked paid statements (6), pay-period settings (7). Still open with the client: commission before or after discounts (built: after), Groupon at face value or payout (built: face value), per-category rates, and the compliance conversation at the top of the plan.
-5. **Confirmation texting (SMS via Twilio)** — designed, not started. Blocked on A2P 10DLC registration, which needs a live public site and a privacy policy page — so it depends on item 1. Ask the client early whether the salon has an EIN, and for its exact legal name, address, and authorized rep. The SMS opt-in must be unchecked by default and never required to book. Full plan in `docs/PROJECT_HISTORY.md`, Roadmap item 13.
+5. **Confirmation texting (SMS via Twilio)** — **built (2026-10-22), not live.** Remaining, in order:
+   - ~~apply the migration~~ (applied to dev 2026-10-22). Then run the dev-console checks in `docs/SMS_10DLC.md` §2.
+   - client/lawyer review of the privacy and terms text (Gap 25)
+   - deploy (item 1)
+   - register the brand and campaign in the salon's Twilio account (client details: EIN, exact legal name from the CP 575, address, authorized rep)
+   - set the `TWILIO_*` secrets and `SALON_CONTACT.smsNumber`.
+
+   Everything the campaign form asks for, including sample messages, is in `docs/SMS_10DLC.md`. Not built: a "reply C to confirm" link.
 6. **Remaining `FEATURE_GAPS.md` items** — address/phone (14: the footer, confirmation and emails are built and show them as soon as `SALON_CONTACT` in `src/lib/site.ts` is filled in; hours are already live from availability) and privacy/terms (25, plan written, waiting on the client — both block SMS), notes (10), "any artist" (24), booking confirmation dead end (20), artist logins (12), schedule auto-refresh (16), SEO/metadata (19), audit log (21), and the nice-to-haves 27, 29–35. The **UI and feel** items U1–U13 are built (2026-10-19).
 7. **One-time Prettier pass (Eric)** — `npm run format` as its own commit once everything else is committed; ~120 files don't match `.prettierrc` yet. Until then, keep diffs scoped to what you changed.
 
@@ -87,7 +109,7 @@ In rough priority order:
 - Deleting a portfolio image or replacing a photo leaves the file in Cloudinary. One pre-uploads-only artist photo (`example.com`) in the dev database shows as initials until replaced.
 - `npm audit` reports 5 "high" advisories, all in eslint-config-next's `braces`/`micromatch` chain — dev-only lint tooling; npm's only offered fix is a downgrade to Next 14.
 - The portfolio manager's delete (×) button is 28px — admin-only, desktop-first, but under the 44px rule.
-- Gift cards: a lost code can't be reprinted (only its hash is stored) — void it and sell a new one. No "send by email" for e-gift cards. Customer redeem relies on the Cloudflare edge rate limit (runbook) plus 80-bit codes; there's no in-app attempt counter.
+- Gift cards: the printed card carries the terms, as NY GBL § 396-i(3) requires, from the same `GIFT_CARD_TERMS` as the Terms page. Cards already printed keep their terms, and § 396-i forbids changing a card's terms after issue. An unredeemed card worth under $5 must be paid out in cash on request (the terms say so; cards can be sold from $1), and staff do that at the POS. A lost code can't be reprinted (only its hash is stored); the terms promise replacement only while it's unredeemed: void it and issue a new one. No "send by email" for e-gift cards. Customer redeem relies on the Cloudflare edge rate limit (runbook) plus 80-bit codes; there's no in-app attempt counter.
 - Groupon: nothing stops staff from forgetting to redeem the voucher in Merchant Center; the app only records the method.
 - Not yet asked of the client: their accountant's view on gift-card liability / NY unclaimed property (the gift cards page shows the total owed).
 - Booking caps are count-then-book: two bookings sent at the same instant could both pass, so a determined account can exceed a cap by a booking or two (bounded by the edge rate limit).
@@ -97,7 +119,7 @@ In rough priority order:
 
 - **Route shape:** guard first (the first `await` — the test checks) → `readJsonObject(request)` (`src/lib/request.ts`; `403` cross-origin, `415` not JSON, `400` on bad JSON, non-objects and arrays), or `rejectCrossOrigin(request)` for a mutation with no body → validate with the helpers in `src/lib/validation.ts` (`normalizeEmail`, `requiredPersonName` for people's names, `requiredText`/`optionalText` with `TEXT_LIMITS`, `normalizePhone`), `isOwnCloudinaryUrl()` and `passwordError()` → existence checks return **`404`**.
 - **Admin pages:** `await requireAdminPage("/admin/…")` as the first statement — never inside a `Promise.all` with queries. Responses are always `{ data }` / `{ error }`. `PATCH` fields are optional (`undefined` = don't touch, `null` = clear where allowed). Catch `P2025` → `404` and `P2002` → `409`.
-- **Client-safe modules:** anything imported by a Client Component must not import Prisma, even transitively — this has broken the build three times. Pure helpers live in `schedule-grid.ts`, `format.ts`, `recurring.ts`, `appointment-services.ts`, `discount.ts`, `service-category.ts`, `validation.ts`, `time-off.ts`, `pay-report.ts`, `artist-services.ts`, `customer-summary.ts`, `calendar.ts` and `site.ts`; server-only logic lives in `availability.ts`, `booking.ts`, `settings.ts`, `appointment-emails.ts`, `pay-terms.ts`, `pay-report-data.ts`, `artist-services-data.ts`, `time-off-conflicts.ts`, `report-error.ts`, `salon-hours.ts`, `artist-cards.ts` and `exclude-appointment.ts`. The footer is a Server Component passed into the client `FooterGate` as `children` (a client module can't import it). Constants shared between a Server Component and a Client Component go in a plain module, never in a `'use client'` file. Server pages pass settings values down as props.
+- **Client-safe modules:** anything imported by a Client Component must not import Prisma, even transitively — this has broken the build three times. Pure helpers live in `salon-time.ts`, `sms-consent.ts`, `sms-templates.ts`, `twilio-signature.ts`, `schedule-grid.ts`, `format.ts`, `recurring.ts`, `appointment-services.ts`, `discount.ts`, `service-category.ts`, `validation.ts`, `time-off.ts`, `pay-report.ts`, `artist-services.ts`, `customer-summary.ts`, `calendar.ts` and `site.ts`; server-only logic lives in `availability.ts`, `booking.ts`, `settings.ts`, `appointment-emails.ts`, `appointment-sms.ts`, `sms.ts`, `sms-consent-data.ts`, `twilio-webhook.ts`, `pay-terms.ts`, `pay-report-data.ts`, `artist-services-data.ts`, `time-off-conflicts.ts`, `report-error.ts`, `salon-hours.ts`, `artist-cards.ts` and `exclude-appointment.ts`. The footer is a Server Component passed into the client `FooterGate` as `children` (a client module can't import it). Constants shared between a Server Component and a Client Component go in a plain module, never in a `'use client'` file. Server pages pass settings values down as props.
 - **Migrations:** Prisma's auto-diff can't rename enum values, add a required column to a non-empty table, or add a unique constraint non-interactively. Hand-write those, name the folder with a **UTC** timestamp, apply with `prisma migrate deploy`, and **ask Eric first**. Each deploy so far has left Prisma's advisory lock held on Neon's pooled connection; release it with `SELECT pg_advisory_unlock(72707369)` (run it until `pg_locks` shows none).
 - **Colors:** use the theme tokens in `globals.css` (`text-body`, `text-on-dark*`, `bg-cream`, `bg-band`, `text-lacquer`, `border-line`, `shadow-card`, …), not hex values in class names. On the `band` colour, don't put blue links or `text-primary-strong` (both under 4.5:1). Gold text on light backgrounds is `text-primary-strong`; `--primary` is for fills.
 - **Admin CRUD pages:** build the visual scaffold with stubbed handlers first, then wire up and verify each handler one at a time.
@@ -107,6 +129,7 @@ In rough priority order:
 - **Printing:** site chrome, admin nav and screen-only controls carry Tailwind's `print:hidden`. The gift-card print rule in `globals.css` is scoped with `body:has(.gift-card-print)` — unscoped, it blanked every other printed page.
 - **Headless Chromium against `next dev` reloads in a loop** (seen 2026-10-18 on the login page: endless HMR "Compiled" + reload). Run browser verification against a production build (`next build && next start`) instead. Admin page `redirect()`s arrive as a 200 with a meta refresh (the `/admin/loading.tsx` boundary streams), so check them in a browser, not by expecting a 307.
 - **Verification with a headless browser:** wrap scripts in `try/finally` so the browser always closes; check for orphan Chromium/node processes before and after; prefer one long Playwright session. Install Playwright in a scratch folder outside the repo rather than `--no-save` into it. Playwright's `setOffline` doesn't affect service-worker fetches — to test the offline page, stop the server. Leaked processes have crashed this machine once (OOM).
+- **Only one `next dev` per project:** Next 16 refuses a second one ("Another next dev server is already running"). To test with different env vars, stop Eric's server first (ask), or use a production build (`next build && next start -p …`), which runs alongside it.
 - **Dev server:** start test servers with `RESEND_API_KEY=""` (the `.env` has a real key — otherwise test bookings send real email). If a request hangs at "Compiling…", count `node` processes; a stale `.next` once spawned ~1,900. Kill them all, `rm -rf .next`, restart.
 - **Production build locally** (`next build && next start`): needs `AUTH_URL` set or every sign-in fails with `UntrustedHost`. Dev output lives in `.next/dev`, so a production build doesn't disturb it. The service worker only runs in production builds.
 - `next dev` may add or refresh a managed `<!-- BEGIN:nextjs-agent-rules -->` block in `AGENTS.md` (Next 16.3+); that's expected — commit it.
@@ -119,6 +142,55 @@ In rough priority order:
 - In dev, verification and reset links are printed to the dev server's console (`[email:dev] would send:`); in a production build with `RESEND_API_KEY=""` nothing is printed, so test those flows on `next dev`.
 
 ## Recent changes
+
+- **2026-10-22 — Timezone fix, texting (SMS) built for 10DLC, policy pages.** Migration `20261022040455_add_sms_consent_and_messages`, written but **not applied** (additive only):
+  - `User.smsOptIn / smsPhone / smsConfirmedAt / smsConfirmRequestedAt` and `Appointment.smsReminderSentAt`
+  - new tables `SmsConsentEvent` and `SmsMessage`.
+
+  **Timezone** (runbook §6, now done):
+  - `salon-time.ts`; every date helper rebuilt on it, and about 30 display call sites moved to the salon-zone formatters.
+  - Two bugs that would have surfaced on a UTC server or a browser in another zone were fixed along the way: the booking review step sent `getDay()` (browser zone) next to a salon-zone date, and the month calendar built keys from browser-local dates.
+  - `salon-time.test.ts` (11 checks × 5 zones) and the usage rule test, which caught one more local-date call (`LINE_PRICES_RECORDED_FROM`).
+
+  **Texting:** see the architecture bullet and `docs/SMS_10DLC.md` (how it works, campaign form text, sample messages, Twilio setup, live test plan). Runbook §1, §4, §9, §10 and the new §12 cover the deploy side. `.env.example` has the `TWILIO_*` variables.
+
+  **Policy pages:** `/privacy` and `/terms`, linked from the footer, register and the opt-in box.
+  - `/privacy` is the client's Termly policy (dated October 22, 2026) in the site's layout. Termly's standard clauses fill its gaps, and the SMS section uses the standard carrier wording. Four points are open with the client; see Gap 25.
+  - `/terms` is the client's Termly terms, with its SMS section corrected.
+  - New in the terms: an "Appointments" section read from the live settings (no fee for no-shows or late cancellations; the price at booking is honored) and a "Gift Cards" section following NY GBL § 396-i (no expiry, no fees, cash on request under $5).
+  - Privacy retention is seven years past account closure, and data requests are by email only.
+  - No placeholders are left; both pages await client/lawyer review (Gap 25).
+  - The printed gift card now carries the same terms (§ 396-i(3)). Both read `GIFT_CARD_TERMS` in `src/lib/gift-card-terms.ts`.
+  - The SMS migration is applied to dev.
+  - `SALON_CONTACT.address` and `.phone` are now set from the client's documents (167 Park Avenue, (631) 608-8009), so they show in the footer, on the booking confirmation and in emails. The legal contact details are in `LEGAL_CONTACT` (`site.ts`).
+  - The raw Termly HTML Eric pasted is still at `src/app/privacy/policy` and `src/app/terms/terms`. Neither is routed; both can be deleted.
+
+  **Verified:**
+  - tsc, ESLint, 55/55 tests, and a production build.
+  - After the migration was applied: **62/62 end-to-end API checks** on a test `next dev`, with `RESEND_API_KEY=""` and a test-only `TWILIO_AUTH_TOKEN` so the Twilio webhooks are signed for real. Covered:
+    - register with the box ticked; the real email-verification link; the opt-in cooldown
+    - webhook signature, wrong-token and JSON refusals; YES, STOP, START, and the carrier error 21610
+    - booking, standing appointment (one summary text), cancel-series, reschedule (claim reset) and cancellation texts, and no text after STOP
+    - the reminder sent once on a simulated noon run, and held at night
+    - the delivery-status callback; a phone change turning texts off; non-US numbers and `smsOptIn: "yes"` ignored
+    - every text GSM-7 and one segment.
+  - All test data removed afterwards; the booking toggle was restored to off.
+  - Not run in a browser.
+
+- **2026-10-20 — Home page artist carousel.** "Meet the Artists" is a 3D ring (`src/components/artists/artist-carousel.tsx`):
+  - Every active artist sits on a slightly tilted circle that turns with side arrows, arrow keys, swipe or a tap on a side card. One card is in full focus; the rest are smaller, dimmer and blurred as they travel round behind it, and the ones behind peek over the top.
+  - Cards are a large round photo overlapping a smaller rectangular details card (bio, specialties, next opening, Book / See their work). Unfocused cards are `inert`, and a live region announces the artist in front.
+  - Positioning is CSS only: `rotateY · translateZ(var(--ring-r)) · rotateY⁻¹`, with angles never wrapped, so every card glides along the arc. Reduced motion skips the travel.
+  - **The front card's transforms cancel out exactly.** The ring and the cards pivot at top centre (`origin-top`). The ring moves back by where the 14° tilt puts the front card (`sin`/`cos` × `--ring-r`), not just by the radius. Cards shrink about their centre via `translateY((1−s)·50%)`. Before this, the front card was drawn about 0.5% off its real size at fractional pixels, which iOS Safari showed as a blur. Chromium now measures it at exactly 1:1, and side cards moved less than 2px. Playwright's Windows WebKit flattens `preserve-3d`, so it can't be used to check this ring.
+  - The next-opening text is formatted on the server.
+  - **`/artists` matches it:** `ArtistCard` is now a tall horizontal card, stacked one per row (`max-w-5xl`). A large round photo (288px at `md`, 320px at `lg`) overlaps the details card's left edge, and the details are bio, specialties, next opening, portfolio thumbnails, and Book / See their work. On phones the photo sits on top, as in the carousel. The card is no longer one big link: the name, "See their work" and the thumbnails (a mouse-only shortcut, `aria-hidden`) go to the profile. Checked on a production build at 1280, 768 and 375px: no sideways scroll, no link under 44px.
+  - **Turns by itself every 5 s** (`AUTO_TURN_MS`), with a Pause/Play button (WCAG 2.2.2). It keeps turning while hovered.
+  - A **manual turn** (arrows, arrow keys, swipe, tapping a side card — everything through `go()`) holds it while the pointer stays over the carousel (`heldByVisitor`). Once the pointer leaves, it resumes after a full interval. On touch there's no hover, so it simply resumes after a full interval. Pressing Play clears any hold.
+  - It also holds while keyboard focus is inside, and only runs on screen with the tab visible. Reduced-motion visitors start paused, and the live region is silent while it auto-turns.
+  - Hover and focus are checked on each 250 ms tick rather than tracked with enter/leave events, which got stuck when cards moved under the pointer.
+  - The ring radius grows on large screens (`--ring-r` up to 500px at `xl`).
+  - The active dot fills towards the next automatic turn, driven by the same 250 ms tick (so it empties when held), and is solid when paused.
+  - Verified on a production build with 2 and 5 artists (3 temporary ones, removed afterwards) at 1280 and 375px: focus, turning both ways, wrap-round, keyboard, inert hidden cards, no sideways scroll, every card inside the carousel at every turn. Screenshots reviewed.
 
 - **2026-10-19 — Art-deco touches and a calmer admin.** `src/components/ui/deco.tsx`: `DecoDivider` (line–sunburst fan–line, under every section heading and the colour-band titles), `DecoRule` (double rule with a diamond; the footer's top edge) and `DecoFrame` (thin inset frame with corner diamonds; the hero, home service cards and the booking confirmation). All `currentColor`, aria-hidden.
   - **Destructive actions ask first**, in place, with the red only on the "Yes" step (`ConfirmAction`, `src/components/ui/confirm-action.tsx`; new `quiet` button variant). This covers deactivating services and artists, deleting hours and time off, closing online booking, the schedule sheet's Cancel and No-Show (both used to act on one tap; Cancel emails the customer), standing-appointment cancel, and customers cancelling in My Bookings.
@@ -155,6 +227,8 @@ In rough priority order:
 - **Sept 2026** — Feature-gap blockers closed (password reset, past-time admin booking, reschedule, cancellation window, salon-wide closures), no-show tracking, customer history, standing-appointment management, Cloudinary uploads, security audit remediation (`SECURITY_AUDIT.md`, local only).
 
 ## Current dev-database notes
+
+- Migration `20261022040455_add_sms_consent_and_messages` was **applied to dev on 2026-10-22**. The advisory lock was released afterwards (one was held, as usual). Public pages and `/api/health` were smoke-tested on a production build afterwards. A `next dev` that was already running needs a restart to pick up the new Prisma client.
 
 - `testing@gmail.com` (customer), the "Pedicure" service, and a few appointments dated 2026-08-25 / 2026-09-01 look like Eric's own manual test data — left alone; ask before deleting.
 - Gift card verification (2026-10-18) left test data: customers `giftcard-verify-*@example.com` "Gift Verify" with redeemed/void test cards, credit entries and completed appointments on Libby Bent's past Tue–Thu dates (Sept 2026). Ledger rows are `RESTRICT`-protected, so removing them means deleting entries before cards, appointments and users — ask Eric first.

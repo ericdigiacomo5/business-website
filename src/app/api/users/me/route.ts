@@ -6,6 +6,7 @@ import { normalizeEmail, normalizePhone, personNameError, requiredPersonName } f
 import { SAFE_USER_SELECT } from "@/lib/user-select"
 import { readJsonObject } from "@/lib/request"
 import { issueEmailVerification } from "@/lib/email-verification"
+import { syncSmsWithPhone } from "@/lib/sms-consent-data"
 
 export async function GET() {
     const userId = await requireUser()
@@ -121,6 +122,10 @@ export async function PATCH(request: Request) {
             data,
             select: SAFE_USER_SELECT,
         })
+
+        // Texting consent was for the old number: a different one turns
+        // texts off until the box is ticked again (sms-consent-data.ts).
+        if (data.phone !== undefined) await syncSmsWithPhone(userId, data.phone)
 
         // email is still the old address until the link is used.
         return Response.json({ data: { ...updated, pendingEmail: newEmail } }, { status: 200 })

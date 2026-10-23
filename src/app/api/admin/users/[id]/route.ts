@@ -7,6 +7,7 @@ import { SAFE_USER_SELECT } from "@/lib/user-select"
 import { readJsonObject } from "@/lib/request"
 import { sendEmail } from "@/lib/email"
 import { emailChangedEmail } from "@/lib/email-templates"
+import { syncSmsWithPhone } from "@/lib/sms-consent-data"
 
 export async function GET(
     request: Request,
@@ -110,6 +111,10 @@ export async function PATCH(
                 select: SAFE_USER_SELECT,
             })
         })
+
+        // A new number turns the customer's texts off: they agreed to texts
+        // at the old one, and staff can't give consent for them.
+        if (data.phone !== undefined) await syncSmsWithPhone(user.id, data.phone)
 
         // No password = a walk-in, which can't sign in; nobody to warn.
         const canSignIn = user.passwordHash !== null

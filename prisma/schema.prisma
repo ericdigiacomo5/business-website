@@ -65,6 +65,22 @@ model User {
   // constraint (hand-written in the migration) keeps it from going below 0.
   creditBalanceCents Int       @default(0)
 
+  // Text messages (SMS), opt-in only — never pre-checked, never required to
+  // book. All changes go through src/lib/sms-consent-data.ts. Texts are sent
+  // only when smsOptIn is true AND the customer has replied YES from
+  // smsPhone (double opt-in), so a mistyped or someone else's number never
+  // gets appointment texts. Changing the profile phone turns texts off.
+  smsOptIn              Boolean   @default(false)
+  // The number (E.164, "+16315550143") the consent is for — the profile
+  // phone at the time the box was ticked.
+  smsPhone              String?
+  // When a YES reply arrived from smsPhone. Null = not confirmed yet.
+  smsConfirmedAt        DateTime?
+  // When the "Reply YES" text was sent. Null while opted in means it still
+  // has to go (texting wasn't configured yet, or the send failed); the
+  // reminder job picks those up.
+  smsConfirmRequestedAt DateTime?
+
   appointments            Appointment[]
   accounts                Account[]
   sessions                Session[]
@@ -76,6 +92,10 @@ model User {
   giftCardsIssued         GiftCard[]               @relation("GiftCardIssuedBy")
   giftCardsRedeemed       GiftCard[]               @relation("GiftCardRedeemedBy")
   giftCardsVoided         GiftCard[]               @relation("GiftCardVoidedBy")
+  smsConsentEvents        SmsConsentEvent[]
+  smsMessages             SmsMessage[]
+
+  @@index([smsPhone])
 }
 
 model Account {
@@ -334,6 +354,10 @@ model Appointment {
   // this from null, so a reminder can never send twice. Reset to null on
   // reschedule, since the old reminder was for the old time.
   reminderSentAt         DateTime?
+  // The same claim for the 24h reminder *text*, kept separate so an email
+  // and a text can each be sent (and retried) on their own. Reset with
+  // reminderSentAt on reschedule.
+  smsReminderSentAt      DateTime?
   // Which week of its series this row was materialized for ("YYYY-MM-DD"),
   // null for one-off appointments. Set once and never changed by a
   // reschedule, so a moved occurrence still counts as "handled" for its
@@ -352,6 +376,7 @@ model Appointment {
   recurringAppointment RecurringAppointment? @relation(fields: [recurringAppointmentId], references: [id])
   creditEntries        CreditEntry[]
   pay                  AppointmentPay?
+  smsMessages          SmsMessage[]
 
   // Each week of a series can be materialized at most once — the database,
   // not careful call-site logic, is what makes a concurrent job run or a
@@ -564,4 +589,73 @@ model AppSettings {
   // Longest a standing appointment may run, in weeks — every week is booked
   // at creation, so this also bounds how much of a calendar one request claims.
   maxSeriesWeeks          Int     @default(52)
+}
+
+// Text messages (SMS, through Twilio). See src/lib/sms-consent-data.ts and
+// docs/SMS_10DLC.md.
+
+enum SmsConsentAction {
+  OPTED_IN // ticked the box on the site
+  CONFIRMED // replied YES from the number
+  OPTED_OUT // unticked the box, replied STOP, changed number, or the carrier reports the number blocked
+}
+
+// Proof of consent: carriers can ask a sender to show when and how a number
+// agreed to texts. Append-only, like the credit ledger — never updated or
+// deleted.
+model SmsConsentEvent {
+  id                String           @id @default(cuid())
+  userId            String
+  // E.164 ("+16315550143").
+  phone             String
+  action            SmsConsentAction
+  // Where it happened: "register", "account", "sms_reply", "phone_changed",
+  // "carrier" (Twilio refused a send because the number opted out).
+  source            String
+  // OPTED_IN only: which wording of the opt-in disclosure was on screen
+  // (SMS_CONSENT_VERSION in src/lib/sms-consent.ts).
+  disclosureVersion String?
+  createdAt         DateTime         @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId, createdAt])
+  @@index([phone, createdAt])
+}
+
+enum SmsKind {
+  OPT_IN_REQUEST
+  BOOKING_CONFIRMATION
+  RECURRING_CONFIRMATION
+  RESCHEDULE
+  CANCELLATION
+  RECURRING_CANCELLATION
+  REMINDER
+}
+
+// Every text the app tried to send, and what became of it. Twilio's status
+// callback (POST /api/sms/status) updates `status` by providerSid.
+model SmsMessage {
+  id            String   @id @default(cuid())
+  userId        String
+  appointmentId String?
+  kind          SmsKind
+  // E.164.
+  to            String
+  body          String
+  // Twilio's message SID (SM...); null when the send never reached Twilio.
+  providerSid   String?  @unique
+  // Twilio's status ("queued", "sent", "delivered", "undelivered",
+  // "failed"), or "not_sent" when the request to Twilio itself failed.
+  status        String
+  // Twilio's error code, e.g. "21610" (the number replied STOP).
+  errorCode     String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  user        User         @relation(fields: [userId], references: [id])
+  appointment Appointment? @relation(fields: [appointmentId], references: [id])
+
+  @@index([userId, createdAt])
+  @@index([appointmentId])
 }

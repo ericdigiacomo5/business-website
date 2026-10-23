@@ -27,6 +27,7 @@ import {
 } from "@/lib/discount"
 import { CREDIT_NOTE_MAX } from "@/lib/credit-shared"
 import { PAYMENT_METHOD_LABEL, STATUS_LABEL, STATUS_TONE, type AdminAppointment } from "./appointment-shared"
+import { formatSalonDateTime, formatSalonTime } from "@/lib/salon-time"
 
 // GROUPON: the customer showed a Groupon voucher. Staff redeem it in
 // Groupon's Merchant Center; this only records that it paid for the visit.
@@ -584,7 +585,7 @@ function RebookForm({
         )
 
     if (startTime) {
-        const when = new Date(startTime).toLocaleString("en-US", {
+        const when = formatSalonDateTime(startTime, {
             weekday: "short",
             month: "short",
             day: "numeric",
@@ -730,13 +731,13 @@ export function ScheduleDetailSheet({
 
     const start = new Date(appointment.startTime)
     const end = new Date(appointment.endTime)
-    const timeRange = `${start.toLocaleString("en-US", {
+    const timeRange = `${formatSalonDateTime(start, {
         weekday: "short",
         month: "short",
         day: "numeric",
         hour: "numeric",
         minute: "2-digit",
-    })} – ${end.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}`
+    })} – ${formatSalonTime(end)}`
 
     return (
         <div

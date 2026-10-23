@@ -19,6 +19,7 @@ import { discountCents, type Discount } from "@/lib/discount"
 import { addDays } from "@/lib/recurring"
 import { startOfDay, startOfMonth } from "@/lib/schedule-grid"
 import { SERVICE_CATEGORIES, SERVICE_CATEGORY_LABEL } from "@/lib/service-category"
+import { formatSalonDate, zonedParts, zonedToInstant } from "@/lib/salon-time"
 
 export type PayReportLine = {
     serviceId: string
@@ -48,10 +49,10 @@ export type PayReportVisit = {
     lines: PayReportLine[]
 }
 
-// Bookings made before the multi-service migration (2026-10-13, local) had
-// their line prices filled in from the services' prices at that time, so a
-// report covering them may be slightly off.
-export const LINE_PRICES_RECORDED_FROM = new Date(2026, 9, 13)
+// Bookings made before the multi-service migration (2026-10-13, salon time)
+// had their line prices filled in from the services' prices at that time, so
+// a report covering them may be slightly off.
+export const LINE_PRICES_RECORDED_FROM = zonedToInstant(2026, 10, 13)
 
 // ---------------------------------------------------------------------------
 // One visit
@@ -305,16 +306,18 @@ export function rangeError(from: Date, to: Date): string | null {
 // "Oct 5 – 18, 2026", "Sep 28 – Oct 11, 2026", "Dec 22, 2026 – Jan 4, 2027",
 // or "Oct 18, 2026" for a single day.
 export function formatDateRange(from: Date, to: Date): string {
-    const sameYear = from.getFullYear() === to.getFullYear()
-    const sameMonth = sameYear && from.getMonth() === to.getMonth()
-    const end = to.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
-    if (sameMonth && from.getDate() === to.getDate()) return end
-    const start = from.toLocaleDateString(
-        "en-US",
+    const f = zonedParts(from)
+    const t = zonedParts(to)
+    const sameYear = f.year === t.year
+    const sameMonth = sameYear && f.month === t.month
+    const end = formatSalonDate(to, { month: "short", day: "numeric", year: "numeric" })
+    if (sameMonth && f.day === t.day) return end
+    const start = formatSalonDate(
+        from,
         sameYear ? { month: "short", day: "numeric" } : { month: "short", day: "numeric", year: "numeric" },
     )
     // Built by hand: Intl formats { day, year } alone as "2026 (day: 18)".
-    const endText = sameMonth ? `${to.getDate()}, ${to.getFullYear()}` : end
+    const endText = sameMonth ? `${t.day}, ${t.year}` : end
     return `${start} – ${endText}`
 }
 

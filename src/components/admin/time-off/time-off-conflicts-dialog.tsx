@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react"
 import { Button } from "@/components/ui/button"
+import { formatSalonDateTime, formatSalonTime } from "@/lib/salon-time"
 
 // One booking inside the time off being saved — the shape the time-off
 // routes return in a 409 (TimeOffConflict in src/lib/time-off-conflicts.ts,
@@ -71,7 +72,7 @@ export function TimeOffConflictsDialog({
                     {conflicts.map((conflict) => (
                         <li key={conflict.id} className="rounded-lg border border-line bg-surface shadow-sm p-3 text-sm">
                             <p className="font-medium text-surface-foreground">
-                                {new Date(conflict.startTime).toLocaleString("en-US", {
+                                {formatSalonDateTime(conflict.startTime, {
                                     weekday: "short",
                                     month: "short",
                                     day: "numeric",
@@ -79,10 +80,7 @@ export function TimeOffConflictsDialog({
                                     minute: "2-digit",
                                 })}
                                 {" – "}
-                                {new Date(conflict.endTime).toLocaleTimeString("en-US", {
-                                    hour: "numeric",
-                                    minute: "2-digit",
-                                })}
+                                {formatSalonTime(conflict.endTime)}
                             </p>
                             <p className="mt-0.5 text-muted-foreground">
                                 {salonWide

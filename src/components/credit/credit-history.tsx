@@ -1,5 +1,6 @@
 import { formatPrice } from "@/lib/format"
 import { describeCreditEntry, type CreditEntryRow } from "@/lib/credit-shared"
+import { formatSalonDate } from "@/lib/salon-time"
 
 // A store-credit ledger, newest first. Shared by My Account and the admin
 // customer page; the admin's rows also say who made each change.
@@ -15,7 +16,7 @@ export function CreditHistory({ entries }: { entries: CreditEntryRow[] }) {
                     <div>
                         <p className="font-medium text-foreground">{describeCreditEntry(entry)}</p>
                         <p className="mt-0.5 text-muted-foreground">
-                            {new Date(entry.createdAt).toLocaleDateString("en-US", {
+                            {formatSalonDate(entry.createdAt, {
                                 month: "short",
                                 day: "numeric",
                                 year: "numeric",

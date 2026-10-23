@@ -14,23 +14,36 @@ import { STATUS_LABEL, STATUS_TONE } from "@/components/admin/appointment-shared
 import { AdminRecurringAppointments } from "./admin-recurring-appointments"
 import { AdminCreditPanel } from "./admin-credit-panel"
 import type { CreditEntryRow } from "@/lib/credit-shared"
+import type { SmsStatus } from "@/lib/sms-consent"
 import type { AdminUser } from "./admin-user-row"
 import { CustomerSummaryPanel } from "./customer-summary-panel"
 import { summarizeCustomer } from "@/lib/customer-summary"
 import { useToast } from "@/components/ui/toast"
+import { formatSalonDateTime } from "@/lib/salon-time"
 
 type UserAppointment = Appointment & { artist: Artist; services: ServiceLine[] }
+
+const SMS_STATUS_LABEL: Record<SmsStatus, string> = {
+    on: "Texts: on",
+    waiting: "Texts: asked for, waiting for their YES reply",
+    stopped: "Texts: off (they replied STOP; texting START turns them back on)",
+    off: "Texts: off (only the customer can turn them on, on My Account)",
+}
 
 export function AdminUserDetail({
     user,
     appointments,
     creditEntries,
+    smsStatus: initialSmsStatus,
 }: {
     user: AdminUser
     appointments: UserAppointment[]
     creditEntries: CreditEntryRow[]
+    // Read-only for staff: only the customer can turn texts on (consent).
+    smsStatus: SmsStatus
 }) {
     const [current, setCurrent] = useState(user)
+    const [smsStatus, setSmsStatus] = useState(initialSmsStatus)
     const toast = useToast()
     const [editing, setEditing] = useState(false)
     const [error, setError] = useState<string | null>(null)
@@ -79,6 +92,8 @@ export function AdminUserDetail({
             }
 
             const body = await res.json()
+            // A new phone number turns the customer's texts off (server-side).
+            if (body.data.phone !== current.phone) setSmsStatus("off")
             setCurrent(body.data)
             setEditing(false)
             toast("Customer details saved.")
@@ -113,6 +128,7 @@ export function AdminUserDetail({
                         </div>
                         <p className="mt-1 text-sm text-muted-foreground">{current.email}</p>
                         <p className="mt-1 text-sm text-muted-foreground">{current.phone}</p>
+                        <p className="mt-1 text-sm text-muted-foreground">{SMS_STATUS_LABEL[smsStatus]}</p>
                     </div>
 
                     <div className="flex flex-wrap gap-2">
@@ -175,7 +191,7 @@ export function AdminUserDetail({
                                 </div>
                                 <p className="mt-1 text-sm text-muted-foreground">with {appointment.artist.name}</p>
                                 <p className="mt-0.5 text-sm text-muted-foreground">
-                                    {new Date(appointment.startTime).toLocaleString("en-US", {
+                                    {formatSalonDateTime(appointment.startTime, {
                                         month: "short",
                                         day: "numeric",
                                         year: "numeric",

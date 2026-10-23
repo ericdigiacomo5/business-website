@@ -4,6 +4,8 @@ import { prisma } from "@/lib/prisma"
 import { MyProfileForm } from "@/components/account/my-profile-form"
 import { MyStoreCredit } from "@/components/account/my-store-credit"
 import { SignOutEverywhere } from "@/components/account/sign-out-everywhere"
+import { MySmsPreferences } from "@/components/account/my-sms-preferences"
+import { smsStatusOf } from "@/lib/sms-consent"
 import { CREDIT_ENTRY_SELECT } from "@/lib/credit-shared"
 import { safeCallbackUrl, UNKNOWN_PHONE } from "@/lib/validation"
 
@@ -23,7 +25,15 @@ export default async function AccountPage({
     const [user, creditEntries, params] = await Promise.all([
         prisma.user.findUnique({
             where: { id: session.user.id },
-            select: { name: true, email: true, phone: true, creditBalanceCents: true },
+            select: {
+                name: true,
+                email: true,
+                phone: true,
+                creditBalanceCents: true,
+                smsOptIn: true,
+                smsPhone: true,
+                smsConfirmedAt: true,
+            },
         }),
         prisma.creditEntry.findMany({
             where: { userId: session.user.id },
@@ -71,6 +81,13 @@ export default async function AccountPage({
                     phone: user.phone === UNKNOWN_PHONE ? "" : user.phone,
                 }}
                 returnTo={returnTo}
+            />
+            <MySmsPreferences
+                // Re-mounts from the saved values when the phone changes
+                // (which turns texts off).
+                key={user.phone}
+                initialStatus={smsStatusOf(user)}
+                initialPhone={user.smsPhone}
             />
             <MyStoreCredit initialBalanceCents={user.creditBalanceCents} initialEntries={creditEntries} />
             <SignOutEverywhere />

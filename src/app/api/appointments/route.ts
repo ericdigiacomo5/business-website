@@ -8,7 +8,7 @@ import { auth } from "@/auth";
 import { isBookingEnabled } from "@/lib/settings";
 import { readJsonObject } from "@/lib/request";
 import { EMAIL_UNVERIFIED_MESSAGE, PROFILE_INCOMPLETE_MESSAGE } from "@/lib/validation";
-import { isValidAppointmentLength, MAX_APPOINTMENT_MINUTES } from "@/lib/schedule-grid";
+import { isOnSlotBoundary, isValidAppointmentLength, MAX_APPOINTMENT_MINUTES } from "@/lib/schedule-grid";
 import { artistServicesError } from "@/lib/artist-services-data";
 
 export async function POST(request: Request) {
@@ -103,10 +103,7 @@ export async function POST(request: Request) {
     }
 
     const parsedStartTime = new Date(startTime)
-    const isOnSlotGrid =
-        parsedStartTime.getMinutes() % 15 === 0 &&
-        parsedStartTime.getSeconds() === 0 &&
-        parsedStartTime.getMilliseconds() === 0
+    const isOnSlotGrid = isOnSlotBoundary(parsedStartTime)
     const isInPast = parsedStartTime.getTime() < Date.now()
     if (isNaN(parsedStartTime.getTime()) || !isOnSlotGrid || (!isAdmin && isInPast)) {
         return Response.json(

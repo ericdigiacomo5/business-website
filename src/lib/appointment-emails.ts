@@ -17,6 +17,13 @@ import { discountOf } from "@/lib/discount"
 import { durationMinutesOf } from "@/lib/schedule-grid"
 import { SERVICE_LINES_INCLUDE, servicesLabel, servicesPriceCents } from "@/lib/appointment-services"
 import { getPolicySettings } from "@/lib/settings"
+import {
+    textBookingConfirmation,
+    textCancellationNotice,
+    textRecurringCancelledNotice,
+    textRecurringConfirmation,
+    textRescheduleNotice,
+} from "@/lib/appointment-sms"
 
 // Server-only (imports prisma) — never import this from a Client Component or
 // from any module one imports; see PROJECT_STATUS.md's RSC-boundary notes.
@@ -136,7 +143,19 @@ async function safely(label: string, fn: () => Promise<void>) {
     }
 }
 
+// Booking events also send their text (appointment-sms.ts) from here, so
+// every route that emails the customer about an appointment texts them too,
+// without each route having to remember. Receipts and credit notices are
+// email only.
+function alongside(email: Promise<void>, text: Promise<void>): Promise<void> {
+    return Promise.all([email, text]).then(() => undefined)
+}
+
 export function sendBookingConfirmation(appointmentId: string) {
+    return alongside(sendBookingConfirmationEmail(appointmentId), textBookingConfirmation(appointmentId))
+}
+
+function sendBookingConfirmationEmail(appointmentId: string) {
     return safely("booking confirmation", async () => {
         const appointment = await loadAppointment(appointmentId)
         // An admin entering a walk-in after the fact (FEATURE_GAPS.md Gap 3)
@@ -150,6 +169,10 @@ export function sendBookingConfirmation(appointmentId: string) {
 }
 
 export function sendRescheduleNotice(appointmentId: string, previousStartTime: Date) {
+    return alongside(sendRescheduleEmail(appointmentId, previousStartTime), textRescheduleNotice(appointmentId))
+}
+
+function sendRescheduleEmail(appointmentId: string, previousStartTime: Date) {
     return safely("reschedule notice", async () => {
         const appointment = await loadAppointment(appointmentId)
         if (!appointment || isInPast(appointment.startTime) || !mayEmail(appointment.user)) return
@@ -163,6 +186,10 @@ export function sendRescheduleNotice(appointmentId: string, previousStartTime: D
 }
 
 export function sendCancellationNotice(appointmentId: string, cancelledBy: "customer" | "salon") {
+    return alongside(sendCancellationEmail(appointmentId, cancelledBy), textCancellationNotice(appointmentId, cancelledBy))
+}
+
+function sendCancellationEmail(appointmentId: string, cancelledBy: "customer" | "salon") {
     return safely("cancellation notice", async () => {
         const appointment = await loadAppointment(appointmentId)
         // Cancelling something that already happened is admin record-keeping
@@ -225,6 +252,17 @@ export function sendRecurringConfirmation(
     createdAppointmentIds: string[],
     skippedStartTimes: Date[],
 ) {
+    return alongside(
+        sendRecurringConfirmationEmail(recurringAppointmentId, createdAppointmentIds, skippedStartTimes),
+        textRecurringConfirmation(recurringAppointmentId, createdAppointmentIds),
+    )
+}
+
+function sendRecurringConfirmationEmail(
+    recurringAppointmentId: string,
+    createdAppointmentIds: string[],
+    skippedStartTimes: Date[],
+) {
     return safely("recurring confirmation", async () => {
         const [series, occurrences] = await Promise.all([
             loadSeries(recurringAppointmentId),
@@ -257,6 +295,17 @@ export function sendRecurringConfirmation(
 }
 
 export function sendRecurringCancelledNotice(
+    recurringAppointmentId: string,
+    changedBy: "customer" | "salon",
+    cancelledAppointmentIds: string[],
+) {
+    return alongside(
+        sendRecurringCancelledEmail(recurringAppointmentId, changedBy, cancelledAppointmentIds),
+        textRecurringCancelledNotice(recurringAppointmentId, cancelledAppointmentIds),
+    )
+}
+
+function sendRecurringCancelledEmail(
     recurringAppointmentId: string,
     changedBy: "customer" | "salon",
     cancelledAppointmentIds: string[],

@@ -7,7 +7,7 @@ export type AvailabilityFormValues = {
     endTime: string
 }
 
-// Index matches Date.getDay() (0 = Sunday), same convention used throughout
+// Index matches salonWeekday() (0 = Sunday), same convention used throughout
 // this project (see PROJECT_STATUS.md).
 export const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
 

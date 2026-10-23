@@ -3,6 +3,7 @@ import { Prisma } from "@/generated/prisma/client";
 import { SLOT_MINUTES, getGridBounds, timeStringToDate, startOfDay, endOfDay, fittingStarts, type ArtistTimeOff, type ArtistWorkingWindow } from "@/lib/schedule-grid";
 import { addDays } from "@/lib/recurring";
 import { toLocalDateKey } from "@/lib/format";
+import { salonWeekday } from "@/lib/salon-time";
 
 // Re-exported so server-side code can keep importing these from this file —
 // only a Client Component (the schedule grid, RecurringSeriesRow, and the
@@ -144,7 +145,7 @@ export async function getOpenSlots(
   options?: { allowPast?: boolean; excludeAppointmentId?: string }
 ): Promise<Date[]> {
   const { availability, timeOff, bookedTimes } = await loadSlotInputs(artistId, startOfDay(date), endOfDay(date), {
-    dayOfWeek: date.getDay(),
+    dayOfWeek: salonWeekday(date),
     excludeAppointmentId: options?.excludeAppointmentId,
   });
   return computeOpenSlots(date, availability, timeOff, bookedTimes, options?.allowPast ?? false);
@@ -172,7 +173,7 @@ export async function getOpenDays(
   );
 
   return dates.flatMap((date) => {
-    const windows = availability.filter((row) => row.dayOfWeek === date.getDay());
+    const windows = availability.filter((row) => row.dayOfWeek === salonWeekday(date));
     if (windows.length === 0) return [];
     const open = computeOpenSlots(date, windows, timeOff.filter((row) => timeOffAppliesOn(row, date)), bookedTimes, false);
     const [first] = fittingStarts(open, durationMinutes);
@@ -207,7 +208,7 @@ export async function getNextOpenings(
 // { start: null, end: null } rather than being omitted, so callers can
 // render a distinct "off today" state instead of an indistinguishable empty one.
 export async function getWorkingWindows(artistIds: string[], date: Date): Promise<ArtistWorkingWindow[]> {
-  const dayOfWeek = date.getDay();
+  const dayOfWeek = salonWeekday(date);
 
   const rows = await prisma.availability.findMany({
     where: { artistId: { in: artistIds }, dayOfWeek },

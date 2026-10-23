@@ -10,6 +10,7 @@ import type { AdminAppointment } from "./appointment-shared"
 import { servicesNotOffered } from "@/lib/artist-services"
 import { isNoShowFlagged, noShowLabel } from "@/lib/customer-summary"
 import { Badge } from "@/components/ui/badge"
+import { formatSalonDateTime } from "@/lib/salon-time"
 
 // Booking from the schedule grid: the clicked cell already fixes the artist,
 // date and time, so only the customer and the services are left to choose.
@@ -52,7 +53,7 @@ export function ScheduleBookSheet({
         setServiceIds((prev) => (prev.includes(id) ? prev.filter((other) => other !== id) : [...prev, id]))
     }
 
-    const when = startTime.toLocaleString("en-US", {
+    const when = formatSalonDateTime(startTime, {
         weekday: "short",
         month: "short",
         day: "numeric",

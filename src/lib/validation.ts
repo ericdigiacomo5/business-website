@@ -85,6 +85,17 @@ export function normalizePhone(value: unknown): string | null {
     return requiredText(value, TEXT_LIMITS.phone)
 }
 
+// A profile phone as a US number in E.164 form ("+16315550143"), or null if
+// it isn't one. Texts only go to US numbers: 10 digits (optionally with a
+// leading 1), where neither the area code nor the exchange starts with 0 or
+// 1. The profile phone itself stays free text; this is only for SMS.
+export function toUsE164(phone: string | null | undefined): string | null {
+    if (!phone) return null
+    const digits = phone.replace(/\D/g, "").replace(/^1(?=\d{10}$)/, "")
+    if (!/^[2-9]\d{2}[2-9]\d{6}$/.test(digits)) return null
+    return `+1${digits}`
+}
+
 // Placeholder phone on rows that predate the phone column (and on Google
 // sign-ups, before Google sign-in was removed). Treated as "missing"
 // everywhere.

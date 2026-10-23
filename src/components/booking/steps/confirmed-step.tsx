@@ -8,6 +8,7 @@ import { DecoFrame } from "@/components/ui/deco"
 import { googleCalendarUrl, icsFile, type CalendarEvent } from "@/lib/calendar"
 import { describeNoticeWindow } from "@/lib/recurring"
 import { SALON_CONTACT, SITE_NAME, formatPhone, mapUrl } from "@/lib/site"
+import { formatSalonDate, formatSalonTime } from "@/lib/salon-time"
 
 type ConfirmedStepProps = {
     // One or more, in the order they were chosen.
@@ -76,10 +77,10 @@ export function ConfirmedStep(props: ConfirmedStepProps) {
                     className="h-20 w-20 rounded-full border-2 border-accent"
                 />
                 <p className="mt-3 font-serif text-3xl font-extrabold leading-tight text-foreground">
-                    {firstStart.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
+                    {formatSalonDate(firstStart, { weekday: "long", month: "long", day: "numeric" })}
                 </p>
                 <p className="mt-1 font-jost text-xl font-semibold text-primary-strong">
-                    {firstStart.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
+                    {formatSalonTime(firstStart)}
                 </p>
                 <p className="mt-3 text-body">
                     {`${serviceNames} with ${artist.name}`}

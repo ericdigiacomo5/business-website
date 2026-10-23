@@ -2,15 +2,16 @@ import { ChevronLeft, ChevronRight } from "lucide-react"
 import { toLocalDateKey } from "@/lib/format"
 import { addDays } from "@/lib/recurring"
 import { startOfWeek, type ScheduleView } from "@/lib/schedule-grid"
+import { formatSalonDate, zonedParts } from "@/lib/salon-time"
 
 // "Nov 22 – 28" or, across a month boundary, "Nov 29 – Dec 5".
 function weekLabel(date: Date): string {
     const start = startOfWeek(date)
     const end = addDays(start, 6)
-    const startText = start.toLocaleDateString("en-US", { month: "short", day: "numeric" })
-    const endText = end.toLocaleDateString(
-        "en-US",
-        start.getMonth() === end.getMonth() ? { day: "numeric" } : { month: "short", day: "numeric" }
+    const startText = formatSalonDate(start, { month: "short", day: "numeric" })
+    const endText = formatSalonDate(
+        end,
+        zonedParts(start).month === zonedParts(end).month ? { day: "numeric" } : { month: "short", day: "numeric" }
     )
     return `${startText} – ${endText}`
 }
@@ -58,7 +59,7 @@ export function DatePicker({
             <span className="min-w-36 text-center text-sm font-medium text-surface-foreground">
                 {view === "week"
                     ? weekLabel(date)
-                    : date.toLocaleDateString("en-US", {
+                    : formatSalonDate(date, {
                           weekday: "long",
                           month: "short",
                           day: "numeric",

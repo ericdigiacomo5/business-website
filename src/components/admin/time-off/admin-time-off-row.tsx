@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button"
 import { ConfirmAction } from "@/components/ui/confirm-action"
 import { toLocalDateKey } from "@/lib/format"
 import { TimeOffForm, type TimeOffFormValues } from "./time-off-form"
+import { formatSalonDate } from "@/lib/salon-time"
 
 export function AdminTimeOffRow({
     timeOff,
@@ -37,10 +38,12 @@ export function AdminTimeOffRow({
     }
 
     const dateLabel = timeOff.endDate
-        ? `${new Date(timeOff.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })} – ${new Date(
-              timeOff.endDate
-          ).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`
-        : new Date(timeOff.date).toLocaleDateString("en-US", {
+        ? `${formatSalonDate(timeOff.date, { month: "short", day: "numeric" })} – ${formatSalonDate(timeOff.endDate, {
+              month: "short",
+              day: "numeric",
+              year: "numeric",
+          })}`
+        : formatSalonDate(timeOff.date, {
               weekday: "short",
               month: "short",
               day: "numeric",

@@ -8,6 +8,7 @@ import { customerBookingLimitError, loadServicesToBook, materializeSeries } from
 import { customerMaxSeriesWeeks } from "@/lib/booking-limits";
 import { parseServiceIds, SERVICE_LINES_INCLUDE, servicesFitOneAppointment } from "@/lib/appointment-services";
 import { parseLocalDate } from "@/lib/format";
+import { salonWeekday } from "@/lib/salon-time";
 import { getPolicySettings, isBookingEnabled } from "@/lib/settings";
 import { readJsonObject } from "@/lib/request";
 import { EMAIL_UNVERIFIED_MESSAGE, PROFILE_INCOMPLETE_MESSAGE } from "@/lib/validation";
@@ -111,7 +112,7 @@ export async function POST(request: Request) {
         )
     }
 
-    if (parsedSeriesStart.getDay() !== dayOfWeek) {
+    if (salonWeekday(parsedSeriesStart) !== dayOfWeek) {
         return Response.json(
             { error: "Series start date does not fall on the given day of week" },
             { status: 400 }

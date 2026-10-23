@@ -1,4 +1,5 @@
 import { SLOT_MINUTES, timeStringToDate, type ScheduleColumn } from "@/lib/schedule-grid"
+import { formatSalonDate, formatSalonTime, salonMinutesOfDay } from "@/lib/salon-time"
 import { Badge } from "@/components/ui/badge"
 import { ScheduleBlock } from "./schedule-block"
 import { ARTIST_COLOR_CYCLE, type AdminAppointment } from "./appointment-shared"
@@ -38,7 +39,7 @@ export function ScheduleArtistColumn({
     const color = ARTIST_COLOR_CYCLE[colorIndex % ARTIST_COLOR_CYCLE.length]
     const isOff = workingWindow.start === null || workingWindow.end === null
     const column = columnIndex + 2 // offset by 1 for the time-axis column (grid columns are 1-indexed)
-    const dayLabel = date.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })
+    const dayLabel = formatSalonDate(date, { weekday: "short", month: "short", day: "numeric" })
 
     const windowStart = workingWindow.start ? toMinutes(workingWindow.start) : null
     const windowEnd = workingWindow.end ? toMinutes(workingWindow.end) : null
@@ -49,7 +50,7 @@ export function ScheduleArtistColumn({
     for (const appointment of appointments) {
         const start = new Date(appointment.startTime)
         const end = new Date(appointment.endTime)
-        const startMinutes = start.getHours() * 60 + start.getMinutes()
+        const startMinutes = salonMinutesOfDay(start)
         const slots = (end.getTime() - start.getTime()) / 60_000 / SLOT_MINUTES
         for (let i = 0; i < slots; i++) occupied.add(startMinutes + i * SLOT_MINUTES)
     }
@@ -109,10 +110,7 @@ export function ScheduleArtistColumn({
                         onClick={() => onBookSlot(artist.id, startTime)}
                         // Names the day too: in the week view, "10:00 AM"
                         // alone repeats in every column.
-                        aria-label={`Book ${artist.name} on ${dayLabel} at ${startTime.toLocaleTimeString("en-US", {
-                            hour: "numeric",
-                            minute: "2-digit",
-                        })}`}
+                        aria-label={`Book ${artist.name} on ${dayLabel} at ${formatSalonTime(startTime)}`}
                         className="cursor-pointer border-b border-l border-border hover:bg-accent/15 focus-visible:bg-accent/15 focus-visible:outline-none"
                     />
                 )

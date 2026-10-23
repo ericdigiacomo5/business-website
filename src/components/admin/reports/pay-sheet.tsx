@@ -12,6 +12,7 @@ import {
     type VisitFigures,
 } from "@/lib/pay-report"
 import { SalesTable } from "./sales-table"
+import { formatSalonDate, formatSalonDateTime, formatSalonTime } from "@/lib/salon-time"
 
 function plural(count: number, word: string): string {
     return `${count} ${word}${count === 1 ? "" : "s"}`
@@ -32,12 +33,12 @@ function paidBy(visit: VisitFigures["visit"]): string {
 }
 
 function visitWhen(date: Date): string {
-    const day = date.toLocaleDateString("en-US", {
+    const day = formatSalonDate(date, {
         weekday: "short",
         month: "short",
         day: "numeric",
     })
-    const time = date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })
+    const time = formatSalonTime(date)
     return `${day}, ${time}`
 }
 
@@ -285,11 +286,11 @@ export function PaySheet({
                 )}
                 {summary.backfilledPriceVisits > 0 && (
                     <p>
-                        {`${plural(summary.backfilledPriceVisits, "visit")} ${summary.backfilledPriceVisits === 1 ? "was" : "were"} booked before ${LINE_PRICES_RECORDED_FROM.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}, before each booking recorded its own prices; ${summary.backfilledPriceVisits === 1 ? "its price is" : "their prices are"} the service prices as of that date and may differ slightly from what was charged.`}
+                        {`${plural(summary.backfilledPriceVisits, "visit")} ${summary.backfilledPriceVisits === 1 ? "was" : "were"} booked before ${formatSalonDate(LINE_PRICES_RECORDED_FROM, { month: "short", day: "numeric", year: "numeric" })}, before each booking recorded its own prices; ${summary.backfilledPriceVisits === 1 ? "its price is" : "their prices are"} the service prices as of that date and may differ slightly from what was charged.`}
                     </p>
                 )}
                 <p>
-                    {`Generated ${generatedAt.toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })}. Figures are calculated from checked-out visits each time, so they change if a visit in this period is edited.`}
+                    {`Generated ${formatSalonDateTime(generatedAt, { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })}. Figures are calculated from checked-out visits each time, so they change if a visit in this period is edited.`}
                 </p>
             </div>
         </section>

@@ -10,6 +10,7 @@ import { formatDuration, formatPrice, toLocalDateKey, toLocalTimeKey } from "@/l
 import { maxSeriesEnd } from "@/lib/recurring"
 import { EMAIL_UNVERIFIED_MESSAGE, PROFILE_INCOMPLETE_MESSAGE } from "@/lib/validation"
 import { appointmentLengthOptions } from "@/lib/schedule-grid"
+import { formatSalonDateTime, salonWeekday } from "@/lib/salon-time"
 import type { BookedAppointment, RecurringBookingResult } from "../wizard-state"
 
 const INTERVAL_OPTIONS = [
@@ -118,7 +119,7 @@ export function ReviewStep({
                       body: JSON.stringify({
                           artistId: artist.id,
                           serviceIds,
-                          dayOfWeek: new Date(startTime).getDay(),
+                          dayOfWeek: salonWeekday(new Date(startTime)),
                           startTime: toLocalTimeKey(new Date(startTime)),
                           intervalWeeks,
                           seriesStart: toLocalDateKey(new Date(startTime)),
@@ -198,7 +199,7 @@ export function ReviewStep({
                 <div className="flex justify-between px-4 py-3">
                     <dt className="text-sm text-muted-foreground">When</dt>
                     <dd className="text-sm font-medium text-surface-foreground">
-                        {new Date(startTime).toLocaleString("en-US", {
+                        {formatSalonDateTime(startTime, {
                             weekday: "short",
                             month: "short",
                             day: "numeric",

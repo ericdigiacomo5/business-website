@@ -1,5 +1,8 @@
 import bcrypt from "bcryptjs"
+import { after } from "next/server"
 import { prisma } from "@/lib/prisma"
+import { optInToSms } from "@/lib/sms-consent-data"
+import { sendOptInRequest } from "@/lib/appointment-sms"
 import { normalizeEmail, normalizePhone, personNameError, requiredPersonName } from "@/lib/validation"
 import { BCRYPT_COST, passwordError } from "@/lib/password"
 import { readJsonObject } from "@/lib/request"
@@ -62,6 +65,16 @@ export async function POST(request: Request) {
     // Anyone can type any address here, so the account can't book (or get
     // booking emails) until its owner clicks the link this sends.
     await issueEmailVerification(user.id, email, "signup")
+
+    // The optional texting box. Only an explicit true counts (never a
+    // default), and it's never required — registration succeeds either way.
+    // Texts start only after a YES reply from the phone (sms-consent-data.ts).
+    // A number texts can't reach (not a US number) is silently skipped; My
+    // Account explains it there.
+    if (body.smsOptIn === true) {
+        const optIn = await optInToSms(user.id, "register")
+        if (optIn.ok) after(() => sendOptInRequest(user.id))
+    }
 
     // Scrubbed response — never echo passwordHash back, same reasoning as
     // authorize() in src/auth.ts. Does not sign the user in; that's a

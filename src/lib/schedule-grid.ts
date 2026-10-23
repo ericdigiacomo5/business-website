@@ -6,6 +6,7 @@
 // server-side code doesn't need two import paths.
 
 import type { Artist } from "@/generated/prisma/client";
+import { zonedParts, zonedToInstant } from "@/lib/salon-time";
 
 export const SLOT_MINUTES = 15;
 
@@ -71,43 +72,46 @@ export type ScheduleColumn = {
   timeOff: ArtistTimeOff[];
 };
 
-// No timezone handling yet: times are interpreted in the server's local
-// timezone. Fine for local dev, but a hard blocker for the Cloudflare
-// Workers deploy (Workers always run in UTC — see PROJECT_STATUS.md's
-// timezone note). Keep all local-time date math in helpers like these so the
-// eventual fix lands in one place.
+// Day boundaries and times of day are the salon's (America/New_York), not
+// the server's: Workers run in UTC. Built on src/lib/salon-time.ts. A
+// "date" here is the instant of the salon's midnight that day.
 export function startOfDay(date: Date): Date {
-  const result = new Date(date);
-  result.setHours(0, 0, 0, 0);
-  return result;
+  const p = zonedParts(date);
+  return zonedToInstant(p.year, p.month, p.day);
 }
 
 // Sunday of the week containing `date`, at midnight — weeks run Sunday to
 // Saturday, matching the admin month calendar's columns.
 export function startOfWeek(date: Date): Date {
-  const result = startOfDay(date);
-  result.setDate(result.getDate() - result.getDay());
-  return result;
+  const p = zonedParts(date);
+  return zonedToInstant(p.year, p.month, p.day - p.weekday);
 }
 
 // The 1st of the month containing `date`, at midnight.
 export function startOfMonth(date: Date): Date {
-  const result = startOfDay(date);
-  result.setDate(1);
-  return result;
+  const p = zonedParts(date);
+  return zonedToInstant(p.year, p.month, 1);
 }
 
+// The last millisecond of the salon's day: one ms before the next midnight.
 export function endOfDay(date: Date): Date {
-  const result = new Date(date);
-  result.setHours(23, 59, 59, 999);
-  return result;
+  const p = zonedParts(date);
+  return new Date(zonedToInstant(p.year, p.month, p.day + 1).getTime() - 1);
 }
 
+// The instant the salon's clock reads `time` ("HH:mm") on `date`'s day.
 export function timeStringToDate(date: Date, time: string): Date {
   const [hours, minutes] = time.split(":").map(Number);
-  const result = new Date(date);
-  result.setHours(hours, minutes, 0, 0);
-  return result;
+  const p = zonedParts(date);
+  return zonedToInstant(p.year, p.month, p.day, hours, minutes);
+}
+
+// On the 15-minute booking grid: :00, :15, :30 or :45 on the salon's clock,
+// with no seconds. Every booking and reschedule route checks this.
+export function isOnSlotBoundary(date: Date): boolean {
+  if (Number.isNaN(date.getTime())) return false;
+  const p = zonedParts(date);
+  return p.minute % SLOT_MINUTES === 0 && p.second === 0 && date.getTime() % 1000 === 0;
 }
 
 // Of a day's open 15-minute slots, the ones a visit of `durationMinutes` can
@@ -130,7 +134,7 @@ export function fittingStarts(openSlots: Date[], durationMinutes: number): Date[
 // "Morning" before noon, "Afternoon" until 5pm, "Evening" after — for
 // grouping a long list of times (the booking wizard's slot grid).
 export function partOfDay(date: Date): "Morning" | "Afternoon" | "Evening" {
-  const hour = date.getHours();
+  const hour = zonedParts(date).hour;
   return hour < 12 ? "Morning" : hour < 17 ? "Afternoon" : "Evening";
 }
 

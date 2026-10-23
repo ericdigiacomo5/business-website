@@ -16,6 +16,7 @@ import { SERVICE_LINES_INCLUDE } from "@/lib/appointment-services"
 import { SAFE_USER_SELECT_BASIC } from "@/lib/user-select"
 import { requireAdminPage } from "@/lib/require-admin-page"
 import { ARTIST_SERVICES_INCLUDE, offeredServiceIdsOf } from "@/lib/artist-services"
+import { formatSalonDate } from "@/lib/salon-time"
 
 export default async function AdminBookingsPage({
     searchParams,
@@ -159,7 +160,7 @@ export default async function AdminBookingsPage({
             date: day,
             heading:
                 view === "week"
-                    ? day.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })
+                    ? formatSalonDate(day, { weekday: "short", month: "short", day: "numeric" })
                     : artist.name,
             isToday: view === "week" && toLocalDateKey(day) === todayKey,
             colorIndex: colorIndexOf(artist.id),

@@ -1,10 +1,11 @@
 import { Badge } from "@/components/ui/badge"
 import { formatPrice } from "@/lib/format"
 import { isNoShowFlagged, noShowLabel, type CustomerSummary } from "@/lib/customer-summary"
+import { formatSalonDate } from "@/lib/salon-time"
 
 function formatDay(date: Date | null): string {
     return date
-        ? date.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" })
+        ? formatSalonDate(date, { weekday: "short", month: "short", day: "numeric", year: "numeric" })
         : "—"
 }
 

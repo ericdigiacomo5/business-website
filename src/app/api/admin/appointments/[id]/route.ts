@@ -4,7 +4,7 @@ import { readJsonObject } from "@/lib/request";
 import { sendCancellationNotice, sendReceipt, sendRescheduleNotice } from "@/lib/appointment-emails";
 import { prisma } from "@/lib/prisma";
 import { AppointmentStatus, PaymentMethod, Prisma, type DiscountType } from "@/generated/prisma/client";
-import { durationMinutesOf, isValidAppointmentLength, MAX_APPOINTMENT_MINUTES } from "@/lib/schedule-grid";
+import { durationMinutesOf, isOnSlotBoundary, isValidAppointmentLength, MAX_APPOINTMENT_MINUTES } from "@/lib/schedule-grid";
 import { discountError, discountOf, totalCents } from "@/lib/discount";
 import { InsufficientCreditError, spendCredit } from "@/lib/credit";
 import { snapshotPayAtCheckout } from "@/lib/pay-terms";
@@ -283,10 +283,7 @@ export async function PATCH(
         }
 
         const candidate = new Date(startTime)
-        const isOnSlotGrid =
-            candidate.getMinutes() % 15 === 0 &&
-            candidate.getSeconds() === 0 &&
-            candidate.getMilliseconds() === 0
+        const isOnSlotGrid = isOnSlotBoundary(candidate)
         if (isNaN(candidate.getTime()) || !isOnSlotGrid) {
             return Response.json(
                 { error: 'startTime is invalid' },
@@ -422,6 +419,7 @@ export async function PATCH(
                     // it so the job reminds about the new one. (A length-only
                     // change leaves the start, and so the reminder, as is.)
                     data.reminderSentAt = null
+                    data.smsReminderSentAt = null
                 }
             }
 

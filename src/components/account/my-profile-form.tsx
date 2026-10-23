@@ -65,6 +65,10 @@ export function MyProfileForm({
 
             if (returnTo) {
                 router.push(returnTo)
+            } else {
+                // Re-reads the page, so the Text Messages section shows that
+                // a new phone number turned texts off.
+                router.refresh()
             }
         } catch {
             setError("Network error. Please try again.")

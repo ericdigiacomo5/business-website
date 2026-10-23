@@ -2,6 +2,7 @@
 
 import { useSyncExternalStore } from "react"
 import { SLOT_MINUTES } from "@/lib/schedule-grid"
+import { salonMinutesOfDay } from "@/lib/salon-time"
 
 // A minute-resolution clock shared by every subscriber. The server snapshot
 // is null, so the line is never in the server HTML (the server's "now" and
@@ -10,10 +11,8 @@ function subscribe(onTick: () => void) {
     const interval = setInterval(onTick, 30_000)
     return () => clearInterval(interval)
 }
-const minuteOfDay = () => {
-    const now = new Date()
-    return now.getHours() * 60 + now.getMinutes()
-}
+// On the salon's clock, so the line is right on a laptop set to another zone.
+const minuteOfDay = () => salonMinutesOfDay(new Date())
 
 // The red "now" line across today's columns on the schedule grid
 // (FEATURE_GAPS.md U13), so staff can see at a glance who's running late.

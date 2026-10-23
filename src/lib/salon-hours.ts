@@ -6,6 +6,7 @@
 
 import { prisma } from "@/lib/prisma"
 import { endOfDay, startOfDay, timeOffDateRangeOverlap } from "@/lib/availability"
+import { salonWeekday } from "@/lib/salon-time"
 
 export type DayHours = { dayOfWeek: number; open: string; close: string } | { dayOfWeek: number; open: null; close: null }
 
@@ -40,7 +41,7 @@ export async function getSalonHours(now: Date = new Date()): Promise<SalonHours>
         }
     })
 
-    const today = week[now.getDay()]
+    const today = week[salonWeekday(now)]
     const closedToday =
         today.open !== null && closures.some((closure) => closure.startTime <= today.open && closure.endTime >= today.close)
 

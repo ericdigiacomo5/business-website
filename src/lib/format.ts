@@ -1,3 +1,5 @@
+import { calendarDateKey, dateKeyParts, formatSalonDate, zonedParts, zonedToInstant } from "@/lib/salon-time"
+
 export function formatPrice(cents: number): string {
     return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100)
 }
@@ -9,22 +11,18 @@ export function formatDuration(minutes: number): string {
     return rest === 0 ? `${hours} hr` : `${hours} hr ${rest} min`
 }
 
-// 'YYYY-MM-DD' in local time — not `date.toISOString()`, which is UTC-based
-// and can shift to the wrong calendar day near midnight. Matches the
-// local-time convention used throughout the backend (see PROJECT_STATUS.md).
+// 'YYYY-MM-DD' on the salon's calendar — not `date.toISOString()`, which is
+// UTC-based and is the next day from 7 or 8 PM in New York.
 export function toLocalDateKey(date: Date): string {
-    const year = date.getFullYear()
-    const month = String(date.getMonth() + 1).padStart(2, "0")
-    const day = String(date.getDate()).padStart(2, "0")
-    return `${year}-${month}-${day}`
+    const p = zonedParts(date)
+    return calendarDateKey(p.year, p.month, p.day)
 }
 
-// 'HH:mm' in local time — the time-of-day component paired with a recurring
-// rule's dayOfWeek, same convention as Availability/TimeOff.
+// 'HH:mm' on the salon's clock — the time-of-day component paired with a
+// recurring rule's dayOfWeek, same convention as Availability/TimeOff.
 export function toLocalTimeKey(date: Date): string {
-    const hours = String(date.getHours()).padStart(2, "0")
-    const minutes = String(date.getMinutes()).padStart(2, "0")
-    return `${hours}:${minutes}`
+    const p = zonedParts(date)
+    return `${String(p.hour).padStart(2, "0")}:${String(p.minute).padStart(2, "0")}`
 }
 
 // "09:00" → "9 AM", "17:30" → "5:30 PM" — for opening hours.
@@ -39,31 +37,18 @@ export function formatTimeOfDay(time: string): string {
 // opening is (artist cards, the booking strip). `now` for tests.
 export function formatOpening(date: Date, now: Date = new Date()): string {
     const time = formatTimeOfDay(toLocalTimeKey(date))
-    const tomorrow = new Date(now)
-    tomorrow.setDate(tomorrow.getDate() + 1)
-    if (toLocalDateKey(date) === toLocalDateKey(now)) return `Today ${time}`
-    if (toLocalDateKey(date) === toLocalDateKey(tomorrow)) return `Tomorrow ${time}`
-    return `${date.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}, ${time}`
+    const today = zonedParts(now)
+    if (toLocalDateKey(date) === calendarDateKey(today.year, today.month, today.day)) return `Today ${time}`
+    if (toLocalDateKey(date) === calendarDateKey(today.year, today.month, today.day + 1)) return `Tomorrow ${time}`
+    return `${formatSalonDate(date, { weekday: "short", month: "short", day: "numeric" })}, ${time}`
 }
 
-// Inverse of toLocalDateKey(): 'YYYY-MM-DD' (local time) -> Date, via the
-// multi-arg Date constructor rather than `new Date(dateString)` — a bare
-// date-only string is parsed as UTC midnight per the JS spec, which can land
-// on the wrong calendar day once shifted into local time. Round-trips the
-// parts back out to catch anything that overflowed (month 13, day 45, etc.)
-// instead of silently landing on some other valid-but-wrong date. Returns
-// null for anything malformed. For an end-of-day bound, compose with
-// endOfDay() from @/lib/schedule-grid rather than passing a flag here.
+// Inverse of toLocalDateKey(): 'YYYY-MM-DD' → the instant of the salon's
+// midnight that day. Never `new Date(dateString)`, which the JS spec parses
+// as UTC midnight (the evening before, in New York). Returns null for
+// anything malformed or not a real date (month 13, Feb 30). For an
+// end-of-day bound, compose with endOfDay() from @/lib/schedule-grid.
 export function parseLocalDate(value: string): Date | null {
-    const parts = value.split("-").map(Number)
-    if (parts.length !== 3 || parts.some((n) => Number.isNaN(n))) return null
-
-    const [year, month, day] = parts
-    const parsed = new Date(year, month - 1, day)
-    const isValid =
-        parsed.getFullYear() === year &&
-        parsed.getMonth() === month - 1 &&
-        parsed.getDate() === day
-
-    return isValid ? parsed : null
+    const parts = dateKeyParts(value)
+    return parts ? zonedToInstant(parts.year, parts.month, parts.day) : null
 }

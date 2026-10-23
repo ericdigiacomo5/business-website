@@ -2,6 +2,7 @@ import { SALON_CONTACT, SITE_NAME, formatPhone } from "@/lib/site"
 import { formatDuration, formatPrice } from "@/lib/format"
 import { amountDueCents, describeDiscount, discountCents, totalCents, type Discount } from "@/lib/discount"
 import { describeNoticeWindow } from "@/lib/recurring"
+import { formatSalonDate, formatSalonTime } from "@/lib/salon-time"
 
 type RenderedEmail = {
     subject: string
@@ -22,23 +23,19 @@ function escapeHtml(value: string): string {
         .replace(/'/g, "&#39;")
 }
 
-// Server-local time, same "server clock = salon clock" simplification as the
-// rest of the backend (see PROJECT_STATUS.md's timezone note) — an email sent
-// from a server in a different timezone than the salon would show the wrong
-// hour here, which is one more reason that assumption is flagged.
+// On the salon's clock (salon-time.ts), whatever zone the server runs in.
 export function formatAppointmentWhen(date: Date): string {
-    const day = date.toLocaleDateString("en-US", {
+    const day = formatSalonDate(date, {
         weekday: "long",
         month: "long",
         day: "numeric",
         year: "numeric",
     })
-    const time = date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })
-    return `${day} at ${time}`
+    return `${day} at ${formatSalonTime(date)}`
 }
 
 function formatShortDate(date: Date): string {
-    return date.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })
+    return formatSalonDate(date, { weekday: "short", month: "short", day: "numeric" })
 }
 
 // Shared shape for every appointment email: a heading, a few paragraphs, an

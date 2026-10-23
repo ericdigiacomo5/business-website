@@ -1,4 +1,5 @@
 import { SLOT_MINUTES } from "@/lib/schedule-grid"
+import { salonMinutesOfDay } from "@/lib/salon-time"
 import { servicesLabel } from "@/lib/appointment-services"
 import {
     appointmentCategory,
@@ -19,7 +20,7 @@ export function ScheduleBlock({
     onSelect: (id: string) => void
 }) {
     const start = new Date(appointment.startTime)
-    const startMinutes = start.getHours() * 60 + start.getMinutes()
+    const startMinutes = salonMinutesOfDay(start)
     const durationMinutes = (new Date(appointment.endTime).getTime() - start.getTime()) / 60_000
 
     // Both are exact multiples of SLOT_MINUTES — every appointment is booked

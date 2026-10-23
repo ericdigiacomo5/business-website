@@ -1,4 +1,5 @@
 import { toLocalDateKey } from "@/lib/format"
+import { formatSalonDate, zonedParts } from "@/lib/salon-time"
 
 export function DayStrip({
     days,
@@ -20,7 +21,7 @@ export function DayStrip({
                 const key = toLocalDateKey(day)
                 const selected = key === selectedDate
                 const full = openDays !== null && !openDays.has(key)
-                const label = day.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })
+                const label = formatSalonDate(day, { weekday: "long", month: "long", day: "numeric" })
                 return (
                     <button
                         key={key}
@@ -38,9 +39,9 @@ export function DayStrip({
                         }
                     >
                         <span className="text-xs uppercase opacity-80">
-                            {day.toLocaleDateString("en-US", { weekday: "short" })}
+                            {formatSalonDate(day, { weekday: "short" })}
                         </span>
-                        <span className={"text-base font-semibold " + (full ? "line-through" : "")}>{day.getDate()}</span>
+                        <span className={"text-base font-semibold " + (full ? "line-through" : "")}>{zonedParts(day).day}</span>
                     </button>
                 )
             })}

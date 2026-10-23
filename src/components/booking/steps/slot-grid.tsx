@@ -1,4 +1,5 @@
 import { partOfDay } from "@/lib/schedule-grid"
+import { formatSalonTime } from "@/lib/salon-time"
 
 // Above this many times, they're grouped into Morning / Afternoon / Evening
 // so a long day stays scannable (FEATURE_GAPS.md U6).
@@ -51,7 +52,7 @@ export function SlotGrid({
                                             : "border-line bg-surface text-surface-foreground shadow-sm hover:border-foreground/40")
                                     }
                                 >
-                                    {new Date(slot).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
+                                    {formatSalonTime(slot)}
                                 </button>
                             )
                         })}

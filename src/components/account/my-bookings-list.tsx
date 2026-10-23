@@ -11,6 +11,7 @@ import { ConfirmAction } from "@/components/ui/confirm-action"
 import { DateTimeStep } from "@/components/booking/steps/datetime-step"
 import { customerChangeDeadline, describeNoticeWindow } from "@/lib/recurring"
 import { durationMinutesOf } from "@/lib/schedule-grid"
+import { formatSalonDateTime } from "@/lib/salon-time"
 
 function isUpcoming(appointment: AppointmentWithRelations, now: number) {
     const isActive = appointment.status === "PENDING" || appointment.status === "CONFIRMED"
@@ -19,7 +20,7 @@ function isUpcoming(appointment: AppointmentWithRelations, now: number) {
 }
 
 function formatWhen(iso: string) {
-    return new Date(iso).toLocaleString("en-US", {
+    return formatSalonDateTime(iso, {
         weekday: "short",
         month: "short",
         day: "numeric",

@@ -10,6 +10,7 @@
 // alongside bookOccurrence() — that file has no client consumers.
 
 import { startOfDay } from "@/lib/schedule-grid";
+import { zonedParts, zonedToInstant } from "@/lib/salon-time";
 
 // The two salon policies an admin can change on the dashboard (stored in
 // AppSettings; read server-side via getPolicySettings() in settings.ts).
@@ -44,13 +45,12 @@ export const SKIP_REASON = {
     UNAVAILABLE: "That time wasn't available",
 } as const;
 
-// setDate (not raw ms arithmetic) so a week-boundary that crosses a DST
-// transition still lands on the same local wall-clock time — adding
-// 7*24*60*60*1000 ms would drift by an hour on that week.
+// The same wall-clock time on the salon's clock, `days` calendar days later.
+// Not raw ms arithmetic: adding 7*24*60*60*1000 ms across a DST change would
+// drift by an hour (a 10 AM standing appointment would become 9 or 11 AM).
 export function addDays(date: Date, days: number): Date {
-    const result = new Date(date);
-    result.setDate(result.getDate() + days);
-    return result;
+    const p = zonedParts(date);
+    return zonedToInstant(p.year, p.month, p.day + days, p.hour, p.minute, p.second, date.getTime() % 1000);
 }
 
 // Exclusive upper bound for a customer booking's startTime: midnight at the
@@ -80,7 +80,7 @@ export function describeNoticeWindow(hours: number): string {
     return hours === 1 ? "1 hour" : `${hours} hours`;
 }
 
-// Calendar dates (midnight local time, no time-of-day) on which a recurring
+// Calendar dates (the salon's midnight, no time-of-day) on which a recurring
 // rule produces an occurrence, from seriesStart through seriesEnd inclusive.
 export function generateOccurrenceDates(
     seriesStart: Date,

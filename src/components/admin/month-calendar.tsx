@@ -3,7 +3,8 @@
 import { useState } from "react"
 import Link from "next/link"
 import { ChevronLeft, ChevronRight } from "lucide-react"
-import { parseLocalDate, toLocalDateKey } from "@/lib/format"
+import { parseLocalDate } from "@/lib/format"
+import { calendarDateKey, calendarWeekday, dateKeyParts, daysInMonth, formatSalonDate } from "@/lib/salon-time"
 import type { ScheduleView } from "@/lib/schedule-grid"
 
 const WEEKDAYS = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"]
@@ -14,9 +15,9 @@ const WEEKDAYS = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"]
 // and a reload or shared link still lands on the same day. The only client
 // state is which *month* is being browsed, which nothing else needs to know.
 //
-// The arithmetic here is pure calendar math on year/month/day values
-// (`new Date(y, m, d)`), never on instants, so it's unaffected by the
-// timezone issue flagged for the Cloudflare deploy.
+// The arithmetic here is pure calendar math on year/month/day values (the
+// calendar helpers in salon-time.ts), never on instants, so it gives the same
+// grid on the server (UTC) and in any browser. Months are 1–12.
 export function MonthCalendar({
     selectedDateKey,
     todayKey,
@@ -34,20 +35,21 @@ export function MonthCalendar({
     // Day or week — carried so picking a date doesn't switch layouts.
     scheduleView: ScheduleView
 }) {
-    const selected = parseLocalDate(selectedDateKey) ?? new Date()
-    const [view, setView] = useState({ year: selected.getFullYear(), month: selected.getMonth() })
+    // todayKey comes from the server's toLocalDateKey(), so it always parses.
+    const selected = dateKeyParts(selectedDateKey) ?? dateKeyParts(todayKey)!
+    const [view, setView] = useState({ year: selected.year, month: selected.month })
 
-    const firstWeekday = new Date(view.year, view.month, 1).getDay()
-    const daysInMonth = new Date(view.year, view.month + 1, 0).getDate()
-    const monthLabel = new Date(view.year, view.month, 1).toLocaleDateString("en-US", {
+    const firstWeekday = calendarWeekday(view.year, view.month, 1)
+    const monthDays = daysInMonth(view.year, view.month)
+    const monthLabel = formatSalonDate(parseLocalDate(calendarDateKey(view.year, view.month, 1))!, {
         month: "long",
         year: "numeric",
     })
 
     function shiftMonth(delta: number) {
-        // Date normalizes month -1 / 12 into the neighboring year.
-        const d = new Date(view.year, view.month + delta, 1)
-        setView({ year: d.getFullYear(), month: d.getMonth() })
+        // calendarDateKey rolls month 0 / 13 into the neighboring year.
+        const next = dateKeyParts(calendarDateKey(view.year, view.month + delta, 1))!
+        setView({ year: next.year, month: next.month })
     }
 
     // Carry the active filters along, same reason DatePicker and
@@ -63,7 +65,7 @@ export function MonthCalendar({
 
     const cells: (number | null)[] = [
         ...Array.from({ length: firstWeekday }, () => null),
-        ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
+        ...Array.from({ length: monthDays }, (_, i) => i + 1),
     ]
 
     return (
@@ -102,8 +104,7 @@ export function MonthCalendar({
                 {cells.map((day, i) => {
                     if (day === null) return <span key={`blank-${i}`} />
 
-                    const date = new Date(view.year, view.month, day)
-                    const key = toLocalDateKey(date)
+                    const key = calendarDateKey(view.year, view.month, day)
                     const isSelected = key === selectedDateKey
                     const isToday = key === todayKey
 
@@ -115,7 +116,7 @@ export function MonthCalendar({
                             // would server-render ~30 schedule pages (each
                             // with its own DB queries) on every visit.
                             prefetch={false}
-                            aria-label={date.toLocaleDateString("en-US", {
+                            aria-label={formatSalonDate(parseLocalDate(key)!, {
                                 weekday: "long",
                                 month: "long",
                                 day: "numeric",

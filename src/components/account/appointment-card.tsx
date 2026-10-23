@@ -5,6 +5,7 @@ import { Price } from "@/components/ui/price"
 import { discountOf } from "@/lib/discount"
 import { formatDuration } from "@/lib/format"
 import { durationMinutesOf } from "@/lib/schedule-grid"
+import { formatSalonDateTime } from "@/lib/salon-time"
 
 export type AppointmentWithRelations = Appointment & { artist: Artist; services: ServiceLine[] }
 
@@ -61,7 +62,7 @@ export function AppointmentCard({
                 </div>
                 <p className="mt-1 text-sm text-muted-foreground">with {appointment.artist.name}</p>
                 <p className="mt-0.5 text-sm text-muted-foreground">
-                    {new Date(appointment.startTime).toLocaleString("en-US", {
+                    {formatSalonDateTime(appointment.startTime, {
                         month: "short",
                         day: "numeric",
                         year: "numeric",

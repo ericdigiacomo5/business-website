@@ -75,12 +75,24 @@ test("every /api/admin handler awaits requireAdmin() or requireAdminId() first",
 // CSRF (SECURITY_AUDIT L1): every mutating handler refuses cross-origin
 // requests — through readJsonObject() (which also requires a JSON content
 // type) or, for one without a body, rejectCrossOrigin().
-// Exempt: Auth.js's own handlers (they check their own CSRF token) and the
-// cron job route (Bearer secret, no cookies involved).
+// Exempt: Auth.js's own handlers (they check their own CSRF token), the
+// cron job route (Bearer secret, no cookies involved) and Twilio's webhooks
+// (form-encoded, no cookies; each must check Twilio's signature instead —
+// tested below).
+const TWILIO_WEBHOOKS = [path.join("sms", "inbound", "route.ts"), path.join("sms", "status", "route.ts")]
 const CSRF_EXEMPT = new Set([
     path.join("auth", "[...nextauth]", "route.ts"),
     path.join("jobs", "send-reminders", "route.ts"),
+    ...TWILIO_WEBHOOKS,
 ])
+
+test("Twilio webhooks check the signature before anything else", () => {
+    for (const route of TWILIO_WEBHOOKS) {
+        for (const { method, body } of handlersIn(readFileSync(path.join(APP_DIR, "api", route), "utf8"))) {
+            assert.equal(awaitsIn(body)[0], "readTwilioRequest", `api/${route} ${method}: the first await must be readTwilioRequest(request)`)
+        }
+    }
+})
 
 test("every mutating API handler refuses cross-origin requests", () => {
     const apiDir = path.join(APP_DIR, "api")

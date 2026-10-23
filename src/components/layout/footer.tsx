@@ -4,6 +4,7 @@ import { SALON_CONTACT, SITE_NAME, formatPhone, mapUrl } from "@/lib/site"
 import { getSalonHours } from "@/lib/salon-hours"
 import { formatTimeOfDay } from "@/lib/format"
 import { DecoRule } from "@/components/ui/deco"
+import { salonYear } from "@/lib/salon-time"
 
 const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 
@@ -111,9 +112,19 @@ export async function Footer() {
                     )}
                 </div>
             </div>
-            <p className="mx-auto max-w-6xl border-t border-on-dark-subtle/40 px-4 py-5 text-sm text-on-dark-subtle">
-                &copy; {new Date().getFullYear()} {SITE_NAME} All rights reserved.
-            </p>
+            <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-x-6 border-t border-on-dark-subtle/40 px-4 py-3 text-sm text-on-dark-subtle">
+                <p className="py-2">
+                    &copy; {salonYear()} {SITE_NAME} All rights reserved.
+                </p>
+                <nav aria-label="Legal" className="flex gap-4">
+                    <Link href="/privacy" className="flex min-h-11 items-center text-on-dark-subtle hover:text-background">
+                        Privacy Policy
+                    </Link>
+                    <Link href="/terms" className="flex min-h-11 items-center text-on-dark-subtle hover:text-background">
+                        Terms
+                    </Link>
+                </nav>
+            </div>
         </footer>
     )
 }

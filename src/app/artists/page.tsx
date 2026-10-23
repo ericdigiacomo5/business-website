@@ -16,13 +16,13 @@ export default async function ArtistsPage() {
                 <p className="mt-4 text-on-dark">Meet the team and browse their work.</p>
             </section>
 
-            <div className="mx-auto w-full max-w-6xl px-4 py-14">
+            <div className="mx-auto w-full max-w-5xl px-4 py-14">
                 {artists.length === 0 ? (
                     <EmptyState icon={Users} title="Our artists are coming soon">
                         We&apos;re putting the team page together. Check back shortly.
                     </EmptyState>
                 ) : (
-                    <div className="grid grid-cols-1 gap-8 sm:grid-cols-2 md:grid-cols-3">
+                    <div className="flex flex-col gap-12 md:gap-16">
                         {artists.map((artist) => (
                             <ArtistCard key={artist.id} artist={artist} />
                         ))}

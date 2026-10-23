@@ -4,6 +4,7 @@
 // drift apart (same idea as SAFE_USER_SELECT).
 
 import type { CreditEntryKind, GiftCardStatus } from "@/generated/prisma/client"
+import { formatSalonDate } from "@/lib/salon-time"
 
 export const CREDIT_KIND_LABEL: Record<CreditEntryKind, string> = {
     GIFT_CARD: "Gift card",
@@ -99,7 +100,7 @@ export function describeCreditEntry(entry: CreditEntryRow): string {
     const label = CREDIT_KIND_LABEL[entry.kind]
     if (entry.kind === "GIFT_CARD" && entry.giftCard) return `${label} ending ${entry.giftCard.codeLast4}`
     if (entry.appointment) {
-        const when = new Date(entry.appointment.startTime).toLocaleDateString("en-US", {
+        const when = formatSalonDate(entry.appointment.startTime, {
             month: "short",
             day: "numeric",
             year: "numeric",

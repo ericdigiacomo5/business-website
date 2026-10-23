@@ -14,6 +14,7 @@ import { SERVICE_CATEGORIES, SERVICE_CATEGORY_LABEL } from "@/lib/service-catego
 import { CATEGORY_BLOCK_COLOR, STATUS_BAR_COLOR, STATUS_LABEL, type AdminAppointment } from "./appointment-shared"
 import { useToast } from "@/components/ui/toast"
 import { ScheduleNowLine } from "./schedule-now-line"
+import { formatSalonDateTime } from "@/lib/salon-time"
 
 // One 15-minute row. A CSS variable rather than a constant: globals.css sets
 // it to 24px for a mouse and 44px on touch screens (pointer: coarse), so
@@ -299,7 +300,7 @@ export function ScheduleGrid({
 
             const body = await res.json()
             const created: AdminAppointment = { ...body.data, artist: from.artist, user: from.user }
-            const when = new Date(created.startTime).toLocaleString("en-US", {
+            const when = formatSalonDateTime(created.startTime, {
                 weekday: "short",
                 month: "short",
                 day: "numeric",

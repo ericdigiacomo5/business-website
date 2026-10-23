@@ -1,8 +1,10 @@
 'use client'
 
 import { useState } from "react"
+import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
+import { SmsConsentCheckbox } from "@/components/sms/sms-consent-checkbox"
 import { TEXT_LIMITS } from "@/lib/validation"
 
 export function RegisterForm() {
@@ -11,6 +13,8 @@ export function RegisterForm() {
     const [email, setEmail] = useState("")
     const [phone, setPhone] = useState("")
     const [password, setPassword] = useState("")
+    // Never pre-checked (carrier rule).
+    const [smsOptIn, setSmsOptIn] = useState(false)
     const [error, setError] = useState<string | null>(null)
     const [pending, setPending] = useState(false)
 
@@ -22,7 +26,7 @@ export function RegisterForm() {
         const response = await fetch("/api/auth/register", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ name, email, phone, password }),
+            body: JSON.stringify({ name, email, phone, password, smsOptIn }),
         })
 
         setPending(false)
@@ -105,6 +109,7 @@ export function RegisterForm() {
                 />
                 <p className="mt-1 text-xs text-muted-foreground">At least 8 characters.</p>
             </div>
+            <SmsConsentCheckbox id="sms-opt-in" checked={smsOptIn} onChange={setSmsOptIn} />
             {error && (
                 <p role="alert" className="text-sm text-danger">
                     {error}
@@ -113,6 +118,17 @@ export function RegisterForm() {
             <Button type="submit" disabled={pending} size="lg" className="w-full">
                 {pending ? "Creating account..." : "Create Account"}
             </Button>
+            <p className="text-center text-xs text-muted-foreground">
+                {"By creating an account you agree to our "}
+                <Link href="/terms" className="underline underline-offset-2 hover:text-foreground">
+                    Terms
+                </Link>
+                {" and "}
+                <Link href="/privacy" className="underline underline-offset-2 hover:text-foreground">
+                    Privacy Policy
+                </Link>
+                .
+            </p>
         </form>
     )
 }

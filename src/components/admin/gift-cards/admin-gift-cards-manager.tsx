@@ -5,7 +5,9 @@ import Link from "next/link"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { formatPrice } from "@/lib/format"
+import { formatSalonDate } from "@/lib/salon-time"
 import { SITE_NAME } from "@/lib/site"
+import { GIFT_CARD_TERMS } from "@/lib/gift-card-terms"
 import { TEXT_LIMITS } from "@/lib/validation"
 import {
     CREDIT_NOTE_MAX,
@@ -25,7 +27,7 @@ const MIN_VALUE_DOLLARS = MIN_GIFT_CARD_CENTS / 100
 const MAX_VALUE_DOLLARS = MAX_GIFT_CARD_CENTS / 100
 
 function formatDate(value: Date | string): string {
-    return new Date(value).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+    return formatSalonDate(value, { month: "short", day: "numeric", year: "numeric" })
 }
 
 // The card as printed and handed to the buyer. Only this element prints
@@ -50,8 +52,19 @@ function PrintableGiftCard({ card, code, onDone }: { card: GiftCardRow; code: st
                 <p className="mt-4 text-xs uppercase tracking-wide text-muted-foreground">Code</p>
                 <p className="font-mono text-lg font-semibold tracking-wider">{code}</p>
                 <p className="mt-4 text-xs text-muted-foreground">
-                    {`To use it, sign in at ${origin}/account and add this code under Gift Cards & Store Credit, or bring this card to the salon. The value becomes store credit on your account and is applied at checkout. Never expires. Keep this code private — anyone who has it can redeem it.`}
+                    {`To use it, sign in at ${origin}/account and add this code under Gift Cards & Store Credit, or bring this card to the salon. The value becomes store credit on your account and is applied at checkout. Keep this code private — anyone who has it can redeem it.`}
                 </p>
+                {/* Required on the card by NY GBL § 396-i(3); the same text
+                    as the Terms page (src/lib/gift-card-terms.ts). */}
+                <div className="mt-4 border-t border-line pt-3 text-[11px] leading-snug text-muted-foreground">
+                    <p className="font-semibold uppercase tracking-wide">Terms and Conditions</p>
+                    <ul className="mt-1 list-disc space-y-0.5 pl-4">
+                        {GIFT_CARD_TERMS.map((term) => (
+                            <li key={term}>{term}</li>
+                        ))}
+                    </ul>
+                    <p className="mt-1">{`Full terms: ${origin}/terms#giftcards`}</p>
+                </div>
             </div>
 
             <div className="flex flex-col gap-2 sm:flex-row">

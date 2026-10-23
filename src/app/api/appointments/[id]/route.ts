@@ -6,7 +6,7 @@ import { requireUser } from "@/lib/require-user"
 import { readJsonObject, rejectCrossOrigin } from "@/lib/request"
 import { getPolicySettings, isBookingEnabled } from "@/lib/settings"
 import { BOOKING_WINDOW_DAYS, bookingWindowEnd, customerChangeDeadline, describeNoticeWindow } from "@/lib/recurring"
-import { durationMinutesOf } from "@/lib/schedule-grid"
+import { durationMinutesOf, isOnSlotBoundary } from "@/lib/schedule-grid"
 import { reclaimSlots, SlotUnavailableError } from "@/lib/booking"
 import { SERVICE_LINES_INCLUDE } from "@/lib/appointment-services"
 
@@ -142,8 +142,7 @@ export async function PATCH(
     }
 
     const newStart = new Date(startTime)
-    const isOnSlotGrid =
-        newStart.getMinutes() % 15 === 0 && newStart.getSeconds() === 0 && newStart.getMilliseconds() === 0
+    const isOnSlotGrid = isOnSlotBoundary(newStart)
     if (isNaN(newStart.getTime()) || !isOnSlotGrid || newStart.getTime() < Date.now()) {
         return Response.json({ error: "Time is invalid" }, { status: 400 })
     }
@@ -193,6 +192,7 @@ export async function PATCH(
                     status: "PENDING",
                     // Any reminder already sent was for the old time.
                     reminderSentAt: null,
+                    smsReminderSentAt: null,
                 },
                 include: { artist: true, ...SERVICE_LINES_INCLUDE },
             })

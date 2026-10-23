@@ -50,7 +50,7 @@ Nearly every gap below sits in the ring *around* that core, and they cluster int
 | 22 | **SHOULD** | Time off or a closure over existing bookings doesn't flag them | `src/app/api/admin/time-off/route.ts` | **CLOSED** (2026-10-19) — confirmation lists the bookings; Go Back or Cancel All & Save |
 | 23 | **SHOULD** | Every artist can be booked for every service | `prisma/schema.prisma` — `Artist`, `Service` | **CLOSED** (2026-10-19) — `ArtistService`; enforced for customers, admins warned |
 | 24 | **SHOULD** | No "any artist / first available" choice when booking | `src/components/booking/steps/artist-step.tsx` | Open |
-| 25 | **SHOULD** | No privacy policy or terms page | `src/app/` | **Planned** (2026-10-19) — plan below; blocked on client details and review |
+| 25 | **SHOULD** | No privacy policy or terms page | `src/app/` | **Pages built, text pending** (2026-10-22). SMS sections written, the rest placeholders; blocked on client details and review. |
 | 26 | **SHOULD** | No error monitoring or uptime alerts | *(absent)* | **CLOSED in app** (2026-10-19) — error reports, `/api/health`, cron heartbeat; channel and monitors are set up at deploy (runbook §11) |
 | 27 | NICE | No waitlist when the wanted day is full | *(absent)* | Open |
 | 28 | NICE | Customer page has no summary stats or repeat no-show flag | `src/components/admin/users/admin-user-detail.tsx` | **CLOSED** (2026-10-19) |
@@ -438,7 +438,24 @@ The wizard requires picking an artist before any times appear. Many customers do
 
 ### Gap 25 — SHOULD — No privacy policy or terms page
 
-**Status: PLANNED (2026-10-19)** — the plan is below. The code is about half a day; the text needs the client's details and their review, and that's the long pole.
+**Status: TEXT COMPLETE, AWAITING CLIENT/LAWYER REVIEW (2026-10-22).** No placeholders are left.
+- The open choices were made by Eric: keep the Yahoo contact email; retention of seven years past account closure (Termly's option); data requests by email only (Termly form removed); no fee for no-shows or late cancellations; the price at booking is honored; gift cards as built, plus NY § 396-i's cash-under-$5 rule.
+- §5/§6 of the terms aren't Termly text (it has no template for them), so they want a lawyer's read.
+- Follow-ups:
+  - ~~Print the gift-card terms on or with the card~~ (done 2026-10-22: `src/lib/gift-card-terms.ts`, shared by the card and the Terms page).
+  - Tell staff that a customer holding an unredeemed card worth under $5 may ask for cash (cards can be sold from $1).
+
+Earlier notes, now superseded: `/privacy` and `/terms` exist (`src/app/privacy`, `src/app/terms`, layout in `src/components/legal/policy-page.tsx`). They are linked from the footer, the register page and the SMS opt-in box.
+- **`/privacy`** is the client's Termly-generated policy, kept as worded.
+  - Gaps filled from Termly's standard clauses: service providers named, information collected automatically, cookies, more processing purposes.
+  - A "Text Messages" section in the standard carrier wording.
+  - Generator glitches fixed.
+  - Open with the client: the contact email (personal Yahoo), retention (it promises nothing is kept past the account, which conflicts with tax records, the credit ledger and the consent log), the Termly-hosted data-request form, and the 18+ age (the terms must match). See the comment at the top of the page.
+- **`/terms`** is the client's Termly-generated terms, kept as worded.
+  - Its SMS section is corrected in the standard CTIA/carrier wording: the salon's program, not "Twilio's"; every message type; double opt-in; consent not a condition of purchase; rejoin by replying START.
+  - A new §5 "Appointments" states the booking rules from the live settings.
+  - Generator glitches fixed, and the table of contents rebuilt.
+  - Open with the client: the no-show / pricing policy (placeholder in §5), gift cards (§6, placeholder, needs their accountant or lawyer under NY law), and the same contact email. The booking review step and the email footer still have no policy link. The plan below still applies to the text.
 
 **Location:** `src/app/` (no `privacy`/`terms` routes; nothing links to one)
 
